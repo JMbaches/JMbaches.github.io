@@ -7,12 +7,12 @@
 // 1. CONFIGURATION — remplacer par ta vraie config
 // ----------------------------------------------------------------
 const firebaseConfig = {
-  apiKey:            "YOUR_API_KEY",
-  authDomain:        "YOUR_PROJECT.firebaseapp.com",
-  projectId:         "YOUR_PROJECT_ID",
-  storageBucket:     "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId:             "YOUR_APP_ID"
+  apiKey: "AIzaSyBe3ftHEv0SLYE9iaLoX0ycv4b0os48wPI",
+  authDomain: "jm-baches.firebaseapp.com",
+  projectId: "jm-baches",
+  storageBucket: "jm-baches.firebasestorage.app",
+  messagingSenderId: "526625133379",
+  appId: "1:526625133379:web:5d23d9eef20df4a1bd55f6"
 };
 
 // ----------------------------------------------------------------
