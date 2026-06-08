@@ -261,5 +261,17 @@ function refreshCurrentView() {
 // 10. DÉMARRAGE
 // ----------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
-  initFirebase();
+  _auth.onAuthStateChanged(async firebaseUser => {
+    if (firebaseUser) {
+      await initFirebase();
+      const u = users.find(x => x.email && x.email.toLowerCase() === firebaseUser.email.toLowerCase() && x.active);
+      if (u) {
+        connectUser(u);
+      } else {
+        await _auth.signOut();
+      }
+    } else {
+      showLoadingOverlay(false);
+    }
+  });
 });
