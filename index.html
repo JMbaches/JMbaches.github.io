@@ -764,7 +764,7 @@ tbody tr { transition: background .12s var(--ease); }
   </div>
 </div>
 
-<script type="module">
+<script>
 /* ================================================================
    DONNÉES & CONSTANTES
    ================================================================ */
@@ -3744,8 +3744,10 @@ document.querySelectorAll('.modal-overlay').forEach(el=>{
 
 buildLoginSelect();
 </script>
-
-<script type="module" src="firebase-layer.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="firebase-layer-v2.js"></script>
 
 <div id="planning-data" style="display:none" data-content=""></div>
 
