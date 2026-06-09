@@ -62,7 +62,15 @@ function startFirestoreListeners() {
         window._chatMessages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         // Vérification stricte avant tout accès à currentUser
         if (!_firestoreReady || !currentUser || !currentUser.id) return;
-        const convIds = ['general', ...users.filter(u => u.id !== currentUser.id).map(u => u.id)];
+        // Recalculer non lus avec convIds canoniques (priv_u1_u9)
+        const otherUsers = users.filter(u => u.id !== currentUser.id);
+        const convIds = [
+          'general',
+          ...otherUsers.map(u => {
+            const ids = [currentUser.id, u.id].sort();
+            return 'priv_' + ids[0] + '_' + ids[1];
+          })
+        ];
         convIds.forEach(cid => {
           const unread = window._chatMessages.filter(m =>
             m.convId === cid &&
