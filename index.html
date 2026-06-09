@@ -1717,6 +1717,7 @@ function renderDos() {
             <div style="display:flex;gap:5px;flex-wrap:wrap">
               <button class="btn btn-ghost btn-sm" onclick="openFiche('${d.id}')"><i class="ti ti-file-description"></i> Fiche</button>
               ${can('advance')&&!isCloture(d.statut)?`<button class="btn btn-secondary btn-sm" onclick="avancerDos('${d.id}',event)">${STATUT_NEXT_BTN[d.statut].split(' ')[0]}</button>`:''}
+              ${can('create')?`<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="supprimerDossier('${d.id}',event)" title="Supprimer le dossier"><i class="ti ti-trash"></i></button>`:''}
             </div>
           </td>
         </tr>`;
@@ -3963,6 +3964,7 @@ function renderUsers() {
         <div style="display:flex;gap:6px">
           <button class="btn btn-secondary btn-sm" style="flex:1;justify-content:center" onclick="openEditUser('${u.id}')"><i class="ti ti-edit"></i> Modifier</button>
           ${!isMe?`<button class="btn ${u.active?'btn-danger':'btn-secondary'} btn-sm" onclick="toggleActive('${u.id}')">${u.active?'Désactiver':'Réactiver'}</button>`:''}
+          ${!isMe?`<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteUser('${u.id}')" title="Supprimer le compte"><i class="ti ti-trash"></i></button>`:''}
         </div>
       </div>`;
     }).join('')}
@@ -4031,6 +4033,39 @@ function saveUser() {
 function toggleActive(uid) {
   const u=users.find(x=>x.id===uid); if(!u||u.id===currentUser.id) return;
   u.active=!u.active; saveData(); buildLoginSelect(); renderUsers();
+}
+
+function deleteUser(uid) {
+  const u = users.find(x => x.id === uid);
+  if (!u || u.id === currentUser.id) return;
+  if (!confirm(`Supprimer le compte de ${u.name} ?\n\nCette action supprime le profil de l'app.\n⚠️ Pensez aussi à supprimer le compte dans Firebase Auth (console.firebase.google.com → Authentication → Utilisateurs).`)) return;
+  // Supprimer dans Firestore
+  if (window._db) {
+    window._db.collection('users').doc(uid).delete().catch(e => console.error(e));
+  }
+  users = users.filter(x => x.id !== uid);
+  buildLoginSelect();
+  renderUsers();
+  showToast(`Compte de ${u.name} supprimé`);
+}
+
+function supprimerDossier(dosId, e) {
+  if (e) e.stopPropagation();
+  const d = dossiers.find(x => x.id === dosId);
+  if (!d) return;
+  if (!confirm(`Supprimer définitivement le dossier ${dosId} — ${d.client} ?\n\nCette action est irréversible.`)) return;
+  // Supprimer dans Firestore
+  if (window._db) {
+    window._db.collection('dossiers').doc(dosId).delete().catch(e => console.error(e));
+    // Supprimer les notifications liées
+    notifications.filter(n => n.dosId === dosId).forEach(n => {
+      window._db.collection('notifications').doc(String(n.id)).delete().catch(() => {});
+    });
+  }
+  dossiers = dossiers.filter(x => x.id !== dosId);
+  notifications = notifications.filter(x => x.dosId !== dosId);
+  showToast(`Dossier ${dosId} supprimé`);
+  renderDos();
 }
 
 function openChecklist(dosId) {
