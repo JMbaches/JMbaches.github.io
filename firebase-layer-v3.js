@@ -21,9 +21,11 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const _auth = firebase.auth();
 const _db   = firebase.firestore();
+window._db  = _db; // Exposé pour la messagerie
  
 let _firestoreReady = false;
-let _unsubUsers, _unsubDossiers, _unsubNotifs;
+let _unsubUsers, _unsubDossiers, _unsubNotifs, _unsubMessages;
+window._chatMessages = [];
  
 // ----------------------------------------------------------------
 // 3. CHARGEMENT FIRESTORE — lancé uniquement après auth confirmée
@@ -62,6 +64,41 @@ function startFirestoreListeners() {
       if (_firestoreReady) updateBadge?.();
       check();
     });
+
+    // Listener messages temps réel
+    _unsubMessages = _db.collection('messages')
+      .orderBy('at', 'asc')
+      .onSnapshot(snap => {
+        window._chatMessages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (_firestoreReady && currentUser) {
+          // Calculer non lus par conv
+          window._chatMessages.forEach(m => {
+            if (m.from === currentUser.id) return;
+            if (!m.readBy || !m.readBy.includes(currentUser.id)) {
+              if (!chatConvs[m.convId]) chatConvs[m.convId] = { unread: 0 };
+              // On recalcule tout à chaque snapshot
+            }
+          });
+
+          // Recalculer unread pour chaque conv
+          const convIds = ['general', ...users.filter(u => u.id !== currentUser.id).map(u => u.id)];
+          convIds.forEach(cid => {
+            const unread = window._chatMessages.filter(m =>
+              m.convId === cid &&
+              m.from !== currentUser.id &&
+              (!m.readBy || !m.readBy.includes(currentUser.id))
+            ).length;
+            if (!chatConvs[cid]) chatConvs[cid] = {};
+            chatConvs[cid].unread = unread;
+          });
+
+          updateChatBadge?.();
+          if (typeof chatOpen !== 'undefined' && chatOpen) {
+            buildChatTabs?.();
+            renderChatMessages?.();
+          }
+        }
+      });
   });
 }
  
@@ -69,7 +106,9 @@ function stopFirestoreListeners() {
   _unsubUsers?.();
   _unsubDossiers?.();
   _unsubNotifs?.();
+  _unsubMessages?.();
   _firestoreReady = false;
+  window._chatMessages = [];
 }
  
 // ----------------------------------------------------------------
