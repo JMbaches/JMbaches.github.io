@@ -1050,6 +1050,11 @@ let nextNotifId = 100;
 let nextUserId = 10;
 let atelierOrder = []; // IDs dans l'ordre manuel drag & drop atelier
 let globalSearchQuery = ""; // Recherche globale persistante entre onglets
+let dosStatFilter    = '';    // Filtre par statut
+let dosCommFilter    = '';    // Filtre par commercial
+let dosPeriodeFilter = '';    // Filtre par période (ce_mois, mois_dernier, cette_annee, en_retard)
+let dosMontantMin    = '';    // Filtre montant min TTC
+let dosMontantMax    = '';    // Filtre montant max TTC
 
 /* ================================================================
    HELPERS
@@ -1286,7 +1291,7 @@ function goTab(tab) {
    RECHERCHE GLOBALE
    ================================================================ */
 
-// Filtre les dossiers selon la requête de recherche
+// Filtre les dossiers selon la recherche globale
 function filteredDossiers(liste) {
   if (!globalSearchQuery) return liste;
   const q = globalSearchQuery.toLowerCase().trim();
@@ -1299,6 +1304,49 @@ function filteredDossiers(liste) {
     (d.adresse||'').toLowerCase().includes(q) ||
     (d.tel||'').toLowerCase().includes(q)
   );
+}
+
+// Applique TOUS les filtres avancés (statut, commercial, période, montant)
+function applyDosFilters(liste) {
+  let r = filteredDossiers(liste);
+  
+  // Filtre statut
+  if (dosStatFilter) r = r.filter(d => d.statut === dosStatFilter);
+  
+  // Filtre commercial (créateur du dossier)
+  if (dosCommFilter) r = r.filter(d => d.createdBy === dosCommFilter || d.commercial === dosCommFilter);
+  
+  // Filtre période livraison
+  if (dosPeriodeFilter) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const todayStr = today.toISOString().split('T')[0];
+    const firstDayMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+    const lastDayMonth  = new Date(today.getFullYear(), today.getMonth()+1, 0).toISOString().split('T')[0];
+    const firstDayLastMonth = new Date(today.getFullYear(), today.getMonth()-1, 1).toISOString().split('T')[0];
+    const lastDayLastMonth  = new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0];
+    const firstDayYear  = new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0];
+    const monday = new Date(today); monday.setDate(today.getDate() - today.getDay() + 1);
+    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+    const mondayStr = monday.toISOString().split('T')[0];
+    const sundayStr = sunday.toISOString().split('T')[0];
+
+    r = r.filter(d => {
+      const liv = d.dateLivraison;
+      if (!liv) return false;
+      if (dosPeriodeFilter === 'en_retard')      return liv < todayStr && !['expédié','posé','retiré'].includes(d.statut);
+      if (dosPeriodeFilter === 'cette_semaine')  return liv >= mondayStr && liv <= sundayStr;
+      if (dosPeriodeFilter === 'ce_mois')        return liv >= firstDayMonth && liv <= lastDayMonth;
+      if (dosPeriodeFilter === 'mois_dernier')   return liv >= firstDayLastMonth && liv <= lastDayLastMonth;
+      if (dosPeriodeFilter === 'cette_annee')    return liv >= firstDayYear;
+      return true;
+    });
+  }
+  
+  // Filtre montant TTC
+  if (dosMontantMin) r = r.filter(d => ttc(d) >= parseFloat(dosMontantMin));
+  if (dosMontantMax) r = r.filter(d => ttc(d) <= parseFloat(dosMontantMax));
+  
+  return r;
 }
 
 // Recherche dans la barre globale — dropdown de résultats rapides
@@ -1548,22 +1596,79 @@ function renderDos() {
     </div>
   </div>
 
-  <div class="section-header" style="margin-bottom:14px">
-    <div class="section-title" style="font-size:17px;font-weight:700;letter-spacing:-.2px">Dossiers clients</div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <div style="position:relative">
-        <i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--ink-faint);font-size:14px;pointer-events:none"></i>
-        <input type="text" id="dos-search" placeholder="Rechercher un client, N°, produit…"
-          style="padding:7px 12px 7px 34px;width:280px"
-          oninput="filterDos(this.value)">
+  <div style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+      <div class="section-title" style="font-size:17px;font-weight:700;letter-spacing:-.2px">Dossiers clients</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div style="position:relative">
+          <i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--ink-faint);font-size:14px;pointer-events:none"></i>
+          <input type="text" id="dos-search" placeholder="Rechercher un client, N°, produit…"
+            value="${globalSearchQuery}"
+            style="padding:7px 12px 7px 34px;width:240px"
+            oninput="filterDos(this.value)">
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="toggleFiltresAvances()" id="btn-filtres-avances" style="${(dosCommFilter||dosPeriodeFilter||dosMontantMin||dosMontantMax||dosStatFilter)?'color:var(--accent);border-color:var(--accent)':''}">
+          <i class="ti ti-adjustments-horizontal"></i> Filtres${(dosCommFilter||dosPeriodeFilter||dosMontantMin||dosMontantMax||dosStatFilter)?' <span style="background:var(--accent);color:#fff;border-radius:8px;padding:0 5px;font-size:10px">actifs</span>':''}
+        </button>
+        ${can('create')?`<button class="btn btn-primary" onclick="openNewDos()"><i class="ti ti-plus"></i> Nouveau dossier</button>`:''}
       </div>
-      <div id="dos-filter" style="display:flex;gap:4px">
-        <button class="btn btn-ghost btn-sm filter-stat active" data-s="" onclick="setStatFilter('',this)">Tous</button>
-        <button class="btn btn-ghost btn-sm filter-stat" data-s="nouveau" onclick="setStatFilter('nouveau',this)"><span class="badge b-nouveau">Nouveau</span></button>
-        <button class="btn btn-ghost btn-sm filter-stat" data-s="admin" onclick="setStatFilter('admin',this)"><span class="badge b-admin">Admin</span></button>
-        <button class="btn btn-ghost btn-sm filter-stat" data-s="production" onclick="setStatFilter('production',this)"><span class="badge b-production">Prod</span></button>
+    </div>
+
+    <!-- Filtres avancés -->
+    <div id="filtres-avances-panel" style="display:${(dosCommFilter||dosPeriodeFilter||dosMontantMin||dosMontantMax||dosStatFilter)?'block':'none'}">
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        
+        <!-- Statut -->
+        <div>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Statut</div>
+          <select onchange="dosStatFilter=this.value;applyFiltres()" style="width:150px;padding:6px 10px;font-size:13px">
+            <option value="" ${!dosStatFilter?'selected':''}>Tous les statuts</option>
+            ${Object.entries(STATUT_LABEL).map(([k,v])=>`<option value="${k}" ${dosStatFilter===k?'selected':''}>${v}</option>`).join('')}
+          </select>
+        </div>
+
+        <!-- Commercial -->
+        <div>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Commercial</div>
+          <select onchange="dosCommFilter=this.value;applyFiltres()" style="width:150px;padding:6px 10px;font-size:13px">
+            <option value="" ${!dosCommFilter?'selected':''}>Tous</option>
+            ${users.filter(u=>u.active&&(u.role==='commercial'||u.role==='admin'||u.role==='direction')).map(u=>`<option value="${u.id}" ${dosCommFilter===u.id?'selected':''}>${u.name}</option>`).join('')}
+          </select>
+        </div>
+
+        <!-- Période -->
+        <div>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Période livraison</div>
+          <select onchange="dosPeriodeFilter=this.value;applyFiltres()" style="width:160px;padding:6px 10px;font-size:13px">
+            <option value="" ${!dosPeriodeFilter?'selected':''}>Toutes périodes</option>
+            <option value="en_retard" ${dosPeriodeFilter==='en_retard'?'selected':''}>⚠ En retard</option>
+            <option value="cette_semaine" ${dosPeriodeFilter==='cette_semaine'?'selected':''}>Cette semaine</option>
+            <option value="ce_mois" ${dosPeriodeFilter==='ce_mois'?'selected':''}>Ce mois</option>
+            <option value="mois_dernier" ${dosPeriodeFilter==='mois_dernier'?'selected':''}>Mois dernier</option>
+            <option value="cette_annee" ${dosPeriodeFilter==='cette_annee'?'selected':''}>Cette année</option>
+          </select>
+        </div>
+
+        <!-- Montant -->
+        ${canSeeCA()?`<div>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Montant TTC</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="number" placeholder="Min €" value="${dosMontantMin}" onchange="dosMontantMin=this.value;applyFiltres()" style="width:80px;padding:6px 8px;font-size:13px">
+            <span style="color:var(--ink-faint);font-size:12px">—</span>
+            <input type="number" placeholder="Max €" value="${dosMontantMax}" onchange="dosMontantMax=this.value;applyFiltres()" style="width:80px;padding:6px 8px;font-size:13px">
+          </div>
+        </div>`:''}
+
+        <!-- Reset -->
+        <button class="btn btn-ghost btn-sm" onclick="resetFiltres()" style="color:var(--red)">
+          <i class="ti ti-x"></i> Réinitialiser
+        </button>
+
+        <!-- Compteur résultats -->
+        <div style="margin-left:auto;font-size:12px;color:var(--ink-faint);align-self:center">
+          <span style="font-weight:600;color:var(--ink)">${applyDosFilters(dossiers).length}</span> dossier(s) trouvé(s)
+        </div>
       </div>
-      ${can('create')?`<button class="btn btn-primary" onclick="openNewDos()"><i class="ti ti-plus"></i> Nouveau dossier</button>`:''}
     </div>
   </div>
 
@@ -1576,13 +1681,28 @@ function renderDos() {
         <th>Activité</th><th>Actions</th>
       </tr></thead>
       ${globalSearchQuery ? `<caption style="caption-side:top;text-align:left;padding:8px 14px;font-size:12px;color:var(--accent);font-weight:600;background:var(--accent-light);border-bottom:1px solid var(--border)"><i class="ti ti-search"></i> ${filteredDossiers(dossiers).length} résultat(s) pour « ${globalSearchQuery} » <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="document.getElementById('global-search-input').value='';globalSearch('')">✕ Effacer</button></caption>` : ""}
-      <tbody>${filteredDossiers(dossiers).map(d=>{
+      <tbody>${applyDosFilters(dossiers).map(d=>{
         const retard = d.dateLivraison && d.dateLivraison < new Date().toISOString().split('T')[0] && !['expédié','posé','retiré'].includes(d.statut);
         return `<tr class="clickable" onclick="openFiche('${d.id}')" style="${retard?'background:rgba(163,45,45,.04)':''}">
           <td style="font-size:11px;color:var(--ink-faint);font-family:'JetBrains Mono',monospace;font-weight:500">${d.id}</td>
           <td><div style="font-weight:600;font-size:13px">${d.client}</div><div style="font-size:11px;color:var(--ink-faint);margin-top:1px">${d.tel||''}</div></td>
           <td style="font-size:13px;color:var(--ink-soft)">${d.structure||'—'}</td>
-          <td>${statBadge(d.statut)}</td>
+          <td onclick="event.stopPropagation()">
+            ${can('advance') ? `
+            <div style="position:relative;display:inline-block">
+              <button class="badge-btn-statut" onclick="toggleStatutMenu('${d.id}',event)" style="cursor:pointer;border:none;background:none;padding:0">
+                ${statBadge(d.statut)}
+                <i class="ti ti-chevron-down" style="font-size:9px;margin-left:3px;opacity:.6;vertical-align:middle"></i>
+              </button>
+              <div id="statut-menu-${d.id}" style="display:none;position:absolute;top:100%;left:0;z-index:500;background:var(--paper);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(22,24,29,.12);min-width:170px;padding:4px">
+                ${Object.entries(STATUT_LABEL).map(([k,v])=>`
+                  <button onclick="changerStatutDirect('${d.id}','${k}',event)" style="display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;background:${d.statut===k?'var(--accent-light)':'none'};border:none;border-radius:4px;font-size:12px;cursor:pointer;text-align:left;color:var(--ink);font-weight:${d.statut===k?'600':'400'}">
+                    ${d.statut===k?'<i class="ti ti-check" style="font-size:11px;color:var(--accent)"></i>':'<span style="width:11px"></span>'}
+                    ${v}
+                  </button>`).join('')}
+              </div>
+            </div>` : statBadge(d.statut)}
+          </td>
           <td style="font-size:12px;color:${retard?'var(--red)':'var(--ink-faint)'};font-weight:${retard?'600':'400'}">
             ${fmt(d.dateLivraison)||'—'}
             ${retard?'<div style="font-size:10px;font-weight:700;color:var(--red)">EN RETARD</div>':''}
@@ -1621,6 +1741,7 @@ function renderFiche() {
     <div style="display:flex;gap:8px;align-items:center">
       ${statBadge(d.statut)}
       <button class="btn btn-secondary" onclick="printFicheA4()"><i class="ti ti-printer"></i> Imprimer A4</button>
+      <button class="btn btn-secondary" onclick="exportDossierPDF()"><i class="ti ti-file-export"></i> Exporter PDF</button>
       <button class="btn btn-primary" onclick="saveFiche()"><i class="ti ti-check"></i> Enregistrer</button>
     </div>
   </div>
@@ -1994,6 +2115,39 @@ function avancerFiche() {
   pushNotif('statut:'+d.statut,d.id,d);
   saveData(); showToast(`Statut mis à jour : ${STATUT_LABEL[d.statut]}`); renderFiche();
 }
+// Fermer tous les menus statut ouverts
+function closeAllStatutMenus() {
+  document.querySelectorAll('[id^="statut-menu-"]').forEach(m => m.style.display = 'none');
+}
+
+// Ouvrir/fermer le menu statut d'un dossier
+function toggleStatutMenu(dosId, e) {
+  e.stopPropagation();
+  const menu = document.getElementById('statut-menu-' + dosId);
+  if (!menu) return;
+  const isOpen = menu.style.display !== 'none';
+  closeAllStatutMenus();
+  if (!isOpen) menu.style.display = 'block';
+}
+
+// Changer le statut directement depuis la liste
+function changerStatutDirect(dosId, newStatut, e) {
+  e.stopPropagation();
+  closeAllStatutMenus();
+  const d = dossiers.find(x => x.id === dosId);
+  if (!d || d.statut === newStatut) return;
+  const prev = d.statut;
+  d.statut = newStatut;
+  logHistory(dosId, 'statut', `Statut changé : ${STATUT_LABEL[prev]} → ${STATUT_LABEL[newStatut]}`);
+  pushNotif('statut:' + newStatut, dosId, d);
+  saveData();
+  showToast(`Statut mis à jour : ${STATUT_LABEL[newStatut]}`);
+  renderDos();
+}
+
+// Fermer les menus si on clique ailleurs
+document.addEventListener('click', () => closeAllStatutMenus());
+
 function avancerDos(id,e) {
   if(e) e.stopPropagation();
   const d=dossiers.find(x=>x.id===id); if(!d||isCloture(d.statut)) return;
@@ -3392,10 +3546,14 @@ function parseHeure(str) {
   if(m2) return parseFloat(m2[1]);
   return null;
 }
-function calcHeures(deb, fin) {
+const PAUSE_MIDI = 0.5; // 30 minutes de pause déduite automatiquement
+
+function calcHeures(deb, fin, avecPause=true) {
   const d = parseHeure(deb), f = parseHeure(fin);
   if(d===null || f===null || f<=d) return null;
-  return f - d;
+  const brut = f - d;
+  // Déduire la pause midi uniquement si la journée dépasse 4h (demi-journée)
+  return avecPause && brut > 4 ? Math.max(0, brut - PAUSE_MIDI) : brut;
 }
 function fmtH(h) {
   if(h===null || h===undefined || isNaN(h)) return '—';
@@ -3419,7 +3577,7 @@ function renderHoraires() {
 
   if(!horairesData[horSemaine]) horairesData[horSemaine] = {};
 
-  // Calcul totaux semaine pour chaque poseur
+  // Calcul totaux semaine pour chaque poseur (avec déduction pause midi)
   function totalSemaine(pid) {
     const sem = horairesData[horSemaine]?.[pid] || {};
     let total = 0;
@@ -3427,9 +3585,11 @@ function renderHoraires() {
       const jour = sem[j] || {};
       let h = null;
       if(jour.mode==='direct' && jour.h !== undefined && jour.h !== '') {
-        h = parseHeure(String(jour.h));
+        // En saisie directe : déduire pause si > 4h
+        const brut = parseHeure(String(jour.h));
+        h = (brut !== null && brut > 4) ? Math.max(0, brut - PAUSE_MIDI) : brut;
       } else if(jour.deb && jour.fin) {
-        h = calcHeures(jour.deb, jour.fin);
+        h = calcHeures(jour.deb, jour.fin); // pause déjà déduite dans calcHeures
       }
       if(h !== null) total += h;
     });
@@ -3441,7 +3601,10 @@ function renderHoraires() {
   mc.innerHTML = `
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
     <div>
-      <div style="font-size:21px;font-weight:700;color:var(--ink);letter-spacing:-.2px"><i class="ti ti-clock" style="vertical-align:-3px;margin-right:9px;color:var(--accent)"></i>Horaires poseurs</div>
+      <div>
+        <div style="font-size:21px;font-weight:700;color:var(--ink);letter-spacing:-.2px"><i class="ti ti-clock" style="vertical-align:-3px;margin-right:9px;color:var(--accent)"></i>Horaires poseurs</div>
+        <div style="font-size:12px;color:var(--ink-faint);margin-top:3px"><i class="ti ti-coffee" style="font-size:12px;vertical-align:-1px;margin-right:3px"></i>30 min de pause midi déduite automatiquement sur les journées de plus de 4h</div>
+      </div>
       <div style="font-size:13px;color:var(--ink-faint);margin-top:3px">${weekLabel(horSemaine)}</div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -4222,6 +4385,176 @@ function escapeHtml(str) {
 function initChat() {
   const btn = document.getElementById('chat-btn');
   if (btn) { btn.style.display = 'flex'; btn.style.alignItems = 'center'; btn.style.justifyContent = 'center'; }
+}
+
+
+/* ================================================================
+   EXPORT PDF COMPLET DU DOSSIER
+   ================================================================ */
+function exportDossierPDF() {
+  const d = dossiers.find(x => x.id === currentDosId);
+  if (!d) return;
+
+  const STATUT_COLORS_EXPORT = {
+    nouveau:'background:#EEEDFE;color:#3C3489', admin:'background:#EAF0F9;color:#14479B',
+    production:'background:#FAEEDA;color:#633806', emballage:'background:#FEF3C7;color:#92400E',
+    stocké:'background:#E0E7FF;color:#3730A3', expédié:'background:#D1FAE5;color:#065F46',
+    posé:'background:#FAECE7;color:#712B13', retiré:'background:#F3F4F6;color:#374151',
+  };
+  const TRANSPORT_LABEL = {enlvt:'Enlèvement client', liv_pose:'Livraison + Pose', livraison:'Livraison seule'};
+  const DEVIS_LABEL = {accepte:'Accepté', paye:'Payé', en_attente:'En attente', refuse:'Refusé'};
+  const now_str = new Date().toLocaleDateString('fr-FR');
+
+  const histHTML = d.history.map(h => {
+    const e = EVT[h.type] || EVT.modification;
+    const userName_h = users.find(u => u.id === h.user)?.name || h.user;
+    return `<tr>
+      <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:11px;color:#666">${h.at}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:11px">${h.action}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:11px;color:#666">${userName_h}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:11px;color:#999">${h.detail||''}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Dossier ${d.id} — ${d.client}</title>
+  <style>
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 24px; color: #1a1a1a; font-size: 13px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #1a1a1a; }
+    .logo { font-size: 22px; font-weight: 800; }
+    .logo span { color: #1B5FCC; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .section { margin-bottom: 20px; }
+    .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #666; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #eee; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .field label { font-size: 10px; color: #999; font-weight: 600; text-transform: uppercase; display: block; margin-bottom: 2px; }
+    .field span { font-size: 13px; font-weight: 500; }
+    table { width: 100%; border-collapse: collapse; }
+    th { padding: 6px 8px; background: #f5f5f5; font-size: 10px; text-transform: uppercase; letter-spacing: .3px; text-align: left; }
+    .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #eee; font-size: 10px; color: #999; display: flex; justify-content: space-between; }
+    @media print { body { padding: 0; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="logo">JM<span>Bâches</span></div>
+      <div style="font-size:11px;color:#666;margin-top:4px">Export dossier — ${now_str}</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:20px;font-weight:700">${d.client}</div>
+      <div style="font-size:12px;color:#666;margin-top:2px">${d.id}</div>
+      <div style="margin-top:6px"><span class="badge" style="${STATUT_COLORS_EXPORT[d.statut]||''}">${STATUT_LABEL[d.statut]||d.statut}</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Informations générales</div>
+    <div class="grid">
+      <div class="field"><label>Structure</label><span>${d.structure||'—'}</span></div>
+      <div class="field"><label>Options</label><span>${d.options||'—'}</span></div>
+      <div class="field"><label>Transport</label><span>${TRANSPORT_LABEL[d.transport]||d.transport||'—'}</span></div>
+      <div class="field"><label>Date livraison</label><span>${fmt(d.dateLivraison)}</span></div>
+      <div class="field"><label>Date pose</label><span>${fmt(d.datePose)||'—'}</span></div>
+      <div class="field"><label>Devis</label><span>${DEVIS_LABEL[d.devis]||d.devis||'—'}</span></div>
+      <div class="field"><label>HT</label><span>${d.ht ? d.ht.toLocaleString('fr-FR') + ' €' : '—'}</span></div>
+      <div class="field"><label>TVA</label><span>${d.tva||20} %</span></div>
+      <div class="field"><label>TTC</label><span style="font-weight:700">${ttc(d).toLocaleString('fr-FR',{minimumFractionDigits:2})} €</span></div>
+    </div>
+  </div>
+
+  ${d.adresse || d.tel ? `<div class="section">
+    <div class="section-title">Contact & Adresse</div>
+    <div class="grid">
+      ${d.tel ? `<div class="field"><label>Téléphone</label><span>${d.tel}</span></div>` : ''}
+      ${d.adresse ? `<div class="field" style="grid-column:span 2"><label>Adresse</label><span>${d.adresse}</span></div>` : ''}
+    </div>
+  </div>` : ''}
+
+  ${d.remarques || d.autres ? `<div class="section">
+    <div class="section-title">Remarques</div>
+    ${d.remarques ? `<div style="background:#f9f9f9;padding:8px 12px;border-radius:4px;margin-bottom:6px">${d.remarques}</div>` : ''}
+    ${d.autres ? `<div style="background:#FEF3C7;padding:8px 12px;border-radius:4px;border-left:3px solid #F59E0B">${d.autres}</div>` : ''}
+  </div>` : ''}
+
+  ${d.largeur || d.longueur || d.lames ? `<div class="section">
+    <div class="section-title">Métrés</div>
+    <div class="grid">
+      ${d.largeur ? `<div class="field"><label>Largeur</label><span>${d.largeur} m</span></div>` : ''}
+      ${d.longueur ? `<div class="field"><label>Longueur</label><span>${d.longueur} m</span></div>` : ''}
+      ${d.hauteur ? `<div class="field"><label>Hauteur coffre</label><span>${d.hauteur} m</span></div>` : ''}
+      ${d.surface ? `<div class="field"><label>Surface</label><span>${d.surface} m²</span></div>` : ''}
+      ${d.lames ? `<div class="field"><label>Lames</label><span>${d.lames}</span></div>` : ''}
+      ${d.moteur ? `<div class="field"><label>Moteur</label><span>${d.moteur}</span></div>` : ''}
+    </div>
+    ${d.notesMetreur ? `<div style="margin-top:8px;background:#f9f9f9;padding:8px 12px;border-radius:4px;font-size:12px">${d.notesMetreur}</div>` : ''}
+  </div>` : ''}
+
+  <div class="section" style="margin-top:24px">
+    <div class="section-title">Historique des modifications (${d.history.length} entrées)</div>
+    <table>
+      <thead><tr>
+        <th>Date</th><th>Action</th><th>Utilisateur</th><th>Détail</th>
+      </tr></thead>
+      <tbody>${histHTML}</tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    <span>JM Bâches — Document généré le ${now_str}</span>
+    <span>${d.id} · ${d.client}</span>
+  </div>
+  <script>window.onload = function(){ window.print(); }<\/script>
+</body>
+</html>`;
+
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'width=900,height=700,scrollbars=yes');
+}
+
+
+/* ================================================================
+   FILTRES AVANCÉS DOSSIERS
+   ================================================================ */
+
+function toggleFiltresAvances() {
+  const panel = document.getElementById('filtres-avances-panel');
+  if (!panel) return;
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function applyFiltres() {
+  renderDos();
+  // Rouvrir le panel après re-render
+  const panel = document.getElementById('filtres-avances-panel');
+  if (panel) panel.style.display = 'block';
+}
+
+function resetFiltres() {
+  dosStatFilter = '';
+  dosCommFilter = '';
+  dosPeriodeFilter = '';
+  dosMontantMin = '';
+  dosMontantMax = '';
+  renderDos();
+}
+
+function filterDos(val) {
+  globalSearchQuery = val.trim();
+  renderDos();
+  const panel = document.getElementById('filtres-avances-panel');
+  if (panel && panel.style.display !== 'none') panel.style.display = 'block';
+}
+
+function setStatFilter(s, el) {
+  dosStatFilter = s;
+  renderDos();
+  const panel = document.getElementById('filtres-avances-panel');
+  if (panel && panel.style.display !== 'none') panel.style.display = 'block';
 }
 
 buildLoginSelect();
