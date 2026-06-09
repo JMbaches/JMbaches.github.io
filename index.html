@@ -3684,13 +3684,13 @@ function renderHoraires() {
                   </select>
                 </td>
                 <td style="padding:6px 10px">
-                  ${mode==='plage'?`<input type="text" placeholder="7h30" value="${jour.deb||''}"
+                  ${mode==='plage'?`<input type="text" placeholder="7:30" value="${jour.deb||''}"
                     style="width:80px;padding:5px 8px;font-size:13px;font-family:'JetBrains Mono',monospace;text-align:center"
                     oninput="setHorVal('${p.id}','${j}','deb',this.value)"
                     ${absent?'disabled':''}>`:'<span style="color:var(--ink-faint);font-size:12px">—</span>'}
                 </td>
                 <td style="padding:6px 10px">
-                  ${mode==='plage'?`<input type="text" placeholder="17h00" value="${jour.fin||''}"
+                  ${mode==='plage'?`<input type="text" placeholder="17:00" value="${jour.fin||''}"
                     style="width:80px;padding:5px 8px;font-size:13px;font-family:'JetBrains Mono',monospace;text-align:center"
                     oninput="setHorVal('${p.id}','${j}','fin',this.value)"
                     ${absent?'disabled':''}>`:'<span style="color:var(--ink-faint);font-size:12px">—</span>'}
