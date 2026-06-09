@@ -191,21 +191,25 @@ window.resetData = async function resetData() {
 // ----------------------------------------------------------------
 window.seedFirestore = async function seedFirestore() {
   if (!confirm('Importer les données initiales ? À ne faire qu\'une seule fois.')) return;
+  // Utilise les constantes INITIAL_ définies dans index.html
+  const _users  = typeof INITIAL_USERS         !== 'undefined' ? INITIAL_USERS         : users;
+  const _dos    = typeof INITIAL_DOSSIERS       !== 'undefined' ? INITIAL_DOSSIERS       : dossiers;
+  const _notifs = typeof INITIAL_NOTIFICATIONS  !== 'undefined' ? INITIAL_NOTIFICATIONS  : notifications;
   const batch = _db.batch();
-  users.forEach(u => {
+  _users.forEach(u => {
     const data = { ...u }; delete data.id;
     batch.set(_db.collection('users').doc(u.id), data);
   });
-  dossiers.forEach(d => {
+  _dos.forEach(d => {
     const data = { ...d }; delete data.id;
     batch.set(_db.collection('dossiers').doc(d.id), data);
   });
-  notifications.forEach(n => {
+  _notifs.forEach(n => {
     const data = { ...n }; delete data.id;
     batch.set(_db.collection('notifications').doc(String(n.id)), data);
   });
   await batch.commit();
-  alert(`✓ Seed terminé : ${users.length} users, ${dossiers.length} dossiers, ${notifications.length} notifications`);
+  alert(`✓ Seed terminé : ${_users.length} users, ${_dos.length} dossiers, ${_notifs.length} notifications`);
 };
  
 // ----------------------------------------------------------------
@@ -320,3 +324,4 @@ window.doResetPassword = async function() {
 document.getElementById('modal-reset-pwd')?.addEventListener('click', function(e) {
   if (e.target === this) hideResetPassword();
 });
+
