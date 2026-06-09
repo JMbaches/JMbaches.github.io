@@ -4030,8 +4030,16 @@ document.querySelectorAll('.modal-overlay').forEach(el=>{
    ================================================================ */
 
 let chatOpen = false;
-let chatCurrentConv = 'general'; // 'general' ou userId pour privé
-let chatConvs = {}; // { convId: { unread: N, lastMsg: '...' } }
+let chatCurrentConv = 'general'; // 'general' ou convId canonique pour privé
+let chatConvs = {}; // { convId: { unread: N } }
+
+// Retourne un convId canonique identique des deux côtés
+// ex: u1 + u9 → "priv_u1_u9" (toujours trié alphabétiquement)
+function getPrivConvId(userId) {
+  if (!currentUser) return userId;
+  const ids = [currentUser.id, userId].sort();
+  return 'priv_' + ids[0] + '_' + ids[1];
+}
 
 // Ouvrir/fermer le panneau
 function toggleChat() {
@@ -4040,6 +4048,10 @@ function toggleChat() {
   if (chatOpen) {
     panel.classList.add('open');
     buildChatTabs();
+    // S'assurer que chatCurrentConv est un convId canonique
+    if (chatCurrentConv !== 'general' && !chatCurrentConv.startsWith('priv_')) {
+      chatCurrentConv = getPrivConvId(chatCurrentConv);
+    }
     openChatConv(chatCurrentConv);
   } else {
     panel.classList.remove('open');
@@ -4052,14 +4064,15 @@ function buildChatTabs() {
   if (!tabs) return;
 
   // Calculer non lus par conv
-  const convIds = ['general', ...users.filter(u => u.id !== currentUser.id && u.active).map(u => u.id)];
+  const otherUsers = users.filter(u => u.id !== currentUser.id && u.active);
 
-  tabs.innerHTML = convIds.map(id => {
+  tabs.innerHTML = ['general', ...otherUsers.map(u => u.id)].map(id => {
     const isGeneral = id === 'general';
+    const convId = isGeneral ? 'general' : getPrivConvId(id);
     const label = isGeneral ? '# Général' : (users.find(u => u.id === id)?.name || id);
-    const unread = chatConvs[id]?.unread || 0;
-    const active = chatCurrentConv === id ? ' active' : '';
-    return `<button class="chat-tab${active}" onclick="openChatConv('${id}')">
+    const unread = chatConvs[convId]?.unread || 0;
+    const active = chatCurrentConv === convId ? ' active' : '';
+    return `<button class="chat-tab${active}" onclick="openChatConv('${convId}','${id}')">
       ${label}
       ${unread > 0 ? `<span class="tab-badge">${unread}</span>` : ''}
     </button>`;
@@ -4067,15 +4080,20 @@ function buildChatTabs() {
 }
 
 // Ouvrir une conversation
-function openChatConv(convId) {
+function openChatConv(convId, userId) {
   chatCurrentConv = convId;
   if (chatConvs[convId]) chatConvs[convId].unread = 0;
   buildChatTabs();
   updateChatBadge();
 
-  const title = convId === 'general'
-    ? '# Canal général'
-    : 'Conversation avec ' + (users.find(u => u.id === convId)?.name || convId);
+  let title;
+  if (convId === 'general') {
+    title = '# Canal général';
+  } else {
+    // Trouver le nom de l'autre utilisateur depuis le convId canonique
+    const otherId = userId || convId.replace('priv_', '').split('_').find(id => id !== currentUser.id);
+    title = 'Conversation avec ' + (users.find(u => u.id === otherId)?.name || otherId);
+  }
   document.getElementById('chat-panel-title').textContent = title;
 
   // Marquer tous les messages non lus de cette conv comme lus dans Firestore
