@@ -72,7 +72,7 @@ function startFirestoreListeners() {
           if (!chatConvs[cid]) chatConvs[cid] = {};
           chatConvs[cid].unread = unread;
         });
-        uif (currentUser && currentUser.id) updateChatBadge?.();
+        if (currentUser && currentUser.id) updateChatBadge?.();
         if (typeof chatOpen !== 'undefined' && chatOpen && currentUser && currentUser.id) {
           buildChatTabs?.();
           renderChatMessages?.();
