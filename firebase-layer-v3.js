@@ -22,6 +22,7 @@ firebase.initializeApp(firebaseConfig);
 const _auth = firebase.auth();
 const _db   = firebase.firestore();
 window._db  = _db; // Exposé pour la messagerie
+window._FieldValue = firebase.firestore.FieldValue; // Exposé pour arrayUnion
  
 let _firestoreReady = false;
 let _unsubUsers, _unsubDossiers, _unsubNotifs, _unsubMessages;
