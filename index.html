@@ -1793,43 +1793,6 @@ ${d.autres?`<div class="box danger" style="margin-top:8px"><div class="box-label
 </div>
 
 <script>window.onload = function(){ window.print(); }<\/script>
-<!-- ================================================================
-     MESSAGERIE INTERNE
-     ================================================================ -->
-
-<!-- Bouton flottant -->
-<button id="chat-btn" onclick="toggleChat()" title="Messagerie interne">
-  <i class="ti ti-message-2"></i>
-  <span class="chat-badge" id="chat-badge" style="display:none">0</span>
-</button>
-
-<!-- Panneau chat -->
-<div id="chat-panel">
-  <div class="chat-panel-hd">
-    <i class="ti ti-message-2" style="font-size:16px;opacity:.7"></i>
-    <span class="chat-title" id="chat-panel-title">Messagerie</span>
-    <button onclick="toggleChat()"><i class="ti ti-x"></i></button>
-  </div>
-
-  <!-- Onglets conversations -->
-  <div class="chat-tabs" id="chat-tabs"></div>
-
-  <!-- Messages -->
-  <div class="chat-messages" id="chat-messages">
-    <div class="chat-empty">Sélectionnez une conversation</div>
-  </div>
-
-  <!-- Saisie -->
-  <div class="chat-input-wrap">
-    <textarea class="chat-input" id="chat-input" placeholder="Message…" rows="1"
-      onkeydown="chatInputKey(event)"
-      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
-    <button class="chat-send-btn" onclick="sendChatMsg()" id="chat-send-btn">
-      <i class="ti ti-send"></i>
-    </button>
-  </div>
-</div>
-
 </body>
 </html>`;
   const w = window.open('', '_blank', 'width=900,height=700');
@@ -4302,6 +4265,37 @@ document.addEventListener('click', e => {
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="firebase-layer-v3.js"></script>
+
+<!-- ================================================================
+     MESSAGERIE INTERNE
+     ================================================================ -->
+
+<!-- Bouton flottant -->
+<button id="chat-btn" onclick="toggleChat()" title="Messagerie interne">
+  <i class="ti ti-message-2"></i>
+  <span class="chat-badge" id="chat-badge" style="display:none">0</span>
+</button>
+
+<!-- Panneau chat -->
+<div id="chat-panel">
+  <div class="chat-panel-hd">
+    <i class="ti ti-message-2" style="font-size:16px;opacity:.7"></i>
+    <span class="chat-title" id="chat-panel-title">Messagerie</span>
+    <button onclick="toggleChat()"><i class="ti ti-x"></i></button>
+  </div>
+  <div class="chat-tabs" id="chat-tabs"></div>
+  <div class="chat-messages" id="chat-messages">
+    <div class="chat-empty">Sélectionnez une conversation</div>
+  </div>
+  <div class="chat-input-wrap">
+    <textarea class="chat-input" id="chat-input" placeholder="Message…" rows="1"
+      onkeydown="chatInputKey(event)"
+      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
+    <button class="chat-send-btn" onclick="sendChatMsg()" id="chat-send-btn">
+      <i class="ti ti-send"></i>
+    </button>
+  </div>
+</div>
 
 <div id="planning-data" style="display:none" data-content=""></div>
 
