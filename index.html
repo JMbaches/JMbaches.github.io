@@ -1166,6 +1166,13 @@ function connectUser(u) {
 function doLogout() {
   localStorage.removeItem('jmb_session');
   currentUser=null; currentDosId=null;
+  // Fermer et cacher le chat
+  chatOpen = false;
+  const chatPanel = document.getElementById('chat-panel');
+  if (chatPanel) chatPanel.classList.remove('open');
+  const chatBtn = document.getElementById('chat-btn');
+  if (chatBtn) chatBtn.style.display = 'none';
+  chatConvs = {};
   document.getElementById('app').style.display='none';
   document.getElementById('login-screen').style.display='flex';
   document.getElementById('login-email').value='';
@@ -4071,12 +4078,18 @@ function openChatConv(convId) {
     : 'Conversation avec ' + (users.find(u => u.id === convId)?.name || convId);
   document.getElementById('chat-panel-title').textContent = title;
 
-  // Marquer comme lus dans Firestore
+  // Marquer tous les messages non lus de cette conv comme lus dans Firestore
   if (window._db && currentUser) {
-    window._db.collection('messages')
-      .where('convId', '==', convId)
-      .where('readBy', 'array-contains', currentUser.id)
-      .get(); // juste pour déclencher — on utilise le listener
+    const unreadMsgs = (window._chatMessages || []).filter(m =>
+      m.convId === convId &&
+      m.from !== currentUser.id &&
+      (!m.readBy || !m.readBy.includes(currentUser.id))
+    );
+    unreadMsgs.forEach(m => {
+      window._db.collection('messages').doc(m.id).update({
+        readBy: (window._FieldValue || firebase.firestore.FieldValue).arrayUnion(currentUser.id)
+      }).catch(() => {});
+    });
   }
 
   renderChatMessages();
