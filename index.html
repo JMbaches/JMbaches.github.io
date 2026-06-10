@@ -899,7 +899,7 @@ a:focus-visible, button:focus-visible,
     <div class="modal-hd">
       <div class="modal-title" id="modal-dos-title">Nouveau dossier</div>
       <div style="display:flex;align-items:center;gap:8px">
-        <button id="megao-import-btn" class="btn btn-secondary btn-sm" onclick="document.getElementById('megao-pdf-input').click()" title="Importer depuis un PDF Mégao" style="display:none">
+        <button id="megao-import-btn" class="btn btn-secondary btn-sm" onclick="document.getElementById('megao-pdf-input').click()" title="Importer depuis un PDF Mégao">
           <i class="ti ti-file-import"></i> Importer PDF Mégao
         </button>
         <input type="file" id="megao-pdf-input" accept=".pdf,image/*" style="display:none" onchange="handleMegaoPDF(this)">
@@ -1145,7 +1145,6 @@ const ALL_PERMS = [
   {id:'journal',          label:'Voir le journal d\'activité'},
   {id:'suivi',            label:'Vue suivi / statistiques'},
   {id:'reset_dossiers',    label:'Réinitialiser tous les dossiers'},
-  {id:'import_megao',      label:'Importer depuis Mégao (PDF)'},
 ];
 const ROLE_DEFAULT_PERMS = {
   direction: ['view_all','create','edit','advance','view_prod','adv_prod','atelier_grand','emballage','emballage_grand','metreur','planning','compta','horaires_poseurs','users','journal','suivi'],
@@ -2573,9 +2572,9 @@ function openNewDos() {
   const today=new Date().toISOString().split('T')[0];
   document.getElementById('f-date-livraison').value=today;
   openModal('modal-dossier');
-  // Afficher le bouton Mégao uniquement si permission import_megao
+  // Bouton Mégao visible pour tous ceux qui peuvent créer des dossiers
   const megaoBtn = document.getElementById('megao-import-btn');
-  if (megaoBtn) megaoBtn.style.display = can('import_megao') ? '' : 'none';
+  if (megaoBtn) megaoBtn.style.display = can('create') ? '' : 'none';
 }
 function calcSurface() {
   const l=parseFloat(document.getElementById('f-largeur')?.value)||0;
@@ -4194,7 +4193,7 @@ function renderUsers() {
       <button class="btn btn-primary" onclick="openNewUser()"><i class="ti ti-plus"></i> Nouveau compte</button>
     </div>
   </div>
-  ${can('import_megao')?`
+  ${can('create')?`
   <div class="card" style="padding:16px 20px;margin-bottom:20px">
     <div style="font-size:13px;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:8px"><i class="ti ti-key" style="color:var(--accent)"></i> Clé API Claude — Import PDF Mégao scanné</div>
     <div style="font-size:12px;color:var(--ink-faint);margin-bottom:12px">Nécessaire uniquement pour les PDF scannés ou photos. Pour les exports PDF numériques de Mégao, l'import fonctionne sans clé.</div>
