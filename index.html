@@ -1144,6 +1144,7 @@ const ALL_PERMS = [
   {id:'users',            label:'Gérer les comptes'},
   {id:'journal',          label:'Voir le journal d\'activité'},
   {id:'suivi',            label:'Vue suivi / statistiques'},
+  {id:'reset_dossiers',    label:'Réinitialiser tous les dossiers'},
 ];
 const ROLE_DEFAULT_PERMS = {
   direction: ['view_all','create','edit','advance','view_prod','adv_prod','atelier_grand','emballage','emballage_grand','metreur','planning','compta','horaires_poseurs','users','journal','suivi'],
@@ -4153,7 +4154,7 @@ function renderUsers() {
   <div class="section-header">
     <div class="section-title">Gestion des comptes</div>
     <div style="display:flex;gap:8px">
-      <button class="btn btn-danger btn-sm" onclick="resetData()" title="Remettre toutes les données à zéro"><i class="ti ti-refresh"></i> Réinitialiser</button>
+      ${can('reset_dossiers')?`<button class="btn btn-danger btn-sm" onclick="confirmResetDossiers()" title="Supprimer tous les dossiers"><i class="ti ti-trash"></i> Supprimer tous les dossiers</button>`:''}
       <button class="btn btn-primary" onclick="openNewUser()"><i class="ti ti-plus"></i> Nouveau compte</button>
     </div>
   </div>
@@ -4253,6 +4254,41 @@ function saveUser() {
 function toggleActive(uid) {
   const u=users.find(x=>x.id===uid); if(!u||u.id===currentUser.id) return;
   u.active=!u.active; saveData(); buildLoginSelect(); renderUsers();
+}
+
+function confirmResetDossiers() {
+  if (!can('reset_dossiers')) { showToast('Permission refusée'); return; }
+  const n = dossiers.length;
+  if (n === 0) { showToast('Aucun dossier à supprimer'); return; }
+  // Double confirmation
+  if (!confirm(`⚠️ Supprimer TOUS les dossiers ?
+
+${n} dossier${n>1?'s':''} seront définitivement supprimés.
+Cette action est IRRÉVERSIBLE.
+
+Cliquez OK pour continuer.`)) return;
+  if (!confirm(`Dernière confirmation.
+
+Vous allez supprimer ${n} dossier${n>1?'s':''} définitivement.
+
+Êtes-vous absolument certain ?`)) return;
+  if (!window._db) { showToast('Erreur : base de données non disponible'); return; }
+  // Suppression par batch (max 500 par batch Firestore)
+  const doDelete = async () => {
+    const allDos = [...dossiers];
+    const batchSize = 400;
+    for (let i = 0; i < allDos.length; i += batchSize) {
+      const batch = window._db.batch();
+      allDos.slice(i, i + batchSize).forEach(d => {
+        batch.delete(window._db.collection('dossiers').doc(d.id));
+      });
+      await batch.commit();
+    }
+    dossiers = [];
+    showToast(`${allDos.length} dossier${allDos.length>1?'s':''} supprimé${allDos.length>1?'s':''}`);
+    if (typeof refreshCurrentView === 'function') refreshCurrentView();
+  };
+  doDelete().catch(e => { console.error(e); showToast('Erreur lors de la suppression'); });
 }
 
 function deleteUser(uid) {
