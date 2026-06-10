@@ -4154,6 +4154,7 @@ function renderUsers() {
   <div class="section-header">
     <div class="section-title">Gestion des comptes</div>
     <div style="display:flex;gap:8px">
+      <button class="btn btn-danger btn-sm" onclick="resetData()" title="Remettre toutes les données à zéro"><i class="ti ti-refresh"></i> Réinitialiser</button>
       ${can('reset_dossiers')?`<button class="btn btn-danger btn-sm" onclick="confirmResetDossiers()" title="Supprimer tous les dossiers"><i class="ti ti-trash"></i> Supprimer tous les dossiers</button>`:''}
       <button class="btn btn-primary" onclick="openNewUser()"><i class="ti ti-plus"></i> Nouveau compte</button>
     </div>
