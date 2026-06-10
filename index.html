@@ -3782,8 +3782,8 @@ function calcHeures(deb, fin, avecPause=true) {
   const d = parseHeure(deb), f = parseHeure(fin);
   if(d===null || f===null || f<=d) return null;
   const brut = f - d;
-  // Déduire la pause midi uniquement si la journée dépasse 4h (demi-journée)
-  return avecPause && brut > 4 ? Math.max(0, brut - PAUSE_MIDI) : brut;
+  // Déduire la pause midi uniquement si la journée finit après 13h
+  return avecPause && f > 13 ? Math.max(0, brut - PAUSE_MIDI) : brut;
 }
 function fmtH(h) {
   if(h===null || h===undefined || isNaN(h)) return '—';
@@ -3807,7 +3807,7 @@ function renderHoraires() {
 
   if(!horairesData[horSemaine]) horairesData[horSemaine] = {};
 
-  // Calcul totaux semaine pour chaque poseur (avec déduction pause midi)
+  // Calcul totaux semaine pour chaque poseur
   function totalSemaine(pid) {
     const sem = horairesData[horSemaine]?.[pid] || {};
     let total = 0;
@@ -3815,12 +3815,13 @@ function renderHoraires() {
       const jour = sem[j] || {};
       let h = null;
       if(jour.mode==='direct' && jour.h !== undefined && jour.h !== '') {
-        // En saisie directe : déduire pause si > 4h
-        const brut = parseHeure(String(jour.h));
-        h = (brut !== null && brut > 4) ? Math.max(0, brut - PAUSE_MIDI) : brut;
+        // Mode direct : l'utilisateur saisit ses heures nettes, pas de déduction auto
+        h = parseHeure(String(jour.h));
       } else if(jour.deb && jour.fin) {
-        h = calcHeures(jour.deb, jour.fin); // pause déjà déduite dans calcHeures
+        h = calcHeures(jour.deb, jour.fin); // pause midi déduite si fin > 13h
       }
+      // Déduire la pause supplémentaire éventuelle (saisie en minutes)
+      if(h !== null && jour.pauseExtra) h = Math.max(0, h - (parseFloat(jour.pauseExtra)||0)/60);
       if(h !== null) total += h;
     });
     return total;
@@ -3833,7 +3834,7 @@ function renderHoraires() {
     <div>
       <div>
         <div style="font-size:21px;font-weight:700;color:var(--ink);letter-spacing:-.2px"><i class="ti ti-clock" style="vertical-align:-3px;margin-right:9px;color:var(--accent)"></i>Horaires poseurs</div>
-        <div style="font-size:12px;color:var(--ink-faint);margin-top:3px"><i class="ti ti-coffee" style="font-size:12px;vertical-align:-1px;margin-right:3px"></i>30 min de pause midi déduite automatiquement sur les journées de plus de 4h</div>
+        <div style="font-size:12px;color:var(--ink-faint);margin-top:3px"><i class="ti ti-coffee" style="font-size:12px;vertical-align:-1px;margin-right:3px"></i>30 min de pause midi déduite si la journée finit après 13h · Pause supp. saisie en minutes</div>
       </div>
       <div style="font-size:13px;color:var(--ink-faint);margin-top:3px">${weekLabel(horSemaine)}</div>
     </div>
@@ -3884,6 +3885,7 @@ function renderHoraires() {
               <th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-faint);background:var(--bg);border-bottom:1px solid var(--border)">Début</th>
               <th style="text-align:left;padding:8px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-faint);background:var(--bg);border-bottom:1px solid var(--border)">Fin</th>
               <th style="text-align:center;padding:8px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-faint);background:var(--bg);border-bottom:1px solid var(--border);width:80px">ou Nb h</th>
+              <th style="text-align:center;padding:8px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-faint);background:var(--bg);border-bottom:1px solid var(--border);width:80px">Pause + (min)</th>
               <th style="text-align:center;padding:8px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-faint);background:var(--bg);border-bottom:1px solid var(--border);width:90px">Total jour</th>
               <th style="text-align:center;padding:8px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-faint);background:var(--bg);border-bottom:1px solid var(--border);width:60px">Absent</th>
             </tr>
@@ -3927,6 +3929,13 @@ function renderHoraires() {
                     ${absent?'disabled':''}>`:'<span style="color:var(--ink-faint);font-size:12px">—</span>'}
                 </td>
                 <td style="padding:6px 10px;text-align:center">
+                  <input type="number" min="0" max="120" placeholder="0" value="${jour.pauseExtra||''}"
+                    style="width:60px;padding:5px 8px;font-size:13px;font-family:'JetBrains Mono',monospace;text-align:center"
+                    oninput="setHorVal('${p.id}','${j}','pauseExtra',this.value)"
+                    title="Pause supplémentaire en minutes"
+                    ${absent?'disabled':''}>
+                </td>
+                <td style="padding:6px 10px;text-align:center">
                   <span id="total-jour-${p.id}-${j}" style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:${totalJour!==null?'var(--ink)':'var(--ink-faint)'}">
                     ${absent?'<span style="font-size:11px;font-weight:700;color:var(--red-light);background:var(--red);padding:2px 7px;border-radius:3px">ABS</span>':fmtH(totalJour)}
                   </span>
@@ -3941,7 +3950,7 @@ function renderHoraires() {
           </tbody>
           <tfoot>
             <tr style="background:var(--bg)">
-              <td colspan="5" style="padding:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-faint)">Total semaine</td>
+              <td colspan="6" style="padding:10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-faint)">Total semaine</td>
               <td style="padding:10px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:17px;font-weight:800;color:${tot>=39?'var(--green)':tot>0?'var(--accent)':'var(--ink-faint)'}"><span id="total-sem-${p.id}">${fmtH(tot)}</span></td>
               <td></td>
             </tr>
@@ -3983,6 +3992,8 @@ function setHorVal(pid, jour, champ, val) {
   let hJour = null;
   if(mode==='direct' && jr.h!==undefined && jr.h!=='') hJour = parseHeure(String(jr.h));
   else if(mode==='plage' && jr.deb && jr.fin) hJour = calcHeures(jr.deb, jr.fin);
+  // Déduire pause supplémentaire
+  if(hJour !== null && jr.pauseExtra) hJour = Math.max(0, hJour - (parseFloat(jr.pauseExtra)||0)/60);
   // Mettre à jour l'affichage du total jour dans le DOM
   const cellId = `total-jour-${pid}-${jour}`;
   const el = document.getElementById(cellId);
@@ -3996,6 +4007,7 @@ function setHorVal(pid, jour, champ, val) {
     let h = null;
     if(jr2.mode==='direct' && jr2.h!==undefined && jr2.h!=='') h = parseHeure(String(jr2.h));
     else if(jr2.deb && jr2.fin) h = calcHeures(jr2.deb, jr2.fin);
+    if(h!==null && jr2.pauseExtra) h = Math.max(0, h - (parseFloat(jr2.pauseExtra)||0)/60);
     if(h!==null) tot += h;
   });
   const totEl = document.getElementById(`total-sem-${pid}`);
@@ -4011,7 +4023,7 @@ function exportHoraires() {
   const JOURS = ['lun','mar','mer','jeu','ven'];
   const JOURS_LABEL = {lun:'Lundi',mar:'Mardi',mer:'Mercredi',jeu:'Jeudi',ven:'Vendredi'};
   const poseurs = getPoseurs();
-  let csv = 'Semaine;Poseur;Jour;Début;Fin;Heures;Absent\n';
+  let csv = 'Semaine;Poseur;Jour;Début;Fin;Pause supp.;Heures nettes;Absent\n';
   poseurs.forEach(p => {
     JOURS.forEach(j => {
       const jour = horairesData[horSemaine]?.[p.id]?.[j] || {};
@@ -4019,7 +4031,7 @@ function exportHoraires() {
       let h = null;
       if(mode==='direct' && jour.h!==undefined && jour.h!=='') h = parseHeure(String(jour.h));
       else if(jour.deb && jour.fin) h = calcHeures(jour.deb, jour.fin);
-      csv += `${horSemaine};${p.name};${JOURS_LABEL[j]};${jour.deb||''};${jour.fin||''};${h!==null?fmtH(h):'0h'};${jour.absent?'Oui':'Non'}\n`;
+      csv += `${horSemaine};${p.name};${JOURS_LABEL[j]};${jour.deb||''};${jour.fin||''};${jour.pauseExtra?jour.pauseExtra+'min':''};${h!==null?fmtH(h):'0h'};${jour.absent?'Oui':'Non'}\n`;
     });
   });
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
