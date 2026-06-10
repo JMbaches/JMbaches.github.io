@@ -1727,13 +1727,13 @@ function renderDashboard() {
       <div style="padding:4px 0">
         ${top5.length>0?top5.map(e=>{
           const ev=EVT[e.type]||EVT.modification;
-          const u2=users.find(x=>x.id===e.user);
-          const rc2=ROLE_COLORS[u2?.role]||{bg:'#F1EFE8',c:'#444'};
+          const u2=resolveUser(e.user);
+          const rc2=ROLE_COLORS[u2.role]||{bg:'#F1EFE8',c:'#444'};
           return `<div class="activity-item" style="padding:9px 16px;cursor:pointer" onclick="openFiche('${e.dosId}')">
             <div class="activity-dot" style="background:${ev.bg};outline:3px solid ${ev.bg}"></div>
             <div style="flex:1;min-width:0">
               <div style="font-size:13px;color:var(--ink)">${e.action} <span style="color:var(--ink-faint)">· ${e.dosClient}</span></div>
-              <div style="font-size:11px;color:var(--ink-faint);margin-top:2px"><span style="padding:1px 5px;border-radius:3px;background:${rc2.bg};color:${rc2.c}">${u2?.name||e.user}</span> · ${e.at}</div>
+              <div style="font-size:11px;color:var(--ink-faint);margin-top:2px"><span style="padding:1px 5px;border-radius:3px;background:${rc2.bg};color:${rc2.c}">${u2.name}</span> · ${e.at}</div>
             </div>
           </div>`;
         }).join(''):`<div style="padding:20px;text-align:center;color:var(--ink-faint);font-size:13px">Aucune activité récente</div>`}
@@ -1993,7 +1993,7 @@ function renderFiche() {
             <div style="flex:1;min-width:0">
               <div class="hist-action">${h.action}</div>
               <div class="hist-meta">
-                <span style="padding:1px 6px;border-radius:3px;background:${(ROLE_COLORS[users.find(u=>u.id===h.user)?.role]||{bg:'#F1EFE8'}).bg};color:${(ROLE_COLORS[users.find(u=>u.id===h.user)?.role]||{c:'#444'}).c};font-size:10px">${userName(h.user)}</span>
+                <span style="padding:1px 6px;border-radius:3px;background:${(ROLE_COLORS[resolveUser(h.user).role]||{bg:'#F1EFE8'}).bg};color:${(ROLE_COLORS[resolveUser(h.user).role]||{c:'#444'}).c};font-size:10px">${resolveUser(h.user).name}</span>
                 · ${h.at}
               </div>
               ${h.detail?`<div class="hist-detail">${h.detail}</div>`:''}
@@ -4099,13 +4099,13 @@ function renderJournal() {
       <thead><tr><th>Dossier</th><th>Client</th><th>Type</th><th>Utilisateur</th><th>Action</th><th>Date / heure</th></tr></thead>
       <tbody>${all.map(e=>{
         const ev=EVT[e.type]||EVT.modification;
-        const u=users.find(x=>x.id===e.user);
-        const rc=ROLE_COLORS[u?.role]||{bg:'#F1EFE8',c:'#444'};
+        const u=resolveUser(e.user);
+        const rc=ROLE_COLORS[u.role]||{bg:'#F1EFE8',c:'#444'};
         return `<tr class="clickable" onclick="openFiche('${e.dosId}')">
           <td style="font-size:11px;color:var(--ink-faint);font-family:'JetBrains Mono',monospace">${e.dosId}</td>
           <td><strong>${e.dosClient}</strong></td>
           <td><span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:3px;background:${ev.bg};color:${ev.c};font-weight:500"><i class="ti ${ev.icon}" style="font-size:10px"></i>${e.type}</span></td>
-          <td><span style="font-size:11px;padding:2px 7px;border-radius:3px;background:${rc.bg};color:${rc.c}">${u?.name||e.user}</span></td>
+          <td><span style="font-size:11px;padding:2px 7px;border-radius:3px;background:${rc.bg};color:${rc.c}">${u.name}</span></td>
           <td style="font-size:12px">${e.action}${e.detail?`<div style="font-size:11px;color:var(--ink-faint);margin-top:1px">${e.detail}</div>`:''}</td>
           <td style="font-size:11px;color:var(--ink-faint)">${e.at}</td>
         </tr>`;
@@ -4776,7 +4776,7 @@ function exportDossierPDF() {
 
   const histHTML = d.history.map(h => {
     const e = EVT[h.type] || EVT.modification;
-    const userName_h = users.find(u => u.id === h.user)?.name || h.user;
+    const userName_h = resolveUser(h.user).name;
     return `<tr>
       <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:11px;color:#666">${h.at}</td>
       <td style="padding:5px 8px;border-bottom:1px solid #eee;font-size:11px">${h.action}</td>
@@ -5022,14 +5022,27 @@ function piloMonthLabel(dt){ return dt.toLocaleDateString('fr-FR',{month:'short'
 
 // Table de correspondance anciens IDs → noms (pour les dossiers créés avant la migration)
 const PILO_LEGACY = {
-  'u1':'Nicolas','u2':'Sophie M.','u3':'Antoine V.','u4':'Paul R.',
-  'u5':'Jean-Pierre','u6':'Lucie B.','u7':'Marc D.','u8':'Achats-volets',
-  'u9':'Service Emballage','u10':'Sacha'
+  'u1': {name:'Nicolas',           role:'direction'},
+  'u2': {name:'Sophie M.',         role:'admin'},
+  'u3': {name:'Antoine V.',        role:'commercial'},
+  'u4': {name:'Paul R.',           role:'compta'},
+  'u5': {name:'Jean-Pierre',       role:'ouvrier'},
+  'u6': {name:'Lucie B.',          role:'sav'},
+  'u7': {name:'Marc D.',           role:'planning'},
+  'u8': {name:'Achats-volets',     role:'metreur'},
+  'u9': {name:'Service Emballage', role:'emballage'},
+  'u10':{name:'Sacha',             role:'commercial'},
 };
+// Résout un UID (nouveau ou ancien) en {name, role}
+function resolveUser(uid) {
+  if(!uid) return {name:'—', role:null};
+  const leg = PILO_LEGACY[uid];
+  if(leg) return leg;
+  const u = users.find(x => x.id === uid);
+  return u ? {name: u.name, role: u.role} : {name: uid, role: null};
+}
 function piloUserName(uid){
-  if(!uid||uid==='—') return '—';
-  if(PILO_LEGACY[uid]) return PILO_LEGACY[uid];
-  return userName(uid)||uid;
+  return resolveUser(uid).name;
 }
 const PILO_WON = ['accepte','facture','paye'];
 function piloIsWon(d){ return PILO_WON.includes(d.devisStatut); }
