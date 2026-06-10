@@ -843,7 +843,7 @@ a:focus-visible, button:focus-visible,
 </div>
 
 <!-- MODAL MOT DE PASSE OUBLIÉ -->
-<div id="modal-profil" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center">
+<div id="modal-profil" class="modal-overlay">
   <div class="modal" style="max-width:460px">
     <div class="modal-hd">
       <div class="modal-title"><i class="ti ti-user-circle" style="color:var(--accent)"></i> Mon profil</div>
@@ -4383,8 +4383,7 @@ function openProfilModal() {
   document.getElementById('profil-pwd2').value = '';
   document.getElementById('profil-info-msg').textContent = '';
   document.getElementById('profil-pwd-msg').textContent = '';
-  const modal = document.getElementById('modal-profil');
-  if(modal) modal.style.display = 'flex';
+  openModal('modal-profil');
 }
 
 async function saveProfilInfo() {
