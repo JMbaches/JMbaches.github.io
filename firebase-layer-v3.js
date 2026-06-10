@@ -109,6 +109,7 @@ window.saveData = async function saveData() {
     });
     users.forEach(u => {
       const data = { ...u }; delete data.id;
+      delete data.pwd; 
       batch.set(_db.collection('users').doc(u.id), data, { merge: true });
     });
     notifications.forEach(n => {
