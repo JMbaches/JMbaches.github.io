@@ -810,6 +810,50 @@ a:focus-visible, button:focus-visible,
 @media print {
   .print-fiche-header { border-bottom-color: var(--accent) !important; }
 }
+
+/* ---- MODE SOMBRE ---- */
+[data-theme="dark"] {
+  --bg: #0F1117;
+  --paper: #1C1F28;
+  --ink: #E6E9F0;
+  --ink-soft: #8E99AD;
+  --ink-faint: #606879;
+  --border: #2C3140;
+  --border-strong: #3D4455;
+  --accent-light: #162046;
+  --amber-light: #271A07;
+  --red-light: #280F10;
+  --green-light: #091A0F;
+  --purple-light: #171330;
+  --coral-light: #251008;
+  --teal-light: #071512;
+}
+[data-theme="dark"] .topbar {
+  background: linear-gradient(180deg, #0B0D13 0%, #0E1118 100%) !important;
+  box-shadow: inset 0 -1px 0 rgba(255,255,255,.04), 0 2px 14px rgba(0,0,0,.4);
+}
+[data-theme="dark"] .nav { background: #0E1118 !important; border-bottom-color: var(--accent); }
+[data-theme="dark"] tr:hover td { background: rgba(255,255,255,.025) !important; }
+[data-theme="dark"] tr.clickable:hover td { background: rgba(36,86,230,.10) !important; }
+[data-theme="dark"] th { background: #14171F !important; color: var(--ink-faint) !important; border-bottom-color: var(--border-strong) !important; }
+[data-theme="dark"] .login-card { background: var(--paper) !important; }
+[data-theme="dark"] #login-screen { background: linear-gradient(160deg, #0B0D13, #0E1118) !important; }
+[data-theme="dark"] .global-search-input { background: rgba(255,255,255,.06) !important; }
+[data-theme="dark"] .modal { background: var(--paper) !important; }
+[data-theme="dark"] .modal-hd, [data-theme="dark"] .modal-ft { background: var(--paper) !important; }
+[data-theme="dark"] .fiche-section-title { background: #14171F !important; }
+[data-theme="dark"] .avance-bar { background: #14171F !important; }
+[data-theme="dark"] .btn-primary { background: linear-gradient(180deg, #2B313D 0%, #14171F 100%) !important; }
+[data-theme="dark"] .edt-col.today { background: #14172A !important; }
+[data-theme="dark"] .edt-head-cell.today { background: var(--accent-light) !important; }
+[data-theme="dark"] .pipe-card:hover { background: var(--accent-light) !important; }
+[data-theme="dark"] .spec-grid > div { background: #14171F !important; }
+[data-theme="dark"] input, [data-theme="dark"] select, [data-theme="dark"] textarea { background: var(--paper) !important; color: var(--ink) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .fiche-cell input, [data-theme="dark"] .fiche-cell select { background: transparent !important; color: var(--ink) !important; }
+[data-theme="dark"] .rem-area { background: transparent !important; color: var(--ink) !important; border-color: var(--border-strong) !important; }
+[data-theme="dark"] .chat-msg-bubble { background: #1F2535 !important; }
+[data-theme="dark"] .chat-input { background: #14171F !important; }
+[data-theme="dark"] #chat-panel { background: var(--paper) !important; }
 </style>
 </head>
 <body>
@@ -943,6 +987,7 @@ a:focus-visible, button:focus-visible,
         </div>
       </div>
       <button id="btn-api-key" class="btn btn-sm" onclick="openApiKeyModal()" style="color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.2);display:none" title="Configurer la clé API Claude"><i class="ti ti-key"></i></button>
+      <button id="btn-dark-mode" class="btn btn-sm" onclick="toggleDarkMode()" style="color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.2)" title="Mode sombre / clair"><i class="ti ti-moon" id="dark-icon"></i></button>
       <button class="btn btn-sm" onclick="doLogout()" style="color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.2)"><i class="ti ti-logout"></i> Déconnexion</button>
     </div>
   </div>
@@ -1659,8 +1704,8 @@ function globalSearch(val) {
     return `<div class="gs-item" onclick="globalSearchGoTo('${d.id}')">
       <div class="gs-item-dot" style="background:${dot}"></div>
       <div class="gs-item-main">
-        <div class="gs-item-client">${d.client}</div>
-        <div class="gs-item-sub">${d.id} · ${d.structure||'—'} · ${STATUT_LABEL[d.statut]||d.statut}</div>
+        <div class="gs-item-client">${highlight(d.client, globalSearchQuery)}</div>
+        <div class="gs-item-sub">${highlight(d.id, globalSearchQuery)} · ${highlight(d.structure||'—', globalSearchQuery)} · ${STATUT_LABEL[d.statut]||d.statut}</div>
       </div>
     </div>`;
   }).join('');
@@ -1726,7 +1771,7 @@ function renderDashboard() {
   const u = currentUser;
   const rc = ROLE_COLORS[u.role]||{bg:'#EAF0F9',c:'#14479B'};
   const unread = myNotifs().filter(n=>!n.read[u.id]);
-  const urgent = dossiers.filter(d=>d.autres&&d.autres.toLowerCase().includes('urgent')&&d.statut!=='posé');
+  const urgent = dossiers.filter(d=>isUrgent(d)&&!isCloture(d.statut));
   const prod = dossiers.filter(d=>d.statut==='production');
   const nouveaux = dossiers.filter(d=>d.statut==='nouveau');
   const total = dossiers.reduce((s,d)=>s+ttc(d),0);
@@ -1976,9 +2021,15 @@ function renderDos() {
       <tbody>${applyDosFilters(dossiers).map(d=>{
         const retard = d.dateLivraison && d.dateLivraison < new Date().toISOString().split('T')[0] && !['expédié','posé','retiré'].includes(d.statut);
         return `<tr class="clickable" onclick="openFiche('${d.id}')" style="${retard?'background:rgba(163,45,45,.04)':''}">
-          <td style="font-size:11px;color:var(--ink-faint);font-family:'JetBrains Mono',monospace;font-weight:500">${d.id}</td>
-          <td><div style="font-weight:600;font-size:13px">${d.client}</div><div style="font-size:11px;color:var(--ink-faint);margin-top:1px">${d.tel||''}</div></td>
-          <td style="font-size:13px;color:var(--ink-soft)">${d.structure||'—'}</td>
+          <td style="font-size:11px;color:var(--ink-faint);font-family:'JetBrains Mono',monospace;font-weight:500">${highlight(d.id, globalSearchQuery)}</td>
+          <td>
+            <div style="font-weight:600;font-size:13px">${highlight(d.client, globalSearchQuery)}</div>
+            <div style="font-size:11px;color:var(--ink-faint);margin-top:1px;display:flex;align-items:center;gap:4px">
+              ${d.tel ? `<span>${d.tel}</span><button onclick="event.stopPropagation();copyPhone('${d.tel}',this)" class="btn btn-xs btn-ghost" style="padding:1px 4px;min-height:0;line-height:1" title="Copier le téléphone"><i class="ti ti-copy" style="font-size:10px"></i></button>` : ''}
+            </div>
+            ${dosProgressBar(d)}
+          </td>
+          <td style="font-size:13px;color:var(--ink-soft)">${highlight(d.structure||'—', globalSearchQuery)}</td>
           <td onclick="event.stopPropagation()">
             ${can('advance') ? `
             <div style="position:relative;display:inline-block">
@@ -2033,6 +2084,9 @@ function renderFiche() {
     <button class="btn btn-secondary" onclick="goTab('dos')"><i class="ti ti-arrow-left"></i> Retour aux dossiers</button>
     <div style="display:flex;gap:8px;align-items:center">
       ${statBadge(d.statut)}
+      <button class="btn btn-sm ${isUrgent(d)?'btn-danger':'btn-ghost'}" onclick="toggleUrgent()" style="${isUrgent(d)?'':'color:var(--red);border-color:rgba(163,45,45,.3)'}" title="${isUrgent(d)?'Cliquer pour retirer la priorité':'Marquer comme urgent'}">
+        <i class="ti ti-alert-triangle"></i> ${isUrgent(d)?'URGENT':'Urgent ?'}
+      </button>
       <button class="btn btn-secondary" onclick="printFicheA4()"><i class="ti ti-printer"></i> Imprimer A4</button>
       <button class="btn btn-secondary" onclick="exportDossierPDF()"><i class="ti ti-file-export"></i> Exporter PDF</button>
       <button class="btn btn-primary" onclick="saveFiche()"><i class="ti ti-check"></i> Enregistrer</button>
@@ -2067,10 +2121,10 @@ function renderFiche() {
   </div>`;
 }
 function renderPage(d,p) {
-  if(p.type==='commande') return renderPageCommande(d);
+  if(p.type==='commande') return renderPageCommande(d,p);
   if(p.type==='verif') return renderPageVerif(d,p);
   if(p.type==='notes') return renderPageNotes(p);
-  if(p.type==='expedition') return renderPageExp(d);
+  if(p.type==='expedition') return renderPageExp(d,p);
   return '';
 }
 function printFicheA4() {
@@ -2221,7 +2275,7 @@ ${d.autres?`<div class="box danger" style="margin-top:8px"><div class="box-label
   w.document.close();
 }
 
-function renderPageCommande(d) {
+function renderPageCommande(d, p) { p = p || {};
   const tr=d.transport||'';
   const STRUCTS=['Volet hors-sol Silver Roll (2h30)','Volet hors-sol solaire Golden Roll (2h30)','Volet hors-sol avec coffre (2h30)','Volet hors-sol grand bassin X-Trem Roll (2h30)','Volet déplaçable Mouv&Roll (3h)','Volet immergé Subwater (5h)','Volet immergé Subwater Total (6h30)','SAV / réglage volet (1h30)','Remplacement tablier / lames (2h)','Métrage / repérage (1h)'];
   return `<div class="card" style="margin-bottom:12px">
@@ -2292,9 +2346,9 @@ function renderPageCommande(d) {
       ${can('advance')&&!isCloture(d.statut)?`<button class="btn btn-primary" onclick="avancerFiche()"><i class="ti ti-arrow-right"></i> ${STATUT_NEXT_BTN[d.statut]}</button>`:`<span class="badge b-expedie">Dossier clôturé</span>`}
     </div>
     <div style="display:flex;gap:12px;padding:12px 16px;border-top:1px solid var(--border)">
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Responsable</div><input placeholder="Nom / initiales"></div>
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Date livraison prévue</div><input type="date" value="${d.dateLivraison||''}"></div>
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Visa direction</div><input placeholder="Initiales"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Responsable</div><input value="${p.sigResponsable||''}" placeholder="Nom / initiales" onchange="setPageField(${currentPageIdx},'sigResponsable',this.value)"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Date livraison prévue</div><input type="date" value="${p.sigDate||d.dateLivraison||''}" onchange="setPageField(${currentPageIdx},'sigDate',this.value)"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Visa direction</div><input value="${p.sigVisa||''}" placeholder="Initiales" onchange="setPageField(${currentPageIdx},'sigVisa',this.value)"></div>
     </div>
   </div>`;
 }
@@ -2321,9 +2375,9 @@ function renderPageVerif(d,p) {
       <button class="btn btn-ghost btn-sm no-print" onclick="addVerifRow()"><i class="ti ti-plus"></i> Ajouter une ligne</button>
     </div>
     <div style="display:flex;gap:12px;padding:12px 16px;border-top:1px solid var(--border)">
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Contrôlé par</div><input placeholder="Initiales"></div>
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Date contrôle</div><input type="date"></div>
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Visa expédition</div><input placeholder="Initiales"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Contrôlé par</div><input value="${p.sigCtr||''}" placeholder="Initiales" onchange="setPageField(${currentPageIdx},'sigCtr',this.value)"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Date contrôle</div><input type="date" value="${p.sigCtrDate||''}" onchange="setPageField(${currentPageIdx},'sigCtrDate',this.value)"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Visa expédition</div><input value="${p.sigExp||''}" placeholder="Initiales" onchange="setPageField(${currentPageIdx},'sigExp',this.value)"></div>
     </div>
   </div>`;
 }
@@ -2335,27 +2389,27 @@ function renderPageNotes(p) {
       <textarea style="min-height:200px" onchange="setPageField(${currentPageIdx},'content',this.value)">${p.content||''}</textarea>
     </div>
     <div style="display:flex;gap:12px;padding:12px 16px;border-top:1px solid var(--border)">
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Auteur</div><input placeholder="Nom"></div>
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Date</div><input type="date"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Auteur</div><input value="${p.sigAuteur||''}" placeholder="Nom" onchange="setPageField(${currentPageIdx},'sigAuteur',this.value)"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Date</div><input type="date" value="${p.sigDate||''}" onchange="setPageField(${currentPageIdx},'sigDate',this.value)"></div>
     </div>
   </div>`;
 }
-function renderPageExp(d) {
+function renderPageExp(d, p) { p = p || {};
   return `<div class="card">
     <div class="card-hd"><span class="card-title">Fiche expédition — ${d.id} · ${d.client}</span></div>
     <div class="card-body">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Transporteur</div><input placeholder="ex: DHL, propre véhicule..."></div>
-        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">N° suivi colis</div><input placeholder="—"></div>
-        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Nombre de colis</div><input type="number" min="1" value="1"></div>
-        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Date expédition</div><input type="date"></div>
+        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Transporteur</div><input value="${p.expTransporteur||''}" placeholder="ex: DHL, propre véhicule..." onchange="setPageField(${currentPageIdx},'expTransporteur',this.value)"></div>
+        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">N° suivi colis</div><input value="${p.expSuivi||''}" placeholder="—" onchange="setPageField(${currentPageIdx},'expSuivi',this.value)"></div>
+        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Nombre de colis</div><input type="number" min="1" value="${p.expNbColis||1}" onchange="setPageField(${currentPageIdx},'expNbColis',this.value)"></div>
+        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Date expédition</div><input type="date" value="${p.expDate||''}" onchange="setPageField(${currentPageIdx},'expDate',this.value)"></div>
       </div>
-      <div style="margin-bottom:10px"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Adresse de livraison</div><textarea style="min-height:60px">${[d.adresse,[d.cp,d.ville].filter(Boolean).join(' ')].filter(Boolean).join('\n')}</textarea></div>
-      <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Instructions livraison</div><textarea placeholder="ex: Appeler avant, livrer matin uniquement..."></textarea></div>
+      <div style="margin-bottom:10px"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Adresse de livraison</div><textarea style="min-height:60px" onchange="setPageField(${currentPageIdx},'expAdresse',this.value)">${p.expAdresse||[d.adresse,[d.cp,d.ville].filter(Boolean).join(' ')].filter(Boolean).join('\n')}</textarea></div>
+      <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Instructions livraison</div><textarea placeholder="ex: Appeler avant, livrer matin uniquement..." onchange="setPageField(${currentPageIdx},'expInstructions',this.value)">${p.expInstructions||''}</textarea></div>
     </div>
     <div style="display:flex;gap:12px;padding:12px 16px;border-top:1px solid var(--border)">
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Expédié par</div><input placeholder="Initiales"></div>
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Visa réception</div><input placeholder="—"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Expédié par</div><input value="${p.sigPar||''}" placeholder="Initiales" onchange="setPageField(${currentPageIdx},'sigPar',this.value)"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Visa réception</div><input value="${p.sigReception||''}" placeholder="—" onchange="setPageField(${currentPageIdx},'sigReception',this.value)"></div>
     </div>
   </div>`;
 }
@@ -2643,8 +2697,24 @@ function calcSurface() {
 function calcTTC() { const ht=parseFloat(document.getElementById('f-ht').value)||0; const tva=parseFloat(document.getElementById('f-tva').value)||20; if(ht>0)document.getElementById('f-ttc').value=(ht*(1+tva/100)).toFixed(2); }
 function calcHT() { const ttcv=parseFloat(document.getElementById('f-ttc').value)||0; const tva=parseFloat(document.getElementById('f-tva').value)||20; if(ttcv>0)document.getElementById('f-ht').value=(ttcv/(1+tva/100)).toFixed(2); }
 function saveDossier() {
-  const client=document.getElementById('f-client').value.trim();
-  if(!client){document.getElementById('f-client').focus();alert('Le nom du client est obligatoire.');return;}
+  const clientEl = document.getElementById('f-client');
+  const structEl = document.getElementById('f-structure');
+  const client = clientEl.value.trim();
+  const structure = structEl.value;
+  // Reset styles
+  clientEl.style.borderColor = ''; clientEl.style.boxShadow = '';
+  structEl.style.borderColor = ''; structEl.style.boxShadow = '';
+  let firstErr = null;
+  if (!client) {
+    clientEl.style.borderColor = 'var(--red)'; clientEl.style.boxShadow = '0 0 0 3px rgba(176,40,44,.18)';
+    clientEl.placeholder = '⚠ Obligatoire — entrez le nom du client';
+    firstErr = firstErr || clientEl;
+  }
+  if (!structure) {
+    structEl.style.borderColor = 'var(--red)'; structEl.style.boxShadow = '0 0 0 3px rgba(176,40,44,.18)';
+    firstErr = firstErr || structEl;
+  }
+  if (firstErr) { firstErr.focus(); showToast('Veuillez remplir les champs obligatoires (*)'); return; }
   const id='D-2024-0'+nextDosNum++;
   const tva=parseFloat(document.getElementById('f-tva').value)||20;
   const ht=parseFloat(document.getElementById('f-ht').value)||0;
@@ -2688,7 +2758,7 @@ function renderAtelier() {
   mc.innerHTML=`<div class="section-header"><div class="section-title">Commandes à fabriquer</div><span style="font-size:13px;color:var(--ink-faint)">${prod.length} en cours</span></div>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">
     ${prod.map(d=>{
-      const urg=d.autres&&d.autres.toLowerCase().includes('urgent');
+      const urg=isUrgent(d);
       return `<div class="card" style="${urg?'border-left:3px solid var(--red);':''}">
         <div style="padding:12px 14px">
           <div style="font-size:11px;color:var(--ink-faint);margin-bottom:3px;font-family:'JetBrains Mono',monospace">${d.id}${urg?' <span style="color:var(--red);font-weight:600">URGENT</span>':''}</div>
@@ -2791,7 +2861,7 @@ function renderAtelierGrand() {
   </div>
   <div class="stagger" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:18px">
     ${sorted.map((d, idx) => {
-      const urg = d.autres && d.autres.toLowerCase().includes('urgent');
+      const urg = isUrgent(d);
       const chk = d.pages?.find(p => p.type==='verif')?.checks || {};
       const rows = d.pages?.find(p => p.type==='verif')?.rows || VERIF_ROWS;
       const done = Object.values(chk).filter(c => c.oui).length;
@@ -3282,7 +3352,7 @@ function renderEmballageGrand() {
       if (aUrg !== bUrg) return aUrg - bUrg;
       return (a.dateLivraison||'9999') < (b.dateLivraison||'9999') ? -1 : 1;
     }).map((d, idx) => {
-      const urg = d.autres && d.autres.toLowerCase().includes('urgent');
+      const urg = isUrgent(d);
       const pos = idx + 1;
       const posColor = pos===1 ? 'var(--red)' : pos===2 ? 'var(--amber)' : '#92400E';
       const posBg   = pos===1 ? 'var(--red-light)' : pos===2 ? 'var(--amber-light)' : '#FEF3C7';
@@ -3460,7 +3530,7 @@ function renderSuivi() {
             </div>
             <div style="font-size:11px;color:var(--ink-faint)">${d.id}</div>
             <div style="font-size:11px;color:var(--ink-faint);margin-top:1px">${d.structure||'—'}</div>
-            ${d.autres&&d.autres.toLowerCase().includes('urgent')?`<div style="font-size:10px;color:var(--red);font-weight:600;margin-top:3px">⚠ URGENT</div>`:''}
+            ${isUrgent(d)?`<div style="font-size:10px;color:var(--red);font-weight:600;margin-top:3px">⚠ URGENT</div>`:''}
           </div>`).join('')||`<div style="font-size:11px;color:var(--ink-faint);text-align:center;padding:14px 0;border:1px dashed var(--border);border-radius:var(--radius);margin-top:4px" id="empty-${col.k}">Aucun dossier</div>`}
         </div>
       </div>`;
@@ -3591,7 +3661,7 @@ function toISODate(d) {
 function isToday(d) { return toISODate(d) === toISODate(new Date()); }
 
 function edtCardHTML(d, opts={}) {
-  const urgent = d.autres && d.autres.toLowerCase().includes('urgent');
+  const urgent = isUrgent(d);
   const cls = opts.unplanned ? 'edt-unplanned-card' : ('edt-card'+(urgent?' urgent':'')+(d.statut==='posé'?' pose':''));
   const dur = d.structure ? d.structure.match(/\(([^)]+)\)/)?.[1]||'' : '';
   return `<div class="${cls}" draggable="true"
@@ -5085,6 +5155,116 @@ function setStatFilter(s, el) {
   if (panel && panel.style.display !== 'none') panel.style.display = 'block';
 }
 
+/* ================================================================
+   AMÉLIORATIONS — Mode sombre, raccourcis, UX
+   ================================================================ */
+
+// ----- MODE SOMBRE -----
+function toggleDarkMode() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.documentElement.setAttribute('data-theme', isDark ? '' : 'dark');
+  localStorage.setItem('jmb_dark', isDark ? '' : '1');
+  const icon = document.getElementById('dark-icon');
+  if (icon) icon.className = isDark ? 'ti ti-moon' : 'ti ti-sun';
+}
+(function initDarkMode() {
+  if (localStorage.getItem('jmb_dark') === '1') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    const icon = document.getElementById('dark-icon');
+    if (icon) icon.className = 'ti ti-sun';
+  }
+})();
+
+// ----- URGENCE (helper backward-compat) -----
+function isUrgent(d) {
+  return d.urgent === true || (d.autres && d.autres.toLowerCase().includes('urgent'));
+}
+function toggleUrgent() {
+  const d = dossiers.find(x => x.id === currentDosId);
+  if (!d) return;
+  d.urgent = !isUrgent(d);
+  logHistory(currentDosId, 'modification', d.urgent ? 'Marqué URGENT' : 'Urgence levée');
+  saveData(); renderFiche();
+}
+
+// ----- COPIER TÉLÉPHONE -----
+function copyPhone(tel, btn) {
+  if (!tel) return;
+  navigator.clipboard.writeText(tel).then(() => {
+    if (btn) {
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<i class="ti ti-check"></i>';
+      setTimeout(() => { btn.innerHTML = orig; }, 1500);
+    }
+    showToast('Téléphone copié : ' + tel);
+  }).catch(() => showToast('Impossible de copier'));
+}
+
+// ----- SURBRILLANCE RECHERCHE -----
+function highlight(text, query) {
+  if (!query || !text) return (text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const safe = (text + '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const q = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return safe.replace(new RegExp('(' + q + ')', 'gi'), '<mark style="background:rgba(36,86,230,.18);color:var(--accent-deep);padding:0 1px;border-radius:2px;font-weight:700">$1</mark>');
+}
+
+// ----- BARRE DE PROGRESSION DOSSIER -----
+const STATUT_STEP = {nouveau:1,admin:2,production:3,emballage:4,stocké:5,expédié:6,posé:6,retiré:6};
+function dosProgressBar(d) {
+  const step = STATUT_STEP[d.statut] || 0;
+  const pct  = Math.round(step / 6 * 100);
+  const cols  = {nouveau:'var(--purple)',admin:'var(--accent)',production:'var(--amber)',emballage:'#D97706',stocké:'#4338CA',expédié:'var(--green)',posé:'var(--green)',retiré:'var(--ink-faint)'};
+  const col = cols[d.statut] || 'var(--accent)';
+  return `<div title="Étape ${step}/6" style="height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:5px;width:100%"><div style="height:100%;width:${pct}%;background:${col};border-radius:2px;transition:width .4s"></div></div>`;
+}
+
+// ----- RACCOURCIS CLAVIER -----
+document.addEventListener('keydown', function(e) {
+  // Échap : fermer modal → fiche → chat → dropdown recherche
+  if (e.key === 'Escape') {
+    const openMod = document.querySelector('.modal-overlay.open');
+    if (openMod) { closeModal(openMod.id); return; }
+    const resetMod = document.getElementById('modal-reset-pwd');
+    if (resetMod && resetMod.style.display === 'flex') { hideResetPassword(); return; }
+    if (typeof currentTab !== 'undefined' && currentTab === 'fiche' && currentDosId) { goTab('dos'); return; }
+    const chatPanel = document.getElementById('chat-panel');
+    if (chatPanel && chatPanel.classList.contains('open')) { if (typeof toggleChat === 'function') toggleChat(); return; }
+    const dd = document.getElementById('global-search-dropdown');
+    if (dd && dd.classList.contains('open')) { dd.classList.remove('open'); return; }
+  }
+  // Ctrl+S / ⌘S : sauvegarder
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault();
+    if (typeof currentDosId !== 'undefined' && currentDosId && typeof saveFiche === 'function') { saveFiche(); }
+    else { if (window.saveDataNow) saveDataNow(); else if (window.saveData) saveData(); showToast('Données sauvegardées'); }
+  }
+  // Ctrl+K / ⌘K : focus recherche
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    const si = document.getElementById('global-search-input');
+    if (si) { si.focus(); si.select(); }
+  }
+});
+
+// ----- TOAST HORS CONNEXION -----
+window.addEventListener('offline', function() {
+  let banner = document.getElementById('offline-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'offline-banner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9998;background:#B0282C;color:#fff;padding:10px 20px;text-align:center;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:10px;';
+    banner.innerHTML = '<i class="ti ti-wifi-off"></i> Vous êtes hors connexion — les modifications seront synchronisées à la reconnexion';
+    document.body.appendChild(banner);
+  }
+  banner.style.display = 'flex';
+});
+window.addEventListener('online', function() {
+  const banner = document.getElementById('offline-banner');
+  if (banner) banner.style.display = 'none';
+  if (typeof showToast === 'function') showToast('Connexion rétablie — synchronisation en cours');
+  if (window.saveData) saveData();
+});
+
 buildLoginSelect();
 
 // Vider le localStorage des anciennes données locales (migration vers Firestore)
@@ -5404,6 +5584,21 @@ function piloExportCSV(){
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="firebase-layer-v3.js"></script>
+<script>
+/* Debounce saveData — regroupe les écritures Firestore rapprochées */
+(function() {
+  var _orig = window.saveData;
+  var _t;
+  window.saveData = function() {
+    clearTimeout(_t);
+    _t = setTimeout(function() { if (_orig) _orig(); }, 700);
+  };
+  window.saveDataNow = function() {
+    clearTimeout(_t);
+    if (_orig) _orig();
+  };
+})();
+</script>
 
 <!-- ================================================================
      MESSAGERIE INTERNE
