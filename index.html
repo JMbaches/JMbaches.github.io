@@ -810,6 +810,50 @@ a:focus-visible, button:focus-visible,
 @media print {
   .print-fiche-header { border-bottom-color: var(--accent) !important; }
 }
+
+/* ---- MODE SOMBRE ---- */
+[data-theme="dark"] {
+  --bg: #0F1117;
+  --paper: #1C1F28;
+  --ink: #E6E9F0;
+  --ink-soft: #8E99AD;
+  --ink-faint: #606879;
+  --border: #2C3140;
+  --border-strong: #3D4455;
+  --accent-light: #162046;
+  --amber-light: #271A07;
+  --red-light: #280F10;
+  --green-light: #091A0F;
+  --purple-light: #171330;
+  --coral-light: #251008;
+  --teal-light: #071512;
+}
+[data-theme="dark"] .topbar {
+  background: linear-gradient(180deg, #0B0D13 0%, #0E1118 100%) !important;
+  box-shadow: inset 0 -1px 0 rgba(255,255,255,.04), 0 2px 14px rgba(0,0,0,.4);
+}
+[data-theme="dark"] .nav { background: #0E1118 !important; border-bottom-color: var(--accent); }
+[data-theme="dark"] tr:hover td { background: rgba(255,255,255,.025) !important; }
+[data-theme="dark"] tr.clickable:hover td { background: rgba(36,86,230,.10) !important; }
+[data-theme="dark"] th { background: #14171F !important; color: var(--ink-faint) !important; border-bottom-color: var(--border-strong) !important; }
+[data-theme="dark"] .login-card { background: var(--paper) !important; }
+[data-theme="dark"] #login-screen { background: linear-gradient(160deg, #0B0D13, #0E1118) !important; }
+[data-theme="dark"] .global-search-input { background: rgba(255,255,255,.06) !important; }
+[data-theme="dark"] .modal { background: var(--paper) !important; }
+[data-theme="dark"] .modal-hd, [data-theme="dark"] .modal-ft { background: var(--paper) !important; }
+[data-theme="dark"] .fiche-section-title { background: #14171F !important; }
+[data-theme="dark"] .avance-bar { background: #14171F !important; }
+[data-theme="dark"] .btn-primary { background: linear-gradient(180deg, #2B313D 0%, #14171F 100%) !important; }
+[data-theme="dark"] .edt-col.today { background: #14172A !important; }
+[data-theme="dark"] .edt-head-cell.today { background: var(--accent-light) !important; }
+[data-theme="dark"] .pipe-card:hover { background: var(--accent-light) !important; }
+[data-theme="dark"] .spec-grid > div { background: #14171F !important; }
+[data-theme="dark"] input, [data-theme="dark"] select, [data-theme="dark"] textarea { background: var(--paper) !important; color: var(--ink) !important; border-color: var(--border) !important; }
+[data-theme="dark"] .fiche-cell input, [data-theme="dark"] .fiche-cell select { background: transparent !important; color: var(--ink) !important; }
+[data-theme="dark"] .rem-area { background: transparent !important; color: var(--ink) !important; border-color: var(--border-strong) !important; }
+[data-theme="dark"] .chat-msg-bubble { background: #1F2535 !important; }
+[data-theme="dark"] .chat-input { background: #14171F !important; }
+[data-theme="dark"] #chat-panel { background: var(--paper) !important; }
 </style>
 </head>
 <body>
@@ -943,6 +987,7 @@ a:focus-visible, button:focus-visible,
         </div>
       </div>
       <button id="btn-api-key" class="btn btn-sm" onclick="openApiKeyModal()" style="color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.2);display:none" title="Configurer la clé API Claude"><i class="ti ti-key"></i></button>
+      <button id="btn-dark-mode" class="btn btn-sm" onclick="toggleDarkMode()" style="color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.2)" title="Mode sombre / clair"><i class="ti ti-moon" id="dark-icon"></i></button>
       <button class="btn btn-sm" onclick="doLogout()" style="color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.2)"><i class="ti ti-logout"></i> Déconnexion</button>
     </div>
   </div>
@@ -1328,14 +1373,18 @@ let editingUserId = null;
 let nextDosNum = 11;
 let nextNotifId = 100;
 let nextUserId = 10;
-let atelierOrder   = []; // IDs dans l'ordre manuel drag & drop atelier
-let emballageOrder = []; // IDs dans l'ordre manuel drag & drop emballage
+let atelierOrder   = [];
+let emballageOrder = []; // IDs dans l'ordre manuel drag & drop atelier
 let globalSearchQuery = ""; // Recherche globale persistante entre onglets
 let dosStatFilter    = '';    // Filtre par statut
 let dosCommFilter    = '';    // Filtre par commercial
 let dosPeriodeFilter = '';    // Filtre par période (ce_mois, mois_dernier, cette_annee, en_retard)
 let dosMontantMin    = '';    // Filtre montant min TTC
 let dosMontantMax    = '';    // Filtre montant max TTC
+let comptaAnnee        = '';    // Filtre année compta
+let comptaDevisFilter  = '';    // Filtre statut devis en compta
+let comptaChartPeriod  = 12;   // Période graphique CA en mois (null = tout)
+let showArchived       = false; // Afficher les dossiers clôturés archivés
 
 /* ================================================================
    HELPERS
@@ -1660,8 +1709,8 @@ function globalSearch(val) {
     return `<div class="gs-item" onclick="globalSearchGoTo('${d.id}')">
       <div class="gs-item-dot" style="background:${dot}"></div>
       <div class="gs-item-main">
-        <div class="gs-item-client">${d.client}</div>
-        <div class="gs-item-sub">${d.id} · ${d.structure||'—'} · ${STATUT_LABEL[d.statut]||d.statut}</div>
+        <div class="gs-item-client">${highlight(d.client, globalSearchQuery)}</div>
+        <div class="gs-item-sub">${highlight(d.id, globalSearchQuery)} · ${highlight(d.structure||'—', globalSearchQuery)} · ${STATUT_LABEL[d.statut]||d.statut}</div>
       </div>
     </div>`;
   }).join('');
@@ -1727,7 +1776,9 @@ function renderDashboard() {
   const u = currentUser;
   const rc = ROLE_COLORS[u.role]||{bg:'#EAF0F9',c:'#14479B'};
   const unread = myNotifs().filter(n=>!n.read[u.id]);
-  const urgent = dossiers.filter(d=>d.autres&&d.autres.toLowerCase().includes('urgent')&&d.statut!=='posé');
+  const urgent = dossiers.filter(d=>isUrgent(d)&&!isCloture(d.statut));
+  const today = new Date().toISOString().split('T')[0];
+  const retard = dossiers.filter(d=>d.dateLivraison&&d.dateLivraison<today&&!isCloture(d.statut));
   const prod = dossiers.filter(d=>d.statut==='production');
   const nouveaux = dossiers.filter(d=>d.statut==='nouveau');
   const total = dossiers.reduce((s,d)=>s+ttc(d),0);
@@ -1809,6 +1860,20 @@ function renderDashboard() {
             <div style="flex:1;min-width:0">
               <div style="font-size:13px;font-weight:600;color:var(--red)">${d.client}</div>
               <div style="font-size:11px;color:var(--red);opacity:.8">${d.autres?.slice(0,60)||''}</div>
+            </div>
+            ${statBadge(d.statut)}
+          </div>`).join('')}
+        </div>
+      </div>`:''}
+
+      ${retard.length>0?`<div class="card" style="margin-bottom:14px">
+        <div class="card-hd" style="background:var(--amber-light)"><span class="card-title" style="color:#854F0B"><i class="ti ti-calendar-exclamation" style="margin-right:5px"></i>En retard (${retard.length})</span></div>
+        <div style="padding:10px 12px">
+          ${retard.map(d=>`<div class="urgence-item" onclick="openFiche('${d.id}')">
+            <i class="ti ti-clock" style="color:#854F0B;font-size:15px;flex-shrink:0"></i>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:600;color:var(--ink)">${d.client}</div>
+              <div style="font-size:11px;color:#854F0B">Livraison : ${fmt(d.dateLivraison)}</div>
             </div>
             ${statBadge(d.statut)}
           </div>`).join('')}
@@ -1903,6 +1968,9 @@ function renderDos() {
         <button class="btn btn-ghost btn-sm" onclick="toggleFiltresAvances()" id="btn-filtres-avances" style="${(dosPeriodeFilter||dosMontantMin||dosMontantMax||dosStatFilter)?'color:var(--accent);border-color:var(--accent)':''}">
           <i class="ti ti-adjustments-horizontal"></i> Filtres${(dosPeriodeFilter||dosMontantMin||dosMontantMax||dosStatFilter)?' <span style="background:var(--accent);color:#fff;border-radius:8px;padding:0 5px;font-size:10px">actifs</span>':''}
         </button>
+        ${(()=>{const n=dossiers.filter(d=>isArchivable(d)).length;return n>0?`<button class="btn btn-ghost btn-sm" onclick="showArchived=!showArchived;renderDos()" style="${showArchived?'color:var(--accent);border-color:var(--accent)':'color:var(--ink-faint)'}"><i class="ti ti-archive"></i> Archives${showArchived?' (visible)':' ('+n+')'}
+        </button>`:'';})()}
+        <button class="btn btn-ghost btn-sm" onclick="exportDossiersCSV()" title="Exporter en CSV"><i class="ti ti-table-export"></i> CSV</button>
         ${can('create')?`<button class="btn btn-primary" onclick="openNewDos()"><i class="ti ti-plus"></i> Nouveau dossier</button>`:''}
       </div>
     </div>
@@ -1974,12 +2042,18 @@ function renderDos() {
         <th>Activité</th><th>Actions</th>
       </tr></thead>
       ${globalSearchQuery ? `<caption style="caption-side:top;text-align:left;padding:8px 14px;font-size:12px;color:var(--accent);font-weight:600;background:var(--accent-light);border-bottom:1px solid var(--border)"><i class="ti ti-search"></i> ${filteredDossiers(dossiers).length} résultat(s) pour « ${globalSearchQuery} » <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="document.getElementById('global-search-input').value='';globalSearch('')">✕ Effacer</button></caption>` : ""}
-      <tbody>${applyDosFilters(dossiers).map(d=>{
+      <tbody>${applyDosFilters(dossiers).filter(d=>showArchived||!isArchivable(d)).map(d=>{
         const retard = d.dateLivraison && d.dateLivraison < new Date().toISOString().split('T')[0] && !['expédié','posé','retiré'].includes(d.statut);
         return `<tr class="clickable" onclick="openFiche('${d.id}')" style="${retard?'background:rgba(163,45,45,.04)':''}">
-          <td style="font-size:11px;color:var(--ink-faint);font-family:'JetBrains Mono',monospace;font-weight:500">${d.id}</td>
-          <td><div style="font-weight:600;font-size:13px">${d.client}</div><div style="font-size:11px;color:var(--ink-faint);margin-top:1px">${d.tel||''}</div></td>
-          <td style="font-size:13px;color:var(--ink-soft)">${d.structure||'—'}</td>
+          <td style="font-size:11px;color:var(--ink-faint);font-family:'JetBrains Mono',monospace;font-weight:500">${highlight(d.id, globalSearchQuery)}</td>
+          <td>
+            <div style="font-weight:600;font-size:13px">${highlight(d.client, globalSearchQuery)}</div>
+            <div style="font-size:11px;color:var(--ink-faint);margin-top:1px;display:flex;align-items:center;gap:4px">
+              ${d.tel ? `<span>${d.tel}</span><button onclick="event.stopPropagation();copyPhone('${d.tel}',this)" class="btn btn-xs btn-ghost" style="padding:1px 4px;min-height:0;line-height:1" title="Copier le téléphone"><i class="ti ti-copy" style="font-size:10px"></i></button>` : ''}
+            </div>
+            ${dosProgressBar(d)}
+          </td>
+          <td style="font-size:13px;color:var(--ink-soft)">${highlight(d.structure||'—', globalSearchQuery)}</td>
           <td onclick="event.stopPropagation()">
             ${can('advance') ? `
             <div style="position:relative;display:inline-block">
@@ -2028,12 +2102,29 @@ function renderFiche() {
   const mc=document.getElementById('main-content');
   const p=d.pages[currentPageIdx];
   const tabs=d.pages.map((pg,i)=>`<button class="page-tab${i===currentPageIdx?' active':''}" onclick="switchPage(${i})">${pg.label}</button>`).join('');
+  const filteredList = typeof applyDosFilters==='function' ? applyDosFilters(dossiers) : dossiers;
+  const curIdx = filteredList.findIndex(x=>x.id===currentDosId);
+  const prevId = curIdx>0 ? filteredList[curIdx-1].id : null;
+  const nextId = curIdx<filteredList.length-1 ? filteredList[curIdx+1].id : null;
+  const HIST_LIMIT = 5;
+  const histSlice = d.history.slice(0, HIST_LIMIT);
+  const histHasMore = d.history.length > HIST_LIMIT;
   mc.innerHTML=`
   <div id="toast-msg" class="toast-msg"></div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px" class="no-print">
-    <button class="btn btn-secondary" onclick="goTab('dos')"><i class="ti ti-arrow-left"></i> Retour aux dossiers</button>
+    <div style="display:flex;align-items:center;gap:6px">
+      <button class="btn btn-secondary" onclick="goTab('dos')"><i class="ti ti-arrow-left"></i> Retour</button>
+      <button class="btn btn-ghost btn-sm" title="Dossier précédent (←)" ${!prevId?'disabled':''} onclick="${prevId?`openFiche('${prevId}')`:''}" style="padding:4px 7px"><i class="ti ti-chevron-left"></i></button>
+      <span style="font-size:11px;color:var(--ink-faint)">${curIdx+1}/${filteredList.length}</span>
+      <button class="btn btn-ghost btn-sm" title="Dossier suivant (→)" ${!nextId?'disabled':''} onclick="${nextId?`openFiche('${nextId}')`:''}" style="padding:4px 7px"><i class="ti ti-chevron-right"></i></button>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--ink);margin-left:4px">${d.id}</span>
+      <button class="btn btn-ghost btn-sm" onclick="copyDosId('${d.id}',this)" title="Copier le N°" style="padding:2px 6px;min-height:0"><i class="ti ti-copy" style="font-size:11px"></i></button>
+    </div>
     <div style="display:flex;gap:8px;align-items:center">
       ${statBadge(d.statut)}
+      <button class="btn btn-sm ${isUrgent(d)?'btn-danger':'btn-ghost'}" onclick="toggleUrgent()" style="${isUrgent(d)?'':'color:var(--red);border-color:rgba(163,45,45,.3)'}" title="${isUrgent(d)?'Cliquer pour retirer la priorité':'Marquer comme urgent'}">
+        <i class="ti ti-alert-triangle"></i> ${isUrgent(d)?'URGENT':'Urgent ?'}
+      </button>
       <button class="btn btn-secondary" onclick="printFicheA4()"><i class="ti ti-printer"></i> Imprimer A4</button>
       <button class="btn btn-secondary" onclick="exportDossierPDF()"><i class="ti ti-file-export"></i> Exporter PDF</button>
       <button class="btn btn-primary" onclick="saveFiche()"><i class="ti ti-check"></i> Enregistrer</button>
@@ -2045,20 +2136,14 @@ function renderFiche() {
     <div class="no-print">
       <div class="card" style="margin-bottom:12px">
         <div class="card-hd"><span class="card-title"><i class="ti ti-history" style="margin-right:5px"></i>Historique</span><span style="font-size:11px;color:var(--ink-faint)">${d.history.length} entrée${d.history.length>1?'s':''}</span></div>
-        <div style="padding:12px">
-          ${d.history.map(h=>{const e=EVT[h.type]||EVT.modification;return`
-          <div class="hist-item">
-            <div class="hist-dot" style="background:${e.bg};color:${e.c}"><i class="ti ${e.icon}" style="font-size:12px"></i></div>
-            <div style="flex:1;min-width:0">
-              <div class="hist-action">${h.action}</div>
-              <div class="hist-meta">
-                <span style="padding:1px 6px;border-radius:3px;background:${(ROLE_COLORS[resolveUser(h.user).role]||{bg:'#F1EFE8'}).bg};color:${(ROLE_COLORS[resolveUser(h.user).role]||{c:'#444'}).c};font-size:10px">${resolveUser(h.user).name}</span>
-                · ${h.at}
-              </div>
-              ${h.detail?`<div class="hist-detail">${h.detail}</div>`:''}
-            </div>
-          </div>`}).join('')}
+        <div id="hist-body" style="padding:12px">
+          ${histSlice.map(h=>histItemHTML(h)).join('')}
         </div>
+        ${histHasMore?`<div id="hist-more" style="padding:6px 12px;border-top:1px solid var(--border)">
+          <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" onclick="showAllHistory()">
+            <i class="ti ti-history"></i> Voir tout — ${d.history.length} entrées
+          </button>
+        </div>`:''}
         <div class="add-comment">
           <textarea id="comment-input" placeholder="Ajouter une note ou un commentaire..."></textarea>
           <button class="btn btn-secondary btn-sm" onclick="addComment()" style="width:100%;justify-content:center"><i class="ti ti-send"></i> Ajouter une note</button>
@@ -2068,10 +2153,10 @@ function renderFiche() {
   </div>`;
 }
 function renderPage(d,p) {
-  if(p.type==='commande') return renderPageCommande(d);
+  if(p.type==='commande') return renderPageCommande(d,p);
   if(p.type==='verif') return renderPageVerif(d,p);
   if(p.type==='notes') return renderPageNotes(p);
-  if(p.type==='expedition') return renderPageExp(d);
+  if(p.type==='expedition') return renderPageExp(d,p);
   return '';
 }
 function printFicheA4() {
@@ -2222,7 +2307,7 @@ ${d.autres?`<div class="box danger" style="margin-top:8px"><div class="box-label
   w.document.close();
 }
 
-function renderPageCommande(d) {
+function renderPageCommande(d, p) { p = p || {};
   const tr=d.transport||'';
   const STRUCTS=['Volet hors-sol Silver Roll (2h30)','Volet hors-sol solaire Golden Roll (2h30)','Volet hors-sol avec coffre (2h30)','Volet hors-sol grand bassin X-Trem Roll (2h30)','Volet déplaçable Mouv&Roll (3h)','Volet immergé Subwater (5h)','Volet immergé Subwater Total (6h30)','SAV / réglage volet (1h30)','Remplacement tablier / lames (2h)','Métrage / repérage (1h)'];
   return `<div class="card" style="margin-bottom:12px">
@@ -2293,9 +2378,9 @@ function renderPageCommande(d) {
       ${can('advance')&&!isCloture(d.statut)?`<button class="btn btn-primary" onclick="avancerFiche()"><i class="ti ti-arrow-right"></i> ${STATUT_NEXT_BTN[d.statut]}</button>`:`<span class="badge b-expedie">Dossier clôturé</span>`}
     </div>
     <div style="display:flex;gap:12px;padding:12px 16px;border-top:1px solid var(--border)">
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Responsable</div><input placeholder="Nom / initiales"></div>
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Date livraison prévue</div><input type="date" value="${d.dateLivraison||''}"></div>
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Visa direction</div><input placeholder="Initiales"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Responsable</div><input value="${p.sigResponsable||''}" placeholder="Nom / initiales" onchange="setPageField(${currentPageIdx},'sigResponsable',this.value)"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Date livraison prévue</div><input type="date" value="${p.sigDate||d.dateLivraison||''}" onchange="setPageField(${currentPageIdx},'sigDate',this.value)"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Visa direction</div><input value="${p.sigVisa||''}" placeholder="Initiales" onchange="setPageField(${currentPageIdx},'sigVisa',this.value)"></div>
     </div>
   </div>`;
 }
@@ -2322,9 +2407,9 @@ function renderPageVerif(d,p) {
       <button class="btn btn-ghost btn-sm no-print" onclick="addVerifRow()"><i class="ti ti-plus"></i> Ajouter une ligne</button>
     </div>
     <div style="display:flex;gap:12px;padding:12px 16px;border-top:1px solid var(--border)">
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Contrôlé par</div><input placeholder="Initiales"></div>
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Date contrôle</div><input type="date"></div>
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Visa expédition</div><input placeholder="Initiales"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Contrôlé par</div><input value="${p.sigCtr||''}" placeholder="Initiales" onchange="setPageField(${currentPageIdx},'sigCtr',this.value)"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Date contrôle</div><input type="date" value="${p.sigCtrDate||''}" onchange="setPageField(${currentPageIdx},'sigCtrDate',this.value)"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Visa expédition</div><input value="${p.sigExp||''}" placeholder="Initiales" onchange="setPageField(${currentPageIdx},'sigExp',this.value)"></div>
     </div>
   </div>`;
 }
@@ -2336,27 +2421,27 @@ function renderPageNotes(p) {
       <textarea style="min-height:200px" onchange="setPageField(${currentPageIdx},'content',this.value)">${p.content||''}</textarea>
     </div>
     <div style="display:flex;gap:12px;padding:12px 16px;border-top:1px solid var(--border)">
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Auteur</div><input placeholder="Nom"></div>
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Date</div><input type="date"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Auteur</div><input value="${p.sigAuteur||''}" placeholder="Nom" onchange="setPageField(${currentPageIdx},'sigAuteur',this.value)"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Date</div><input type="date" value="${p.sigDate||''}" onchange="setPageField(${currentPageIdx},'sigDate',this.value)"></div>
     </div>
   </div>`;
 }
-function renderPageExp(d) {
+function renderPageExp(d, p) { p = p || {};
   return `<div class="card">
     <div class="card-hd"><span class="card-title">Fiche expédition — ${d.id} · ${d.client}</span></div>
     <div class="card-body">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Transporteur</div><input placeholder="ex: DHL, propre véhicule..."></div>
-        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">N° suivi colis</div><input placeholder="—"></div>
-        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Nombre de colis</div><input type="number" min="1" value="1"></div>
-        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Date expédition</div><input type="date"></div>
+        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Transporteur</div><input value="${p.expTransporteur||''}" placeholder="ex: DHL, propre véhicule..." onchange="setPageField(${currentPageIdx},'expTransporteur',this.value)"></div>
+        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">N° suivi colis</div><input value="${p.expSuivi||''}" placeholder="—" onchange="setPageField(${currentPageIdx},'expSuivi',this.value)"></div>
+        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Nombre de colis</div><input type="number" min="1" value="${p.expNbColis||1}" onchange="setPageField(${currentPageIdx},'expNbColis',this.value)"></div>
+        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Date expédition</div><input type="date" value="${p.expDate||''}" onchange="setPageField(${currentPageIdx},'expDate',this.value)"></div>
       </div>
-      <div style="margin-bottom:10px"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Adresse de livraison</div><textarea style="min-height:60px">${[d.adresse,[d.cp,d.ville].filter(Boolean).join(' ')].filter(Boolean).join('\n')}</textarea></div>
-      <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Instructions livraison</div><textarea placeholder="ex: Appeler avant, livrer matin uniquement..."></textarea></div>
+      <div style="margin-bottom:10px"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Adresse de livraison</div><textarea style="min-height:60px" onchange="setPageField(${currentPageIdx},'expAdresse',this.value)">${p.expAdresse||[d.adresse,[d.cp,d.ville].filter(Boolean).join(' ')].filter(Boolean).join('\n')}</textarea></div>
+      <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Instructions livraison</div><textarea placeholder="ex: Appeler avant, livrer matin uniquement..." onchange="setPageField(${currentPageIdx},'expInstructions',this.value)">${p.expInstructions||''}</textarea></div>
     </div>
     <div style="display:flex;gap:12px;padding:12px 16px;border-top:1px solid var(--border)">
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Expédié par</div><input placeholder="Initiales"></div>
-      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Visa réception</div><input placeholder="—"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Expédié par</div><input value="${p.sigPar||''}" placeholder="Initiales" onchange="setPageField(${currentPageIdx},'sigPar',this.value)"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Visa réception</div><input value="${p.sigReception||''}" placeholder="—" onchange="setPageField(${currentPageIdx},'sigReception',this.value)"></div>
     </div>
   </div>`;
 }
@@ -2644,8 +2729,24 @@ function calcSurface() {
 function calcTTC() { const ht=parseFloat(document.getElementById('f-ht').value)||0; const tva=parseFloat(document.getElementById('f-tva').value)||20; if(ht>0)document.getElementById('f-ttc').value=(ht*(1+tva/100)).toFixed(2); }
 function calcHT() { const ttcv=parseFloat(document.getElementById('f-ttc').value)||0; const tva=parseFloat(document.getElementById('f-tva').value)||20; if(ttcv>0)document.getElementById('f-ht').value=(ttcv/(1+tva/100)).toFixed(2); }
 function saveDossier() {
-  const client=document.getElementById('f-client').value.trim();
-  if(!client){document.getElementById('f-client').focus();alert('Le nom du client est obligatoire.');return;}
+  const clientEl = document.getElementById('f-client');
+  const structEl = document.getElementById('f-structure');
+  const client = clientEl.value.trim();
+  const structure = structEl.value;
+  // Reset styles
+  clientEl.style.borderColor = ''; clientEl.style.boxShadow = '';
+  structEl.style.borderColor = ''; structEl.style.boxShadow = '';
+  let firstErr = null;
+  if (!client) {
+    clientEl.style.borderColor = 'var(--red)'; clientEl.style.boxShadow = '0 0 0 3px rgba(176,40,44,.18)';
+    clientEl.placeholder = '⚠ Obligatoire — entrez le nom du client';
+    firstErr = firstErr || clientEl;
+  }
+  if (!structure) {
+    structEl.style.borderColor = 'var(--red)'; structEl.style.boxShadow = '0 0 0 3px rgba(176,40,44,.18)';
+    firstErr = firstErr || structEl;
+  }
+  if (firstErr) { firstErr.focus(); showToast('Veuillez remplir les champs obligatoires (*)'); return; }
   const id='D-2024-0'+nextDosNum++;
   const tva=parseFloat(document.getElementById('f-tva').value)||20;
   const ht=parseFloat(document.getElementById('f-ht').value)||0;
@@ -2689,7 +2790,7 @@ function renderAtelier() {
   mc.innerHTML=`<div class="section-header"><div class="section-title">Commandes à fabriquer</div><span style="font-size:13px;color:var(--ink-faint)">${prod.length} en cours</span></div>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">
     ${prod.map(d=>{
-      const urg=d.autres&&d.autres.toLowerCase().includes('urgent');
+      const urg=isUrgent(d);
       return `<div class="card" style="${urg?'border-left:3px solid var(--red);':''}">
         <div style="padding:12px 14px">
           <div style="font-size:11px;color:var(--ink-faint);margin-bottom:3px;font-family:'JetBrains Mono',monospace">${d.id}${urg?' <span style="color:var(--red);font-weight:600">URGENT</span>':''}</div>
@@ -2722,8 +2823,8 @@ function getSortedProd() {
   const unordered = prod.filter(d => !manualIds.includes(d.id));
   // Tri auto : urgent d'abord, puis date livraison croissante
   unordered.sort((a, b) => {
-    const aUrg = a.autres && a.autres.toLowerCase().includes('urgent') ? 0 : 1;
-    const bUrg = b.autres && b.autres.toLowerCase().includes('urgent') ? 0 : 1;
+    const aUrg = isUrgent(a) ? 0 : 1;
+    const bUrg = isUrgent(b) ? 0 : 1;
     if (aUrg !== bUrg) return aUrg - bUrg;
     const aDate = a.dateLivraison || '9999';
     const bDate = b.dateLivraison || '9999';
@@ -2792,7 +2893,7 @@ function renderAtelierGrand() {
   </div>
   <div class="stagger" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:18px">
     ${sorted.map((d, idx) => {
-      const urg = d.autres && d.autres.toLowerCase().includes('urgent');
+      const urg = isUrgent(d);
       const chk = d.pages?.find(p => p.type==='verif')?.checks || {};
       const rows = d.pages?.find(p => p.type==='verif')?.rows || VERIF_ROWS;
       const done = Object.values(chk).filter(c => c.oui).length;
@@ -2850,6 +2951,18 @@ function renderAtelierGrand() {
               <span style="font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;color:${pct===100?'var(--green)':pct>0?'var(--amber)':'var(--ink-faint)'}">${done}/${total}</span>
             </div>
             <div class="daily-progress"><div style="width:${pct}%;background:${barColor}"></div></div>
+          </div>
+          <div style="margin-bottom:10px">
+            <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;font-size:12px;color:var(--ink-soft)" onclick="toggleNoteRapide('${d.id}')">
+              <i class="ti ti-message-plus"></i> Ajouter une note
+            </button>
+            <div id="note-rapide-${d.id}" style="display:none;margin-top:7px">
+              <textarea id="note-input-${d.id}" placeholder="Note rapide — visible dans l'historique du dossier…" style="width:100%;min-height:54px;resize:vertical;padding:7px 9px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius);background:var(--paper);color:var(--ink);outline:none"></textarea>
+              <div style="display:flex;gap:6px;margin-top:5px">
+                <button class="btn btn-secondary btn-sm" style="flex:1;justify-content:center" onclick="addNoteRapide('${d.id}')"><i class="ti ti-send"></i> Envoyer</button>
+                <button class="btn btn-ghost btn-sm" onclick="toggleNoteRapide('${d.id}')">Annuler</button>
+              </div>
+            </div>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:4px">
             <span style="font-size:13px;font-weight:500;color:${retard?'var(--red)':'var(--ink-faint)'}">
@@ -3294,10 +3407,9 @@ function emballageDrop(e, id) {
 }
 
 function renderEmballageGrand() {
-  const aEmballer = dossiers.filter(d => d.statut === 'emballage');
   const mc = document.getElementById('main-content');
-
   const sorted = getSortedEmballage();
+
   if (!sorted.length) {
     mc.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:420px;gap:18px">
       <div style="width:88px;height:88px;border-radius:50%;background:#FEF3C7;display:flex;align-items:center;justify-content:center"><i class="ti ti-package" style="font-size:44px;color:#92400E"></i></div>
@@ -3328,7 +3440,7 @@ function renderEmballageGrand() {
 
   <div class="stagger" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px">
     ${sorted.map((d, idx) => {
-      const urg = d.autres && d.autres.toLowerCase().includes('urgent');
+      const urg = isUrgent(d);
       const pos = idx + 1;
       const posColor = pos===1 ? 'var(--red)' : pos===2 ? 'var(--amber)' : '#92400E';
       const posBg   = pos===1 ? 'var(--red-light)' : pos===2 ? 'var(--amber-light)' : '#FEF3C7';
@@ -3513,7 +3625,7 @@ function renderSuivi() {
             </div>
             <div style="font-size:11px;color:var(--ink-faint)">${d.id}</div>
             <div style="font-size:11px;color:var(--ink-faint);margin-top:1px">${d.structure||'—'}</div>
-            ${d.autres&&d.autres.toLowerCase().includes('urgent')?`<div style="font-size:10px;color:var(--red);font-weight:600;margin-top:3px">⚠ URGENT</div>`:''}
+            ${isUrgent(d)?`<div style="font-size:10px;color:var(--red);font-weight:600;margin-top:3px">⚠ URGENT</div>`:''}
           </div>`).join('')||`<div style="font-size:11px;color:var(--ink-faint);text-align:center;padding:14px 0;border:1px dashed var(--border);border-radius:var(--radius);margin-top:4px" id="empty-${col.k}">Aucun dossier</div>`}
         </div>
       </div>`;
@@ -3644,7 +3756,7 @@ function toISODate(d) {
 function isToday(d) { return toISODate(d) === toISODate(new Date()); }
 
 function edtCardHTML(d, opts={}) {
-  const urgent = d.autres && d.autres.toLowerCase().includes('urgent');
+  const urgent = isUrgent(d);
   const cls = opts.unplanned ? 'edt-unplanned-card' : ('edt-card'+(urgent?' urgent':'')+(d.statut==='posé'?' pose':''));
   const dur = d.structure ? d.structure.match(/\(([^)]+)\)/)?.[1]||'' : '';
   return `<div class="${cls}" draggable="true"
@@ -4172,20 +4284,52 @@ function exportHoraires() {
 }
 
 function renderCompta() {
-  const total=dossiers.reduce((s,d)=>s+(d.ht||0),0);
-  const paye=dossiers.filter(d=>d.devisStatut==='paye').reduce((s,d)=>s+(d.ht||0),0);
+  const allYears = [...new Set(dossiers.map(d=>(d.dateFrom||d.dateLivraison||'').slice(0,4)).filter(Boolean))].sort().reverse();
+  if (!comptaAnnee && allYears.includes(String(new Date().getFullYear()))) comptaAnnee = String(new Date().getFullYear());
+  const byYear = comptaAnnee ? dossiers.filter(d=>((d.dateFrom||d.dateLivraison||'').startsWith(comptaAnnee))) : dossiers;
+  const filtered = comptaDevisFilter ? byYear.filter(d=>d.devisStatut===comptaDevisFilter) : byYear;
+  const total = filtered.reduce((s,d)=>s+(d.ht||0), 0);
+  const totalTTC = filtered.reduce((s,d)=>s+ttc(d), 0);
+  const paye = filtered.filter(d=>d.devisStatut==='paye').reduce((s,d)=>s+(d.ht||0), 0);
+  const DEVIS_OPTS = [{v:'',l:'Tous les statuts'},{v:'en_attente',l:'En attente'},{v:'accepte',l:'Accepté'},{v:'refuse',l:'Refusé'},{v:'facture',l:'Facturé'},{v:'paye',l:'Payé'}];
+  const periodBtns = [6,12,24,null].map(p=>`<button onclick="comptaChartPeriod=${p};renderComptaChart()" style="padding:3px 10px;font-size:12px;border-radius:4px;border:1px solid ${comptaChartPeriod===p?'var(--accent)':'var(--border)'};background:${comptaChartPeriod===p?'var(--accent-light)':'transparent'};color:${comptaChartPeriod===p?'var(--accent-deep)':'var(--ink-soft)'};cursor:pointer">${p?p+' mois':'Tout'}</button>`).join('');
+  const selStyle = 'padding:6px 10px;font-size:13px;border-radius:var(--radius);border:1px solid var(--border);background:var(--paper);color:var(--ink)';
   document.getElementById('main-content').innerHTML=`
-  <div class="stats-grid">
-    <div class="stat-card"><div class="stat-label">CA total HT</div><div class="stat-value">${Math.round(total).toLocaleString('fr-FR')}</div><div class="stat-sub">euros</div></div>
-    <div class="stat-card"><div class="stat-label">Encaissé</div><div class="stat-value">${Math.round(paye).toLocaleString('fr-FR')}</div><div class="stat-sub">euros</div></div>
-    <div class="stat-card"><div class="stat-label">En attente</div><div class="stat-value">${Math.round(total-paye).toLocaleString('fr-FR')}</div><div class="stat-sub">euros</div></div>
-    <div class="stat-card"><div class="stat-label">Nb dossiers</div><div class="stat-value">${dossiers.length}</div><div class="stat-sub">au total</div></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div class="section-title" style="margin:0;font-size:17px;font-weight:700">Comptabilité</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <select onchange="comptaAnnee=this.value;renderCompta()" style="${selStyle}">
+        <option value="">Toutes les années</option>
+        ${allYears.map(y=>`<option value="${y}"${comptaAnnee===y?' selected':''}>${y}</option>`).join('')}
+      </select>
+      <select onchange="comptaDevisFilter=this.value;renderCompta()" style="${selStyle}">
+        ${DEVIS_OPTS.map(o=>`<option value="${o.v}"${comptaDevisFilter===o.v?' selected':''}>${o.l}</option>`).join('')}
+      </select>
+    </div>
   </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-hd">
+      <span class="card-title"><i class="ti ti-chart-bar" style="margin-right:5px"></i>CA mensuel HT</span>
+      <div style="display:flex;gap:5px">${periodBtns}</div>
+    </div>
+    <div style="padding:14px 16px 10px">
+      <div style="position:relative;height:200px"><canvas id="compta-chart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="stats-grid" style="margin-bottom:16px">
+    <div class="stat-card"><div class="stat-label">CA HT${comptaAnnee?' '+comptaAnnee:''}${comptaDevisFilter?' · '+({en_attente:'En attente',accepte:'Accepté',refuse:'Refusé',facture:'Facturé',paye:'Payé'}[comptaDevisFilter]||''):''}</div><div class="stat-value">${Math.round(total).toLocaleString('fr-FR')}</div><div class="stat-sub">euros HT</div></div>
+    <div class="stat-card"><div class="stat-label">Encaissé</div><div class="stat-value">${Math.round(paye).toLocaleString('fr-FR')}</div><div class="stat-sub">euros HT</div></div>
+    <div class="stat-card"><div class="stat-label">En attente</div><div class="stat-value">${Math.round(total-paye).toLocaleString('fr-FR')}</div><div class="stat-sub">euros HT</div></div>
+    <div class="stat-card"><div class="stat-label">Nb dossiers</div><div class="stat-value">${filtered.length}</div><div class="stat-sub">${comptaAnnee?'en '+comptaAnnee:'au total'}</div></div>
+  </div>
+
   <div class="table-wrap">
     <table>
       <colgroup><col style="width:85px"><col style="width:140px"><col style="width:120px"><col style="width:100px"><col style="width:75px"><col style="width:90px"><col style="width:90px"><col></colgroup>
       <thead><tr><th>N°</th><th>Client</th><th>Produit</th><th>Statut</th><th>Date</th><th>HT</th><th>TTC</th><th>Devis</th></tr></thead>
-      <tbody>${dossiers.map(d=>`<tr class="clickable" onclick="openFiche('${d.id}')">
+      <tbody>${filtered.map(d=>`<tr class="clickable" onclick="openFiche('${d.id}')">
         <td style="font-size:11px;color:var(--ink-faint);font-family:'JetBrains Mono',monospace">${d.id}</td>
         <td><strong>${d.client}</strong></td>
         <td>${d.structure||'—'}</td>
@@ -4195,8 +4339,15 @@ function renderCompta() {
         <td style="font-size:13px;color:var(--ink-soft)">${ttc(d).toLocaleString('fr-FR',{minimumFractionDigits:2})} €</td>
         <td><span style="font-size:11px;padding:2px 7px;border-radius:3px;background:${d.devisStatut==='paye'?'var(--green-light)':d.devisStatut==='accepte'?'var(--accent-light)':'var(--bg)'};color:${d.devisStatut==='paye'?'var(--green)':d.devisStatut==='accepte'?'var(--accent-deep)':'var(--ink-faint)'}">${{en_attente:'En attente',accepte:'Accepté',refuse:'Refusé',facture:'Facturé',paye:'Payé'}[d.devisStatut]||'—'}</span></td>
       </tr>`).join('')}</tbody>
+      <tfoot><tr style="font-weight:600;background:var(--bg)">
+        <td colspan="5" style="font-size:12px;color:var(--ink-faint);text-align:right;padding:8px 12px">${filtered.length} dossier${filtered.length>1?'s':''} — total</td>
+        <td style="font-size:13px;padding:8px 6px">${total.toLocaleString('fr-FR',{minimumFractionDigits:2})} €</td>
+        <td style="font-size:13px;padding:8px 6px;color:var(--ink-soft)">${totalTTC.toLocaleString('fr-FR',{minimumFractionDigits:2})} €</td>
+        <td></td>
+      </tr></tfoot>
     </table>
   </div>`;
+  setTimeout(renderComptaChart, 60);
 }
 function renderJournal() {
   const all=[];
@@ -5138,6 +5289,252 @@ function setStatFilter(s, el) {
   if (panel && panel.style.display !== 'none') panel.style.display = 'block';
 }
 
+/* ================================================================
+   AMÉLIORATIONS — Mode sombre, raccourcis, UX
+   ================================================================ */
+
+// ----- MODE SOMBRE -----
+function toggleDarkMode() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.documentElement.setAttribute('data-theme', isDark ? '' : 'dark');
+  localStorage.setItem('jmb_dark', isDark ? '' : '1');
+  const icon = document.getElementById('dark-icon');
+  if (icon) icon.className = isDark ? 'ti ti-moon' : 'ti ti-sun';
+}
+(function initDarkMode() {
+  if (localStorage.getItem('jmb_dark') === '1') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    const icon = document.getElementById('dark-icon');
+    if (icon) icon.className = 'ti ti-sun';
+  }
+})();
+
+// ----- URGENCE (helper backward-compat) -----
+function isUrgent(d) {
+  return d.urgent === true || (d.autres && d.autres.toLowerCase().includes('urgent'));
+}
+function toggleUrgent() {
+  const d = dossiers.find(x => x.id === currentDosId);
+  if (!d) return;
+  d.urgent = !isUrgent(d);
+  logHistory(currentDosId, 'modification', d.urgent ? 'Marqué URGENT' : 'Urgence levée');
+  saveData(); renderFiche();
+}
+
+// ----- COPIER TÉLÉPHONE -----
+function copyPhone(tel, btn) {
+  if (!tel) return;
+  navigator.clipboard.writeText(tel).then(() => {
+    if (btn) {
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<i class="ti ti-check"></i>';
+      setTimeout(() => { btn.innerHTML = orig; }, 1500);
+    }
+    showToast('Téléphone copié : ' + tel);
+  }).catch(() => showToast('Impossible de copier'));
+}
+
+// ----- SURBRILLANCE RECHERCHE -----
+function highlight(text, query) {
+  if (!query || !text) return (text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const safe = (text + '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const q = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return safe.replace(new RegExp('(' + q + ')', 'gi'), '<mark style="background:rgba(36,86,230,.18);color:var(--accent-deep);padding:0 1px;border-radius:2px;font-weight:700">$1</mark>');
+}
+
+// ----- BARRE DE PROGRESSION DOSSIER -----
+const STATUT_STEP = {nouveau:1,admin:2,production:3,emballage:4,stocké:5,expédié:6,posé:6,retiré:6};
+function dosProgressBar(d) {
+  const step = STATUT_STEP[d.statut] || 0;
+  const pct  = Math.round(step / 6 * 100);
+  const cols  = {nouveau:'var(--purple)',admin:'var(--accent)',production:'var(--amber)',emballage:'#D97706',stocké:'#4338CA',expédié:'var(--green)',posé:'var(--green)',retiré:'var(--ink-faint)'};
+  const col = cols[d.statut] || 'var(--accent)';
+  return `<div title="Étape ${step}/6" style="height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:5px;width:100%"><div style="height:100%;width:${pct}%;background:${col};border-radius:2px;transition:width .4s"></div></div>`;
+}
+
+// ----- RACCOURCIS CLAVIER -----
+document.addEventListener('keydown', function(e) {
+  // Échap : fermer modal → fiche → chat → dropdown recherche
+  if (e.key === 'Escape') {
+    const openMod = document.querySelector('.modal-overlay.open');
+    if (openMod) { closeModal(openMod.id); return; }
+    const resetMod = document.getElementById('modal-reset-pwd');
+    if (resetMod && resetMod.style.display === 'flex') { hideResetPassword(); return; }
+    if (typeof currentTab !== 'undefined' && currentTab === 'fiche' && currentDosId) { goTab('dos'); return; }
+    const chatPanel = document.getElementById('chat-panel');
+    if (chatPanel && chatPanel.classList.contains('open')) { if (typeof toggleChat === 'function') toggleChat(); return; }
+    const dd = document.getElementById('global-search-dropdown');
+    if (dd && dd.classList.contains('open')) { dd.classList.remove('open'); return; }
+  }
+  // Ctrl+S / ⌘S : sauvegarder
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault();
+    if (typeof currentDosId !== 'undefined' && currentDosId && typeof saveFiche === 'function') { saveFiche(); }
+    else { if (window.saveDataNow) saveDataNow(); else if (window.saveData) saveData(); showToast('Données sauvegardées'); }
+  }
+  // Ctrl+K / ⌘K : focus recherche
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    const si = document.getElementById('global-search-input');
+    if (si) { si.focus(); si.select(); }
+  }
+  // Ctrl+P / ⌘P : imprimer la fiche courante
+  if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+    if (typeof currentTab !== 'undefined' && currentTab === 'fiche' && currentDosId) {
+      e.preventDefault();
+      if (typeof printFicheA4 === 'function') printFicheA4();
+    }
+  }
+  // ← → : naviguer entre dossiers (quand on est sur une fiche, sans modificateur, sans focus input)
+  if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key==='ArrowLeft'||e.key==='ArrowRight')) {
+    const tag = document.activeElement && document.activeElement.tagName;
+    if (tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT') return;
+    if (typeof currentTab !== 'undefined' && currentTab === 'fiche' && currentDosId) {
+      const fl = typeof applyDosFilters==='function' ? applyDosFilters(dossiers) : dossiers;
+      const ci = fl.findIndex(x=>x.id===currentDosId);
+      if (e.key==='ArrowLeft' && ci>0) { e.preventDefault(); openFiche(fl[ci-1].id); }
+      if (e.key==='ArrowRight' && ci<fl.length-1) { e.preventDefault(); openFiche(fl[ci+1].id); }
+    }
+  }
+});
+
+// ----- TOAST HORS CONNEXION -----
+window.addEventListener('offline', function() {
+  let banner = document.getElementById('offline-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'offline-banner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9998;background:#B0282C;color:#fff;padding:10px 20px;text-align:center;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:10px;';
+    banner.innerHTML = '<i class="ti ti-wifi-off"></i> Vous êtes hors connexion — les modifications seront synchronisées à la reconnexion';
+    document.body.appendChild(banner);
+  }
+  banner.style.display = 'flex';
+});
+window.addEventListener('online', function() {
+  const banner = document.getElementById('offline-banner');
+  if (banner) banner.style.display = 'none';
+  if (typeof showToast === 'function') showToast('Connexion rétablie — synchronisation en cours');
+  if (window.saveData) saveData();
+});
+
+// ----- ARCHIVAGE CLÔTURÉS -----
+function isArchivable(d) {
+  if (!isCloture(d.statut)) return false;
+  if (!d.dateLivraison) return false;
+  const limit = new Date(); limit.setMonth(limit.getMonth() - 6);
+  return new Date(d.dateLivraison) < limit;
+}
+
+// ----- EXPORT CSV DOSSIERS -----
+function exportDossiersCSV() {
+  const list = applyDosFilters(dossiers).filter(d => showArchived || !isArchivable(d));
+  const headers = ['N°','Client','Structure','Statut','Date livraison','HT','TTC','Devis','Tél','Ville'];
+  const rows = list.map(d => [
+    d.id, d.client, d.structure||'', d.statut, d.dateLivraison||'',
+    (d.ht||0).toFixed(2), ttc(d).toFixed(2), d.devisStatut||'', d.tel||'', d.ville||''
+  ]);
+  const csv = [headers, ...rows].map(r => r.map(c => '"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+  const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'dossiers-jmbaches.csv'; a.click(); URL.revokeObjectURL(a.href);
+  showToast('CSV exporté — '+list.length+' dossiers');
+}
+
+// ----- GRAPHIQUE CA MENSUEL -----
+function renderComptaChart() {
+  const canvas = document.getElementById('compta-chart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  const now = new Date();
+  const months = comptaChartPeriod;
+  let startDate;
+  if (months) {
+    startDate = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
+  } else {
+    const earliest = dossiers.map(d=>(d.dateFrom||d.dateLivraison||'')).filter(Boolean).sort()[0];
+    startDate = earliest ? new Date(parseInt(earliest.slice(0,4)), parseInt(earliest.slice(5,7))-1, 1) : new Date(now.getFullYear()-1, 0, 1);
+  }
+  const MOIS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+  const labels = [], data = [], colors = [];
+  const cur = new Date(startDate);
+  while (cur.getFullYear() < now.getFullYear() || (cur.getFullYear()===now.getFullYear() && cur.getMonth()<=now.getMonth())) {
+    const yy = cur.getFullYear(), mm = cur.getMonth();
+    const prefix = yy+'-'+String(mm+1).padStart(2,'0');
+    labels.push(MOIS[mm]+(yy!==now.getFullYear()?' '+String(yy).slice(2):''));
+    const sum = dossiers.filter(d=>(d.dateFrom||d.dateLivraison||'').startsWith(prefix)).reduce((s,d)=>s+(d.ht||0),0);
+    data.push(Math.round(sum));
+    colors.push(sum>0 ? 'rgba(36,86,230,0.75)' : 'rgba(36,86,230,0.15)');
+    cur.setMonth(cur.getMonth()+1);
+  }
+  if (window._comptaChart) { window._comptaChart.destroy(); window._comptaChart = null; }
+  const isDark = document.documentElement.getAttribute('data-theme')==='dark';
+  const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+  const tickColor = isDark ? '#8E99AD' : '#888';
+  window._comptaChart = new Chart(canvas, {
+    type: 'bar',
+    data: { labels, datasets: [{ label:'CA HT', data, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => '  '+ctx.parsed.y.toLocaleString('fr-FR')+' € HT' } }
+      },
+      scales: {
+        x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 } } },
+        y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 }, callback: v => v>=1000?Math.round(v/1000)+'k€':v+'€' } }
+      }
+    }
+  });
+}
+
+// ----- NOTE RAPIDE ATELIER -----
+function toggleNoteRapide(id) {
+  const zone = document.getElementById('note-rapide-' + id);
+  if (!zone) return;
+  const open = zone.style.display !== 'none';
+  zone.style.display = open ? 'none' : 'block';
+  if (!open) { const inp = document.getElementById('note-input-' + id); if (inp) inp.focus(); }
+}
+function addNoteRapide(id) {
+  const inp = document.getElementById('note-input-' + id); if (!inp) return;
+  const txt = inp.value.trim(); if (!txt) { inp.focus(); return; }
+  logHistory(id, 'commentaire', 'Note atelier : ' + txt);
+  saveData();
+  showToast('Note ajoutée');
+  toggleNoteRapide(id);
+  inp.value = '';
+}
+
+// ----- COPIER N° DOSSIER -----
+function copyDosId(id, btn) {
+  navigator.clipboard.writeText(id).then(() => {
+    if (btn) { const o = btn.innerHTML; btn.innerHTML = '<i class="ti ti-check"></i>'; setTimeout(() => { btn.innerHTML = o; }, 1500); }
+    showToast('N° copié : ' + id);
+  }).catch(() => showToast('Impossible de copier'));
+}
+
+// ----- HISTORIQUE LIMITÉ -----
+function histItemHTML(h) {
+  const e = EVT[h.type] || EVT.modification;
+  const u = resolveUser(h.user);
+  const rc = ROLE_COLORS[u.role] || {bg:'#F1EFE8', c:'#444'};
+  return `<div class="hist-item">
+    <div class="hist-dot" style="background:${e.bg};color:${e.c}"><i class="ti ${e.icon}" style="font-size:12px"></i></div>
+    <div style="flex:1;min-width:0">
+      <div class="hist-action">${h.action}</div>
+      <div class="hist-meta"><span style="padding:1px 6px;border-radius:3px;background:${rc.bg};color:${rc.c};font-size:10px">${u.name}</span> · ${h.at}</div>
+      ${h.detail ? `<div class="hist-detail">${h.detail}</div>` : ''}
+    </div>
+  </div>`;
+}
+
+function showAllHistory() {
+  const d = dossiers.find(x => x.id === currentDosId); if (!d) return;
+  const hb = document.getElementById('hist-body');
+  if (hb) hb.innerHTML = d.history.map(h => histItemHTML(h)).join('');
+  const hm = document.getElementById('hist-more');
+  if (hm) hm.style.display = 'none';
+}
+
 buildLoginSelect();
 
 // Vider le localStorage des anciennes données locales (migration vers Firestore)
@@ -5458,6 +5855,21 @@ function piloExportCSV(){
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="firebase-layer-v3.js"></script>
+<script>
+/* Debounce saveData — regroupe les écritures Firestore rapprochées */
+(function() {
+  var _orig = window.saveData;
+  var _t;
+  window.saveData = function() {
+    clearTimeout(_t);
+    _t = setTimeout(function() { if (_orig) _orig(); }, 700);
+  };
+  window.saveDataNow = function() {
+    clearTimeout(_t);
+    if (_orig) _orig();
+  };
+})();
+</script>
 
 <!-- ================================================================
      MESSAGERIE INTERNE
@@ -5492,6 +5904,7 @@ function piloExportCSV(){
 
 <div id="planning-data" style="display:none" data-content=""></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

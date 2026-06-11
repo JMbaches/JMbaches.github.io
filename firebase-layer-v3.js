@@ -15,11 +15,10 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 
 // App Check — reCAPTCHA v3 (invisible, aucune interaction utilisateur)
-// Protège Firestore contre les appels directs depuis l'extérieur de l'app
 const _appCheck = firebase.appCheck();
 _appCheck.activate(
   new firebase.appCheck.ReCaptchaV3Provider('6LcgHxktAAAAAIbSowBLdOfNPY-2gSr7MGTlRf2y'),
-  true // auto-refresh du token
+  true
 );
 
 const _auth = firebase.auth();
