@@ -5454,33 +5454,70 @@ function renderComptaChart() {
     startDate = earliest ? new Date(parseInt(earliest.slice(0,4)), parseInt(earliest.slice(5,7))-1, 1) : new Date(now.getFullYear()-1, 0, 1);
   }
   const MOIS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
-  const labels = [], data = [], colors = [];
+  const labels = [], dataPaye = [], dataReste = [];
   const cur = new Date(startDate);
   while (cur.getFullYear() < now.getFullYear() || (cur.getFullYear()===now.getFullYear() && cur.getMonth()<=now.getMonth())) {
     const yy = cur.getFullYear(), mm = cur.getMonth();
     const prefix = yy+'-'+String(mm+1).padStart(2,'0');
     labels.push(MOIS[mm]+(yy!==now.getFullYear()?' '+String(yy).slice(2):''));
-    const sum = dossiers.filter(d=>(d.dateFrom||d.dateLivraison||'').startsWith(prefix)).reduce((s,d)=>s+(d.ht||0),0);
-    data.push(Math.round(sum));
-    colors.push(sum>0 ? 'rgba(36,86,230,0.75)' : 'rgba(36,86,230,0.15)');
+    let monthDos = dossiers.filter(d=>(d.dateFrom||d.dateLivraison||'').startsWith(prefix));
+    if (comptaAnnee) monthDos = monthDos.filter(d=>(d.dateFrom||d.dateLivraison||'').startsWith(comptaAnnee));
+    if (comptaDevisFilter) monthDos = monthDos.filter(d=>d.devis===comptaDevisFilter);
+    const total = monthDos.reduce((s,d)=>s+(d.ht||0),0);
+    const paye  = monthDos.filter(d=>d.devis==='paye').reduce((s,d)=>s+(d.ht||0),0);
+    dataPaye.push(Math.round(paye));
+    dataReste.push(Math.round(Math.max(0, total - paye)));
     cur.setMonth(cur.getMonth()+1);
   }
   if (window._comptaChart) { window._comptaChart.destroy(); window._comptaChart = null; }
   const isDark = document.documentElement.getAttribute('data-theme')==='dark';
   const gridColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
   const tickColor = isDark ? '#8E99AD' : '#888';
+  const showLegend = !comptaDevisFilter || comptaDevisFilter !== 'paye';
   window._comptaChart = new Chart(canvas, {
     type: 'bar',
-    data: { labels, datasets: [{ label:'CA HT', data, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'CA payé',
+          data: dataPaye,
+          backgroundColor: 'rgba(34,197,94,0.82)',
+          borderRadius: 0,
+          borderSkipped: false,
+          stack: 'ca'
+        },
+        {
+          label: 'CA non encaissé',
+          data: dataReste,
+          backgroundColor: isDark ? 'rgba(36,86,230,0.35)' : 'rgba(36,86,230,0.25)',
+          borderRadius: 4,
+          borderSkipped: false,
+          stack: 'ca'
+        }
+      ]
+    },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: ctx => '  '+ctx.parsed.y.toLocaleString('fr-FR')+' € HT' } }
+        legend: {
+          display: showLegend,
+          position: 'bottom',
+          labels: { color: tickColor, boxWidth: 12, padding: 12, font: { size: 11 } }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => '  ' + ctx.dataset.label + ' : ' + ctx.parsed.y.toLocaleString('fr-FR') + ' € HT',
+            footer: items => {
+              const total = items.reduce((s,i)=>s+i.parsed.y, 0);
+              return total > 0 ? 'Total : ' + total.toLocaleString('fr-FR') + ' € HT' : '';
+            }
+          }
+        }
       },
       scales: {
-        x: { grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 } } },
-        y: { beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 }, callback: v => v>=1000?Math.round(v/1000)+'k€':v+'€' } }
+        x: { stacked: true, grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 } } },
+        y: { stacked: true, beginAtZero: true, grid: { color: gridColor }, ticks: { color: tickColor, font: { size: 11 }, callback: v => v>=1000?Math.round(v/1000)+'k€':v+'€' } }
       }
     }
   });
