@@ -2576,7 +2576,7 @@ function showImportStatus(msg, visible=true) {
 }
 
 function fillFormFromMegao(data) {
-  const set = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined && val !== '') el.value = val; };
   set('f-client',    data.client);
   set('f-tel',       data.tel);
   set('f-email',     data.email);
@@ -2592,27 +2592,30 @@ function fillFormFromMegao(data) {
   set('f-remarques', data.remarques);
   set('f-autres',    data.autres);
   set('f-ref',       data.ref);
+  if (data.ht > 0) { set('f-ht', data.ht); calcTTC(); }
+  if (data.dateFrom) set('f-date-livraison', data.dateFrom);
   // Structure : cherche correspondance dans le select
   if (data.structure) {
     const sel = document.getElementById('f-structure');
     if (sel) {
       const opts = Array.from(sel.options);
-      const match = opts.find(o => o.text.toLowerCase().includes(data.structure.toLowerCase()));
+      const match = opts.find(o => o.text.toLowerCase().includes(data.structure.toLowerCase().slice(0, 10)));
       if (match) sel.value = match.value;
-      else { // Sinon on laisse vide mais on met la valeur brute dans remarques
+      else {
         const rem = document.getElementById('f-remarques');
         if (rem) rem.value = (rem.value ? rem.value + '\n' : '') + 'Structure Mégao : ' + data.structure;
       }
     }
   }
-  // Transport
-  if (data.transport) {
-    const t = data.transport.toLowerCase();
-    const dosTransport = t.includes('pose') ? 'liv_pose' : t.includes('enlv') || t.includes('enlevt') || t.includes('enlèv') ? 'enlvt' : 'livraison';
-    // Stocké dans une var temporaire — sera appliqué à la création
-    window._megaoTransport = dosTransport;
+  // Transport (déjà au format interne : liv_pose / enlvt / livraison)
+  if (data.transport) window._megaoTransport = data.transport;
+  // Avertissement si commande bâche
+  if (data.isVolet === false) {
+    showImportStatus('⚠ Commande non-volet (aucun code LAM/VR) — vérifiez le bon de commande', true);
+    setTimeout(() => showImportStatus('', false), 8000);
+    return;
   }
-  showImportStatus('✓ Formulaire pré-rempli — vérifiez et complétez si besoin', true);
+  showImportStatus('✓ Formulaire pré-rempli depuis Mégao — vérifiez et complétez si besoin', true);
   setTimeout(() => showImportStatus('', false), 4000);
 }
 
@@ -2626,12 +2629,12 @@ async function parseMegaoPDFLocal(file) {
   const buf = await file.arrayBuffer();
   const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
 
-  // Extraire le texte (1ère page suffit pour un bon de commande Mégao)
-  const lines = [];
+  const allLines  = [];  // page entière (ref, date, produits, ht)
+  const leftLines = [];  // colonne gauche x<320 seulement (bloc client)
+
   for (let p = 1; p <= Math.min(pdf.numPages, 2); p++) {
     const page  = await pdf.getPage(p);
     const items = (await page.getTextContent()).items;
-    // Regrouper les items par coordonnée Y (±3pt = même ligne visuelle)
     const rows  = [];
     for (const item of items) {
       const s = item.str; if (!s.trim()) continue;
@@ -2641,87 +2644,77 @@ async function parseMegaoPDFLocal(file) {
       if (row) row.items.push({ x, s });
       else rows.push({ y, items: [{ x, s }] });
     }
-    rows.sort((a, b) => b.y - a.y); // haut → bas
-    lines.push(...rows.map(r => r.items.sort((a,b) => a.x - b.x).map(i => i.s).join(' ')));
+    rows.sort((a, b) => b.y - a.y);
+    allLines.push(...rows.map(r => r.items.sort((a,b)=>a.x-b.x).map(i=>i.s).join(' ')));
+    leftLines.push(...rows.map(r => {
+      return r.items.filter(i => i.x < 320).sort((a,b)=>a.x-b.x).map(i=>i.s).join(' ');
+    }).filter(l => l.trim()));
   }
 
-  const text = lines.join('\n');
-  console.log('[Mégao parser] Texte extrait :\n' + text); // diagnostic si champ manquant
+  const text     = allLines.join('\n');
+  const leftText = leftLines.join('\n');
+  console.log('[Mégao parser] Texte extrait :\n' + text);
 
-  // Valeur après un label (même ligne ou ligne suivante si non-label)
-  const after = (re) => {
-    for (let i = 0; i < lines.length; i++) {
-      const m = lines[i].match(re);
-      if (!m) continue;
-      const rest = lines[i].slice(m.index + m[0].length).replace(/^\s*:?\s*/, '').trim();
-      if (rest) return rest;
-      const nxt = (lines[i+1]||'').trim();
-      if (nxt && !/^[A-ZÉÈÊÀÂÙÎÔË ]{3,}\s*:/.test(nxt)) return nxt;
-    }
-    return '';
-  };
+  // Ref & date
+  const refM     = text.match(/COMMANDE\s+N[°º]\s*([A-Z0-9\-\/]+)/i);
+  const ref      = refM ? refM[1].trim() : '';
+  const dateM    = text.match(/Date\s*:\s*(\d{2})\/(\d{2})\/(\d{4})/i);
+  const dateFrom = dateM ? `${dateM[3]}-${dateM[2]}-${dateM[1]}` : '';
 
-  // Ref : "COMMANDE N° 114308-01/1"
-  const refM = text.match(/COMMANDE\s+N[°º]\s*([A-Z0-9\-\/]+)/i) ||
-               text.match(/\b(\d{5,6}-\d{2}\/\d+)\b/);
+  // Produits : en PDF.js le code est séparé par un espace de la désignation
+  // Regex : code  désignation  UNIT  quantité (UNIT suivi de chiffres pour éviter faux positifs)
+  const productRe = /^([A-Z][A-Z0-9]{2,})\s+(.+?)\s+(UN|ML|M2|PCS)\b\s+[\d,]/gm;
+  const products  = [];
+  let pm;
+  while ((pm = productRe.exec(text)) !== null) products.push({ code: pm[1], desig: pm[2].trim() });
+  console.log('[Mégao parser] Produits détectés :', products.map(p => p.code).join(', '));
 
-  // Client : "0289.2 / Sheltom" → garder la partie après "/"
-  const clientRaw = after(/\bCLIENT\b/i);
-  const client = clientRaw.includes('/') ? clientRaw.split('/').slice(1).join('/').trim() : clientRaw;
+  const isVolet   = products.some(p => /^(LAM|VR)/.test(p.code));
+  const vrProd    = products.find(p => /^VR/.test(p.code));
+  const lamProd   = products.find(p => /^LAM/.test(p.code));
+  const trspProd  = products.find(p => /^TRSP/.test(p.code));
+  const structure = vrProd  ? vrProd.desig  : '';
+  const lames     = lamProd ? lamProd.desig : '';
 
-  // Bloc EXPÉDITION : contact, adresse, CP, ville, tél, email
-  let contact = '', adresse = '', cp = '', ville = '', tel = '', email = '';
-  const expIdx = lines.findIndex(l => /EXP[ÉE]DITION\s*:?/i.test(l));
-  if (expIdx >= 0) {
-    const expLines = [];
-    for (let j = expIdx; j < Math.min(expIdx + 12, lines.length); j++) {
-      const raw = j === expIdx
-        ? lines[j].replace(/.*EXP[ÉE]DITION\s*:?\s*/i, '').trim()
-        : lines[j].trim();
-      if (!raw) continue;
-      if (j > expIdx && /^(?:ALIM|LAMES|PIEDS|MOTEUR|PUISSANCE|REMARQUES|OPTIONS|AUTRES|V[ÉE]RIF)\s*:/i.test(raw)) break;
-      expLines.push(raw);
-    }
-    for (const l of expLines) {
-      if (/^T[ÉE]L\s*:/i.test(l))   { tel   = l.replace(/^T[ÉE]L\s*:?\s*/i,'').replace(/\s*\/\s*$/,'').trim(); continue; }
-      if (/^E-?MAIL\s*:/i.test(l))   { email = l.replace(/^E-?MAIL\s*:?\s*/i,'').trim(); continue; }
-      if (/[\w.+\-]+@[\w.\-]+\.[a-z]{2,}/i.test(l) && !email) { email = (l.match(/[\w.+\-]+@[\w.\-]+\.[a-z]{2,}/i)||[''])[0]; continue; }
-      if (/^FRANCE$/i.test(l))       continue;
-      const cpVm = l.match(/^(\d{5})\s+(.+)/);
-      if (cpVm)                      { cp = cpVm[1]; ville = cpVm[2].trim(); continue; }
-      if (!contact)                  { contact = l; continue; }
-      if (!adresse)                  { adresse = l; continue; }
-    }
-  }
-  if (!tel)   tel   = after(/\bT[ÉE]L(?:[ÉE]PHONE)?\b/i);
-  if (!email) email = (text.match(/[\w.+\-]+@[\w.\-]+\.[a-z]{2,}/i)||[''])[0];
-  if (!cp) {
-    const cpV = text.match(/\b(\d{5})\s+((?:[A-ZÉÈÊÀÂÙÎÔË][A-Za-zéèêàâùîôëùü\-]+(?:\s|$))+)/);
-    if (cpV) { cp = cpV[1]; if (!ville) ville = cpV[2].trim(); }
+  let transport = 'liv_pose';
+  if (trspProd) {
+    const d = trspProd.desig.toUpperCase();
+    transport = d.includes('ENLV') ? 'enlvt' : d.includes('POSE') ? 'liv_pose' : 'livraison';
   }
 
-  // Transport : ENLVT | LIV + POSE | LIVRAISON
-  const trM = text.match(/\b(LIV(?:RAISON)?\s*\+\s*POSE|ENLV[ÈE]VEMENT|ENLVT|LIVRAISON)\b/i);
+  // Tél & email
+  const telM   = text.match(/T[eé]l\s*:\s*([\d\s.\-\/]+?)(?=\s*\n)/im);
+  const tel    = telM ? telM[1].replace(/\s*\/\s*$/, '').trim() : '';
+  const emailM = text.match(/E-?mail\s*:\s*([\w.+\-]+@[\w.\-]+\.[a-z]{2,})/i)
+              || text.match(/([\w.+\-]+@[\w.\-]+\.[a-z]{2,})/i);
+  const email  = emailM ? emailM[1].trim() : '';
 
-  return {
-    ref:       refM ? (refM[1]||'').trim() : '',
-    client,
-    tel,
-    email,
-    contact,
-    adresse,
-    cp,
-    ville,
-    structure: after(/TYPE\s+DE\s+STRUCTURE\b/i) || after(/\bSTRUCTURE\b/i),
-    lames:     after(/\bLAMES?\b/i),
-    pieds:     after(/\bPIEDS?\b/i),
-    alim:      after(/\bALIM(?:ENTATION)?\b/i),
-    moteur:    after(/PUISSANCE\s+MOTEUR\b/i) || after(/\bMOTEUR\b/i),
-    transport: trM ? trM[1].toUpperCase() : after(/\bTRANSPORT\b/i),
-    options:   after(/\bOPTIONS?\b/i),
-    remarques: after(/\bREMARQUES?\b/i),
-    autres:    after(/\bAUTRES?\b/i),
-  };
+  // Client / adresse : utilise leftText (x<320) pour éviter la colonne droite (adresse JM Bâches)
+  let client = '', contact = '', adresse = '', cp = '', ville = '';
+  const contactMatch = leftText.match(/Contact\s*:?([\s\S]*?)(?=Date\s*:)/i);
+  if (contactMatch) {
+    for (const l of contactMatch[1].split('\n').map(s => s.trim()).filter(Boolean)) {
+      if (/^T[eé]l\s*:/i.test(l) || /^E-?mail\s*:/i.test(l)) continue;
+      if (/^france$/i.test(l)) continue;
+      const cpVm = l.match(/^(\d{5})\s+([A-ZÀ-Ÿ][\wÀ-ÿ\s\-]+)/);
+      if (cpVm) { cp = cpVm[1]; ville = cpVm[2].trim(); continue; }
+      if (!contact) { contact = l; client = l; continue; }
+      if (!adresse)  { adresse = l; continue; }
+    }
+  }
+
+  // HT : PDF.js → valeur en fin de ligne "Total HT ... 1 823,84"
+  //      fallback → "Net HT\n 1 823,84" si la valeur est sur la ligne suivante
+  const htLine = text.split('\n').find(l => /Total\s+HT\b/i.test(l) && /\d,\d{2}/.test(l));
+  const htNums = htLine ? [...htLine.matchAll(/([\d][\d\s]*,\d{2})/g)] : [];
+  const ht1    = htNums.length ? parseFloat(htNums[htNums.length-1][1].replace(/\s/g,'').replace(',','.')) : 0;
+  const htM2   = text.match(/Net\s+HT\s*\n\s*([\d][\d\s]*,\d{2})/i);
+  const ht     = ht1 || (htM2 ? parseFloat(htM2[1].replace(/\s/g,'').replace(',','.')) : 0);
+
+  return { ref, client, contact, tel, email, adresse, cp, ville,
+           structure, lames, pieds: '', alim: '', moteur: '',
+           options: '', remarques: '', autres: '',
+           transport, ht, dateFrom, isVolet };
 }
 
 // --- FALLBACK API Claude (PDFs scannés ou parsing local insuffisant) ---
@@ -2802,7 +2795,8 @@ async function handleMegaoPDF(input) {
 
   try {
     const data = await parseMegaoPDFLocal(file);
-    const found = Object.values(data).filter(v => String(v).trim()).length;
+    const strFields = ['ref','client','tel','email','contact','adresse','cp','ville','structure','lames'];
+    const found = strFields.filter(k => String(data[k]||'').trim()).length;
     console.log('[Mégao] Champs extraits :', found, data);
 
     if (found < 3) {
