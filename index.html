@@ -4938,23 +4938,28 @@ async function deleteUser(uid) {
   }
 }
 
-function supprimerDossier(dosId, e) {
+async function supprimerDossier(dosId, e) {
   if (e) e.stopPropagation();
   const d = dossiers.find(x => x.id === dosId);
   if (!d) return;
   if (!confirm(`Supprimer définitivement le dossier ${dosId} — ${d.client} ?\n\nCette action est irréversible.`)) return;
-  // Supprimer dans Firestore
-  if (window._db) {
-    window._db.collection('dossiers').doc(dosId).delete().catch(e => console.error(e));
-    // Supprimer les notifications liées
-    notifications.filter(n => n.dosId === dosId).forEach(n => {
-      window._db.collection('notifications').doc(String(n.id)).delete().catch(() => {});
-    });
+  try {
+    if (window._db) {
+      await window._db.collection('dossiers').doc(dosId).delete();
+      await Promise.all(
+        notifications.filter(n => n.dosId === dosId).map(n =>
+          window._db.collection('notifications').doc(String(n.id)).delete().catch(() => {})
+        )
+      );
+    }
+    dossiers = dossiers.filter(x => x.id !== dosId);
+    notifications = notifications.filter(x => x.dosId !== dosId);
+    showToast(`Dossier ${dosId} supprimé`);
+    renderDos();
+  } catch (err) {
+    console.error('Erreur suppression dossier:', err);
+    showToast('Erreur : impossible de supprimer (' + (err.code || err.message) + ')');
   }
-  dossiers = dossiers.filter(x => x.id !== dosId);
-  notifications = notifications.filter(x => x.dosId !== dosId);
-  showToast(`Dossier ${dosId} supprimé`);
-  renderDos();
 }
 
 function openChecklist(dosId) {
