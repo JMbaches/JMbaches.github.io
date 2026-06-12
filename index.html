@@ -2744,6 +2744,7 @@ async function parseMegaoPDFLocal(file) {
   const lamProd   = products.find(p => /^LAM/.test(p.code));
   const trspProd  = products.find(p => /^TRSP/.test(p.code));
   const instProd  = products.find(p => /^TRSP/.test(p.code) && /PINST|INST/i.test(p.code));
+  const enlevProd = products.find(p => /^ENLEV/i.test(p.code));
   const JM_COVER_DEPTS = new Set(['01','04','05','06','07','08','12','13','21','25','26','30','34','38','39','42','43','48','51','52','54','55','57','63','67','68','69','70','71','73','74','83','84','88','90']);
 
   // Structure : correspondance avec les options du select
@@ -2785,7 +2786,9 @@ async function parseMegaoPDFLocal(file) {
   const longueur = lamQtyM ? lamQtyM[1].replace(',', '.') : '';
 
   let transport = 'liv_pose';
-  if (instProd) {
+  if (enlevProd) {
+    transport = 'enlvt';
+  } else if (instProd) {
     const deptM = instProd.code.match(/(?:PINST|INST)(\d{2,3})/i);
     const dept  = deptM ? String(parseInt(deptM[1])).padStart(2, '0') : '';
     transport   = dept && JM_COVER_DEPTS.has(dept) ? 'liv_pose' : 'livraison';
