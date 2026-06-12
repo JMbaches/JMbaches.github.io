@@ -229,6 +229,7 @@ button { cursor: pointer; border: none; background: transparent; }
 .b-emballage { background: #FEF3C7; color: #92400E; }
 .b-stocke { background: #E0E7FF; color: #3730A3; }
 .b-expedie { background: #D1FAE5; color: #065F46; }
+.b-livre  { background: #A7F3D0; color: #064E3B; }
 .b-pose { background: var(--coral-light); color: var(--coral); }
 .b-retire { background: #F3F4F6; color: #374151; }
 
@@ -715,6 +716,7 @@ tr.clickable:hover td { background: var(--accent-light); cursor: pointer; }
 .b-emballage  { background: #FBF0CD; color: #876008; }
 .b-stocke     { background: #E5E9FC; color: #33308F; }
 .b-expedie    { background: #DEF2E4; color: #1C6A39; }
+.b-livre      { background: #BBFCD8; color: #064E3B; }
 .b-pose       { background: #DCF1EC; color: #0B5C4C; }
 .b-retire     { background: #EBEEF2; color: #495260; }
 
@@ -1182,8 +1184,8 @@ a:focus-visible, button:focus-visible,
           <div style="width:32px;height:32px;border-radius:3px;background:var(--coral-light);color:var(--coral);display:flex;align-items:center;justify-content:center"><i class="ti ti-home"></i></div>
           <div style="text-align:left"><div style="font-weight:600">Posé</div><div style="font-size:11px;color:var(--ink-faint)">Les poseurs interviennent chez le client</div></div>
         </button>
-        <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 14px" onclick="cloturerDossier('expédié')">
-          <div style="width:32px;height:32px;border-radius:3px;background:#D1FAE5;color:#065F46;display:flex;align-items:center;justify-content:center"><i class="ti ti-truck"></i></div>
+        <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 14px" onclick="cloturerDossier('livré')">
+          <div style="width:32px;height:32px;border-radius:3px;background:#A7F3D0;color:#064E3B;display:flex;align-items:center;justify-content:center"><i class="ti ti-truck"></i></div>
           <div style="text-align:left"><div style="font-weight:600">Livré</div><div style="font-size:11px;color:var(--ink-faint)">Livraison par transporteur, pas de pose</div></div>
         </button>
         <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 14px" onclick="cloturerDossier('retiré')">
@@ -1261,9 +1263,9 @@ const ROLE_DEFAULT_PERMS = {
   emballage: ['emballage','emballage_grand'],
 };
 const STATUT_NEXT = {nouveau:'admin',admin:'production',production:'emballage',emballage:'stocké',stocké:'expédié',expédié:'expédié',terminé:'emballage',posé:'posé',retiré:'retiré'};
-const STATUT_LABEL = {nouveau:'Nouveau',admin:'Traitement admin',production:'En production',emballage:'Emballage',stocké:'Stocké',expédié:'Livré',posé:'Posé',retiré:'Enlevé'};
-const STATUT_COLORS = {nouveau:'#7C3AED',admin:'#D97706',production:'#2563EB',emballage:'#D97706',stocké:'#4338CA',expédié:'#059669',posé:'#065F46',retiré:'#374151'};
-const STATUT_NEXT_BTN = {nouveau:'→ Envoyer en admin',admin:'→ Envoyer en production',production:'→ Envoyer en emballage',emballage:'→ Marquer stocké',stocké:'→ Clôturer le dossier',expédié:'Dossier clôturé',posé:'Dossier clôturé',retiré:'Dossier clôturé',terminé:'→ Envoyer en emballage'};
+const STATUT_LABEL = {nouveau:'Nouveau',admin:'Traitement admin',production:'En production',emballage:'Emballage',stocké:'Stocké',expédié:'Expédié',livré:'Livré',posé:'Posé',retiré:'Enlevé'};
+const STATUT_COLORS = {nouveau:'#7C3AED',admin:'#D97706',production:'#2563EB',emballage:'#D97706',stocké:'#4338CA',expédié:'#059669',livré:'#047857',posé:'#065F46',retiré:'#374151'};
+const STATUT_NEXT_BTN = {nouveau:'→ Envoyer en admin',admin:'→ Envoyer en production',production:'→ Envoyer en emballage',emballage:'→ Marquer stocké',stocké:'→ Marquer expédié',expédié:'→ Marquer livré',livré:'Dossier clôturé',posé:'Dossier clôturé',retiré:'Dossier clôturé',terminé:'→ Envoyer en emballage'};
 const EVT = {
   création:     {icon:'ti-file-plus',bg:'#EAF0F9',c:'#14479B'},
   statut:       {icon:'ti-arrow-right',bg:'#FAEEDA',c:'#633806'},
@@ -1399,7 +1401,7 @@ function can(p) { return currentUser && currentUser.perms.includes(p); }
 function canSeeCA() { return currentUser && currentUser.role !== 'ouvrier'; }
 function userName(uid) { const u=users.find(x=>x.id===uid); return u?u.name:uid; }
 function statBadge(s) {
-  const map={nouveau:'b-nouveau',admin:'b-admin',production:'b-production',emballage:'b-emballage',stocké:'b-stocke',expédié:'b-expedie',posé:'b-pose',retiré:'b-retire'};
+  const map={nouveau:'b-nouveau',admin:'b-admin',production:'b-production',emballage:'b-emballage',stocké:'b-stocke',expédié:'b-expedie',livré:'b-livre',posé:'b-pose',retiré:'b-retire'};
   return `<span class="badge ${map[s]||''}">${STATUT_LABEL[s]||s}</span>`;
 }
 function initials(n) { return (n||'').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); }
@@ -2541,26 +2543,28 @@ function addComment() {
   saveData(); renderFiche();
 }
 function saveFiche() { logHistory(currentDosId,'modification','Fiche enregistrée'); saveData(); showToast('Fiche enregistrée avec succès'); }
-const STATUTS_CLOTURE = ['expédié','posé','retiré'];
+const STATUTS_CLOTURE = ['expédié','livré','posé','retiré'];
 function isCloture(statut) { return STATUTS_CLOTURE.includes(statut); }
 function isDossierCloture(d) {
   if (!d) return false;
   if (d.transport === 'enlvt')     return d.statut === 'retiré';
-  if (d.transport === 'livraison') return d.statut === 'expédié';
+  if (d.transport === 'livraison') return d.statut === 'livré';
   if (d.transport === 'liv_pose')  return d.statut === 'posé';
   return isCloture(d.statut);
 }
 function getNextStatut(d) {
-  if (d.statut === 'expédié' && d.transport === 'liv_pose') return 'posé';
+  if (d.statut === 'expédié' && d.transport === 'livraison') return 'livré';
+  if (d.statut === 'expédié' && d.transport === 'liv_pose')  return 'posé';
   return STATUT_NEXT[d.statut] || d.statut;
 }
 function getNextBtnLabel(d) {
   if (d.statut === 'stocké') {
     if (d.transport === 'enlvt')     return '→ Marquer enlevé';
-    if (d.transport === 'livraison') return '→ Marquer livré';
-    if (d.transport === 'liv_pose')  return '→ Marquer livré';
+    if (d.transport === 'livraison') return '→ Marquer expédié';
+    if (d.transport === 'liv_pose')  return '→ Marquer expédié';
   }
-  if (d.statut === 'expédié' && d.transport === 'liv_pose') return '→ Marquer posé';
+  if (d.statut === 'expédié' && d.transport === 'livraison') return '→ Marquer livré';
+  if (d.statut === 'expédié' && d.transport === 'liv_pose')  return '→ Marquer posé';
   return STATUT_NEXT_BTN[d.statut] || '—';
 }
 function avancerFiche() {
@@ -5432,6 +5436,7 @@ function exportDossierPDF() {
     nouveau:'background:#EEEDFE;color:#3C3489', admin:'background:#EAF0F9;color:#14479B',
     production:'background:#FAEEDA;color:#633806', emballage:'background:#FEF3C7;color:#92400E',
     stocké:'background:#E0E7FF;color:#3730A3', expédié:'background:#D1FAE5;color:#065F46',
+    livré:'background:#A7F3D0;color:#064E3B',
     posé:'background:#FAECE7;color:#712B13', retiré:'background:#F3F4F6;color:#374151',
   };
   const TRANSPORT_LABEL = {enlvt:'Enlèvement client', liv_pose:'Livraison + Pose', livraison:'Livraison seule'};
