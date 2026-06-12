@@ -52,7 +52,9 @@ function parseMegaoText(text) {
     { k: ['subwater','vrsub'],              v: 'Volet immergé Subwater (5h)' },
   ];
   const structure = STRUCT_MAP.find(m => m.k.some(k => vrText.includes(k)))?.v || vrDesig;
-  const lames     = lamM ? lamM[2].replace(/\s*(UN|ML|M2|PCS)\s+.*$/i, '').trim() : '';
+  const lameRaw   = lamM ? lamM[2].replace(/\s*(UN|ML|M2|PCS)\s+.*$/i, '').trim() : '';
+  const lameParenIdx = lameRaw.lastIndexOf(')');
+  const lames     = lameParenIdx >= 0 ? lameRaw.slice(lameParenIdx + 1).trim() : lameRaw;
 
   // Moteur : suffixe du code VR après le préfixe de structure (VRSIL80S → 80S)
   const moteurM = vrCode.match(/^VR(?:SUBT|SUB|MOUV|XTR|COF|SOL|SIL)([A-Z0-9]+)$/i);

@@ -1383,9 +1383,10 @@ let dosPeriodeFilter = '';    // Filtre par période (ce_mois, mois_dernier, cet
 let dosMontantMin    = '';    // Filtre montant min TTC
 let dosMontantMax    = '';    // Filtre montant max TTC
 let dosRevendeurFilter = '';  // Filtre par revendeur
-let comptaAnnee        = '';    // Filtre année compta
-let comptaDevisFilter  = '';    // Filtre statut devis en compta
-let comptaChartPeriod  = 12;   // Période graphique CA en mois (null = tout)
+let comptaAnnee           = '';    // Filtre année compta
+let comptaDevisFilter     = '';    // Filtre statut devis en compta
+let comptaChartPeriod     = 12;   // Période graphique CA en mois (null = tout)
+let comptaRevendeurFilter = '';    // Drill-down par revendeur
 let showArchived       = false; // Afficher les dossiers clôturés archivés
 
 /* ================================================================
@@ -2050,7 +2051,7 @@ function renderDos() {
       <colgroup><col style="width:90px"><col style="width:180px"><col style="width:140px"><col style="width:115px"><col style="width:85px">${canSeeCA()?'<col style="width:100px">':''}<col style="width:75px"><col></colgroup>
       <thead><tr>
         <th>N°</th><th>Client</th><th>Produit</th><th>Statut</th><th>Livraison</th>
-        ${canSeeCA()?'<th>TTC</th>':''}
+        ${canSeeCA()?'<th>HT</th>':''}
         <th>Activité</th><th>Actions</th>
       </tr></thead>
       ${globalSearchQuery ? `<caption style="caption-side:top;text-align:left;padding:8px 14px;font-size:12px;color:var(--accent);font-weight:600;background:var(--accent-light);border-bottom:1px solid var(--border)"><i class="ti ti-search"></i> ${filteredDossiers(dossiers).length} résultat(s) pour « ${globalSearchQuery} » <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="document.getElementById('global-search-input').value='';globalSearch('')">✕ Effacer</button></caption>` : ""}
@@ -2086,7 +2087,7 @@ function renderDos() {
             ${fmt(d.dateLivraison)||'—'}
             ${retard?'<div style="font-size:10px;font-weight:700;color:var(--red)">EN RETARD</div>':''}
           </td>
-          ${canSeeCA()?`<td style="font-size:13px;font-weight:600;font-family:'JetBrains Mono',monospace">${ttc(d).toLocaleString('fr-FR',{minimumFractionDigits:2})} €</td>`:''}
+          ${canSeeCA()?`<td style="font-size:13px;font-weight:600;font-family:'JetBrains Mono',monospace">${(d.ht||0).toLocaleString('fr-FR',{minimumFractionDigits:2})} €</td>`:''}
           <td><span style="font-size:12px;color:var(--ink-faint)">${d.history.length} action${d.history.length>1?'s':''}</span></td>
           <td onclick="event.stopPropagation()">
             <div style="display:flex;gap:5px;flex-wrap:wrap">
@@ -2715,7 +2716,9 @@ async function parseMegaoPDFLocal(file) {
     { k: ['subwater','vrsub'],              v: 'Volet immergé Subwater (5h)' },
   ];
   const structure = STRUCT_MAP.find(m => m.k.some(k => vrText.includes(k)))?.v || (vrProd ? vrProd.desig : '');
-  const lames     = lamProd ? lamProd.desig : '';
+  const lameDesig = lamProd ? lamProd.desig : '';
+  const lameParenIdx = lameDesig.lastIndexOf(')');
+  const lames     = lameParenIdx >= 0 ? lameDesig.slice(lameParenIdx + 1).trim() : lameDesig;
 
   // Moteur : suffixe du code VR après le préfixe de structure (VRSIL80S → 80S)
   const moteurM = vrProd ? vrProd.code.match(/^VR(?:SUBT|SUB|MOUV|XTR|COF|SOL|SIL)([A-Z0-9]+)$/i) : null;
@@ -4464,7 +4467,8 @@ function renderCompta() {
   const allYears = [...new Set(dossiers.map(d=>(d.dateFrom||d.dateLivraison||'').slice(0,4)).filter(Boolean))].sort().reverse();
   if (!comptaAnnee && allYears.includes(String(new Date().getFullYear()))) comptaAnnee = String(new Date().getFullYear());
   const byYear = comptaAnnee ? dossiers.filter(d=>((d.dateFrom||d.dateLivraison||'').startsWith(comptaAnnee))) : dossiers;
-  const filtered = comptaDevisFilter ? byYear.filter(d=>d.devisStatut===comptaDevisFilter) : byYear;
+  const byDevis = comptaDevisFilter ? byYear.filter(d=>d.devisStatut===comptaDevisFilter) : byYear;
+  const filtered = comptaRevendeurFilter ? byDevis.filter(d=>(d.revendeur||'')===comptaRevendeurFilter) : byDevis;
   const total = filtered.reduce((s,d)=>s+(d.ht||0), 0);
   const totalTTC = filtered.reduce((s,d)=>s+ttc(d), 0);
   const paye = filtered.filter(d=>d.devisStatut==='paye').reduce((s,d)=>s+(d.ht||0), 0);
@@ -4473,7 +4477,10 @@ function renderCompta() {
   const selStyle = 'padding:6px 10px;font-size:13px;border-radius:var(--radius);border:1px solid var(--border);background:var(--paper);color:var(--ink)';
   document.getElementById('main-content').innerHTML=`
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-    <div class="section-title" style="margin:0;font-size:17px;font-weight:700">Comptabilité</div>
+    <div style="display:flex;align-items:center;gap:10px">
+      ${comptaRevendeurFilter ? `<button onclick="comptaRevendeurFilter='';renderCompta()" style="display:flex;align-items:center;gap:5px;padding:5px 10px;font-size:12px;border-radius:var(--radius);border:1px solid var(--border);background:var(--paper);color:var(--ink-soft);cursor:pointer"><i class="ti ti-arrow-left" style="font-size:13px"></i> Tous</button>` : ''}
+      <div class="section-title" style="margin:0;font-size:17px;font-weight:700">${comptaRevendeurFilter ? `<span style="color:var(--ink-faint);font-weight:400;font-size:14px">Comptabilité · </span>${comptaRevendeurFilter}` : 'Comptabilité'}</div>
+    </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <select onchange="comptaAnnee=this.value;renderCompta()" style="${selStyle}">
         <option value="">Toutes les années</option>
@@ -4487,7 +4494,7 @@ function renderCompta() {
 
   <div class="card" style="margin-bottom:16px">
     <div class="card-hd">
-      <span class="card-title"><i class="ti ti-chart-bar" style="margin-right:5px"></i>CA mensuel HT</span>
+      <span class="card-title"><i class="ti ti-chart-bar" style="margin-right:5px"></i>CA mensuel HT${comptaRevendeurFilter?' — '+comptaRevendeurFilter:''}</span>
       <div style="display:flex;gap:5px">${periodBtns}</div>
     </div>
     <div style="padding:14px 16px 10px">
@@ -4503,25 +4510,28 @@ function renderCompta() {
   </div>
 
   ${(()=>{
-    const revs = [...new Set(filtered.map(d=>d.revendeur||'').filter(Boolean))].sort();
-    if (!revs.length) return '';
-    const rows = revs.map(r => {
-      const rd = filtered.filter(d=>(d.revendeur||'')===r);
+    if (comptaRevendeurFilter) return '';
+    const allRevs = [...new Set(byDevis.map(d=>d.revendeur||'').filter(Boolean))].sort();
+    if (!allRevs.length) return '';
+    const totalAll = byDevis.reduce((s,d)=>s+(d.ht||0),0);
+    const rows = allRevs.map(r => {
+      const rd = byDevis.filter(d=>(d.revendeur||'')===r);
       const rht = rd.reduce((s,d)=>s+(d.ht||0),0);
-      const pct = total>0 ? Math.round(rht/total*100) : 0;
+      const pct = totalAll>0 ? Math.round(rht/totalAll*100) : 0;
       return {r, nb:rd.length, ht:rht, pct};
     }).sort((a,b)=>b.ht-a.ht);
     return `<div class="card" style="margin-bottom:16px">
       <div class="card-hd"><span class="card-title"><i class="ti ti-building-store" style="margin-right:5px"></i>Par revendeur</span></div>
       <div class="table-wrap" style="margin:0">
         <table>
-          <colgroup><col><col style="width:80px"><col style="width:110px"><col style="width:80px"></colgroup>
-          <thead><tr><th>Revendeur</th><th>Dossiers</th><th>CA HT</th><th>% du CA</th></tr></thead>
-          <tbody>${rows.map(({r,nb,ht,pct})=>`<tr class="clickable" onclick="dosRevendeurFilter='${r}';goTab('dos')">
+          <colgroup><col><col style="width:80px"><col style="width:110px"><col style="width:80px"><col style="width:40px"></colgroup>
+          <thead><tr><th>Revendeur</th><th>Dossiers</th><th>CA HT</th><th>% du CA</th><th></th></tr></thead>
+          <tbody>${rows.map(({r,nb,ht,pct})=>`<tr class="clickable" onclick="comptaRevendeurFilter='${r}';renderCompta()">
             <td><strong>${r}</strong></td>
             <td>${nb}</td>
             <td style="font-weight:600">${Math.round(ht).toLocaleString('fr-FR')} €</td>
             <td><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:6px;background:var(--border);border-radius:3px"><div style="width:${pct}%;height:100%;background:var(--accent);border-radius:3px"></div></div><span style="font-size:11px;color:var(--ink-faint);min-width:28px">${pct}%</span></div></td>
+            <td><i class="ti ti-chevron-right" style="font-size:13px;color:var(--ink-faint)"></i></td>
           </tr>`).join('')}</tbody>
         </table>
       </div>
@@ -4945,7 +4955,9 @@ async function supprimerDossier(dosId, e) {
   if (!confirm(`Supprimer définitivement le dossier ${dosId} — ${d.client} ?\n\nCette action est irréversible.`)) return;
   try {
     if (window._db) {
+      console.log('[supprimerDossier] tentative delete Firestore:', dosId);
       await window._db.collection('dossiers').doc(dosId).delete();
+      console.log('[supprimerDossier] delete OK côté serveur:', dosId);
       await Promise.all(
         notifications.filter(n => n.dosId === dosId).map(n =>
           window._db.collection('notifications').doc(String(n.id)).delete().catch(() => {})
@@ -4957,7 +4969,7 @@ async function supprimerDossier(dosId, e) {
     showToast(`Dossier ${dosId} supprimé`);
     renderDos();
   } catch (err) {
-    console.error('Erreur suppression dossier:', err);
+    console.error('[supprimerDossier] ERREUR:', err.code, err.message, err);
     showToast('Erreur : impossible de supprimer (' + (err.code || err.message) + ')');
   }
 }
@@ -5678,7 +5690,8 @@ function renderComptaChart() {
     const prefix = yy+'-'+String(mm+1).padStart(2,'0');
     labels.push(MOIS[mm]+(yy!==now.getFullYear()?' '+String(yy).slice(2):''));
     let monthDos = dossiers.filter(d=>(d.dateFrom||d.dateLivraison||'').startsWith(prefix));
-    if (comptaDevisFilter) monthDos = monthDos.filter(d=>d.devisStatut===comptaDevisFilter);
+    if (comptaDevisFilter)     monthDos = monthDos.filter(d=>d.devisStatut===comptaDevisFilter);
+    if (comptaRevendeurFilter) monthDos = monthDos.filter(d=>(d.revendeur||'')===comptaRevendeurFilter);
     const total = monthDos.reduce((s,d)=>s+(d.ht||0), 0);
     const paye  = monthDos.filter(d=>d.devisStatut==='paye').reduce((s,d)=>s+(d.ht||0), 0);
     dataPaye.push(Math.round(paye));
