@@ -2353,6 +2353,8 @@ function renderPageCommande(d, p) { p = p || {};
       <div class="fiche-section-title">Caractéristiques produit</div>
       <div class="fiche-section-body">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:10px">
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Largeur bassin (m)</div><input type="number" step="0.01" min="0" value="${d.largeur||''}" onchange="setDosField('largeur',this.value)" placeholder="ex: 3.50"></div>
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Longueur bassin (m)</div><input type="number" step="0.01" min="0" value="${d.longueur||''}" onchange="setDosField('longueur',this.value)" placeholder="ex: 7.50"></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Coloris lames</div><input value="${d.lames||''}" onchange="setDosField('lames',this.value)" placeholder="ex: Gris"></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Coloris pieds</div><input value="${d.pieds||''}" onchange="setDosField('pieds',this.value)" placeholder="ex: 7016/Gris"></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Alimentation</div><input value="${d.alim||''}" onchange="setDosField('alim',this.value)" placeholder="ex: 24V"></div>
