@@ -1620,6 +1620,7 @@ function buildNav() {
   tabs.push({id:'dashboard',icon:'ti-home',label:'Accueil'});
   if(can('compta')) tabs.push({id:'pilotage',icon:'ti-chart-pie',label:'Pilotage'});
   if(can('view_all')||can('create')) tabs.push({id:'dos',icon:'ti-clipboard-list',label:'Dossiers'});
+  if(can('view_all')||can('create')) { const na=dossiers.filter(d=>isArchivable(d)).length; tabs.push({id:'archives',icon:'ti-archive',label:'Archives'+(na>0?' ('+na+')':'')}); }
   if(can('view_prod')) tabs.push({id:'atelier',icon:'ti-tool',label:'Atelier'});
   if(can('view_prod')&&can('atelier_grand')) tabs.push({id:'atelier_grand',icon:'ti-layout-grid',label:'Vue grand écran'});
   if(can('metreur')) tabs.push({id:'metreur',icon:'ti-ruler',label:'Fiches techniques'});
@@ -1660,6 +1661,7 @@ function goTab(tab) {
   else if(tab==='pilotage') renderPilotage();
   else if(tab==='compta') renderCompta();
   else if(tab==='horaires') loadHoraires().then(()=>renderHoraires());
+  else if(tab==='archives') renderArchives();
   else if(tab==='journal') renderJournal();
   else if(tab==='notifs') renderNotifs();
   else if(tab==='users') renderUsers();
@@ -1865,6 +1867,12 @@ function renderDashboard() {
       <div class="dash-card-label">Clôturés</div>
       <div class="dash-card-sub">${dossiers.length} dossiers au total</div>
     </div>
+    ${(()=>{const dm=calcDelaiMoyen();return dm!==null?`<div class="dash-card" onclick="goTab('archives')" title="Délai moyen création → clôture">
+      <div class="dash-card-icon" style="background:#EDE9FE;color:#5B21B6"><i class="ti ti-clock-hour-4"></i></div>
+      <div class="dash-card-value">${dm}j</div>
+      <div class="dash-card-label">Délai moyen</div>
+      <div class="dash-card-sub">création → clôture</div>
+    </div>`:''})()}
     ${canSeeCA()?`<div class="dash-card" onclick="goTab('compta')">
       <div class="dash-card-icon" style="background:var(--accent-light);color:var(--accent)"><i class="ti ti-receipt"></i></div>
       <div class="dash-card-value">${Math.round(total/1000)}k</div>
@@ -5751,7 +5759,7 @@ window.addEventListener('offline', function() {
     banner = document.createElement('div');
     banner.id = 'offline-banner';
     banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9998;background:#B0282C;color:#fff;padding:10px 20px;text-align:center;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:10px;';
-    banner.innerHTML = '<i class="ti ti-wifi-off"></i> Vous êtes hors connexion — les modifications seront synchronisées à la reconnexion';
+    banner.innerHTML = '<i class="ti ti-wifi-off"></i> Vous êtes hors connexion — les modifications seront synchronisées à la reconnexion <button onclick="location.reload()" style="margin-left:16px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;padding:3px 12px;border-radius:4px;cursor:pointer;font-size:12px">Recharger</button>';
     document.body.appendChild(banner);
   }
   banner.style.display = 'flex';
@@ -5765,10 +5773,74 @@ window.addEventListener('online', function() {
 
 // ----- ARCHIVAGE CLÔTURÉS -----
 function isArchivable(d) {
-  if (!isCloture(d.statut)) return false;
+  if (!isDossierCloture(d)) return false;
   if (!d.dateLivraison) return false;
   const limit = new Date(); limit.setMonth(limit.getMonth() - 6);
   return new Date(d.dateLivraison) < limit;
+}
+
+function renderArchives() {
+  const archived = dossiers.filter(d => isArchivable(d))
+    .sort((a, b) => (b.dateLivraison||'') > (a.dateLivraison||'') ? 1 : -1);
+  document.getElementById('main-content').innerHTML = `
+  <div class="section-header">
+    <div class="section-title"><i class="ti ti-archive" style="margin-right:6px"></i>Archives <span style="font-size:13px;font-weight:400;color:var(--ink-faint)">— dossiers clôturés il y a plus de 6 mois</span></div>
+    <button class="btn btn-ghost btn-sm" onclick="exportDossiersCSVArchives()"><i class="ti ti-table-export"></i> CSV</button>
+  </div>
+  ${archived.length === 0 ? `<div class="empty-state"><i class="ti ti-archive"></i>Aucun dossier archivé pour l'instant</div>` : `
+  <div class="card">
+    <table class="dos-table" style="width:100%">
+      <thead><tr>
+        <th>N°</th><th>Client</th><th>Structure</th><th>Statut</th>
+        <th>Livraison</th>${canSeeCA()?'<th>HT</th>':''}
+        <th></th>
+      </tr></thead>
+      <tbody>${archived.map(d=>`
+        <tr style="cursor:pointer;opacity:.85" onclick="openFiche('${d.id}')">
+          <td style="font-size:12px;color:var(--ink-faint)">${d.id}</td>
+          <td style="font-weight:500">${d.client}</td>
+          <td style="font-size:12px">${d.structure||'—'}</td>
+          <td>${statBadge(d.statut)}</td>
+          <td style="font-size:12px;color:var(--ink-faint)">${fmt(d.dateLivraison)||'—'}</td>
+          ${canSeeCA()?`<td style="font-size:12px;font-family:monospace">${(d.ht||0).toLocaleString('fr-FR',{minimumFractionDigits:2})} €</td>`:''}
+          <td onclick="event.stopPropagation()">
+            <button class="btn btn-ghost btn-sm" onclick="openFiche('${d.id}')"><i class="ti ti-file-description"></i> Fiche</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`}`;
+}
+
+function exportDossiersCSVArchives() {
+  const list = dossiers.filter(d => isArchivable(d));
+  const headers = ['N°','Client','Structure','Statut','Date livraison','HT','TTC','Devis','Tél','Ville'];
+  const rows = list.map(d => [d.id,d.client,d.structure||'',d.statut,d.dateLivraison||'',(d.ht||0).toFixed(2),ttc(d).toFixed(2),d.devisStatut||'',d.tel||'',d.ville||'']);
+  const csv = [headers,...rows].map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+  const blob = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'archives-jmbaches.csv'; a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ----- DÉLAI MOYEN CRÉATION → CLÔTURE -----
+function parseFrDate(at) {
+  if (!at) return null;
+  const m = at.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  return m ? new Date(`${m[3]}-${m[2]}-${m[1]}`) : null;
+}
+
+function calcDelaiMoyen() {
+  const clos = dossiers.filter(d => isDossierCloture(d) && d.dateFrom);
+  const delais = clos.map(d => {
+    const creation = new Date(d.dateFrom);
+    const closureEntry = [...(d.history||[])].reverse().find(h => (h.action||'').toLowerCase().includes('clôturé'));
+    const closureDate = closureEntry ? parseFrDate(closureEntry.at) : (d.dateLivraison ? new Date(d.dateLivraison) : null);
+    if (!closureDate || isNaN(closureDate)) return null;
+    const diff = Math.round((closureDate - creation) / 86400000);
+    return diff > 0 && diff < 365 ? diff : null;
+  }).filter(x => x !== null);
+  if (!delais.length) return null;
+  return Math.round(delais.reduce((a, b) => a + b, 0) / delais.length);
 }
 
 // ----- EXPORT CSV DOSSIERS -----
