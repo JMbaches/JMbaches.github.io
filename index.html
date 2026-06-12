@@ -2556,8 +2556,8 @@ function isDossierCloture(d) {
   return isCloture(d.statut);
 }
 function getNextStatut(d) {
-  if (d.statut === 'expédié' && d.transport === 'livraison') return 'livré';
-  if (d.statut === 'expédié' && d.transport === 'liv_pose')  return 'posé';
+  if (d.statut === 'expédié' && (d.transport === 'livraison' || d.transport === 'liv_pose')) return 'livré';
+  if (d.statut === 'livré'   && d.transport === 'liv_pose')  return 'posé';
   return STATUT_NEXT[d.statut] || d.statut;
 }
 function getNextBtnLabel(d) {
@@ -2566,8 +2566,8 @@ function getNextBtnLabel(d) {
     if (d.transport === 'livraison') return '→ Marquer expédié';
     if (d.transport === 'liv_pose')  return '→ Marquer expédié';
   }
-  if (d.statut === 'expédié' && d.transport === 'livraison') return '→ Marquer livré';
-  if (d.statut === 'expédié' && d.transport === 'liv_pose')  return '→ Marquer posé';
+  if (d.statut === 'expédié' && (d.transport === 'livraison' || d.transport === 'liv_pose')) return '→ Marquer livré';
+  if (d.statut === 'livré'   && d.transport === 'liv_pose')  return '→ Marquer posé';
   return STATUT_NEXT_BTN[d.statut] || '—';
 }
 function avancerFiche() {
@@ -3915,7 +3915,7 @@ function isDropAllowed(d, newStatut) {
   if (!d || !d.transport)              return true;
   if (d.transport === 'enlvt')         return newStatut === 'retiré';
   if (d.transport === 'livraison')     return newStatut === 'expédié' || newStatut === 'livré';
-  if (d.transport === 'liv_pose')      return newStatut === 'expédié' || newStatut === 'posé';
+  if (d.transport === 'liv_pose')      return newStatut === 'expédié' || newStatut === 'livré' || newStatut === 'posé';
   return true;
 }
 
