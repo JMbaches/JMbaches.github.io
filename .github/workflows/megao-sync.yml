@@ -2,7 +2,7 @@ name: Mégao Sync
 
 on:
   schedule:
-    - cron: '*/30 * * * *'   # toutes les 30 minutes
+    - cron: '*/15 * * * *'   # toutes les 15 minutes
   workflow_dispatch:           # déclenchement manuel pour tester
 
 jobs:
