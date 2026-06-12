@@ -50,9 +50,10 @@ function parseMegaoText(text) {
   const moteurM = vrCode.match(/^VR(?:SUBT|SUB|MOUV|XTR|COF|SOL|SIL)([A-Z0-9]+)$/i);
   const moteur  = moteurM ? moteurM[1] : '';
 
-  // Alim : voltage dans la désignation VR ou LAM (24V, 230V, 12V…)
-  const alimSrc = vrDesig + ' ' + (lamM ? lamM[2] : '');
-  const alimM   = alimSrc.match(/\b(\d+)\s*[Vv]\b/);
+  // Alim : voltage dans le texte autour de la ligne VR (la valeur est souvent sur la ligne suivante)
+  const vrIdx   = vrM ? text.indexOf(vrM[0]) : -1;
+  const vrBlock = vrIdx >= 0 ? text.slice(vrIdx, vrIdx + 400) : text;
+  const alimM   = vrBlock.match(/\b(\d{2,3})\s*V\b/i);
   const alim    = alimM ? alimM[1] + 'V' : '';
 
   // Largeur depuis le code LAM (LAM350→3.50m, LAM45→4.5m, LAM4→4m)
