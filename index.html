@@ -1765,7 +1765,7 @@ function buildNav() {
   if(can('planning')) mainTabs.push({id:'planning',icon:'ti-calendar',label:'Planning'});
   if(can('planning')) mainTabs.push({id:'planning_avance',icon:'ti-calendar-stats',label:'Planning IA'});
   if(can('compta')) mainTabs.push({id:'compta',icon:'ti-receipt',label:'Comptabilité'});
-  if(can('vue_poseur')) mainTabs.push({id:'poseur_view',icon:'ti-hammer',label:'Ma journée'});
+  if(can('vue_poseur') && currentUser.role === 'poseur') mainTabs.push({id:'poseur_view',icon:'ti-hammer',label:'Ma journée'});
   if(can('vue_poseurs_all')) mainTabs.push({id:'poseurs_direction',icon:'ti-users',label:'Poseurs'});
   if(can('horaires_poseurs')) mainTabs.push({id:'horaires',icon:'ti-clock',label:'Horaires poseurs'});
   if(can('journal')||can('view_all')||can('view_prod')) mainTabs.push({id:'journal',icon:'ti-history',label:'Journal'});
@@ -5346,30 +5346,14 @@ function renderVuePoseur() {
   </div>`;
 }
 
-/* ── Vue direction : journée de tous les poseurs ─────────────────── */
-let vuePoseurDirectionId = '';
+/* ── Vue direction : semaines de tous les poseurs (lecture seule) ── */
+let vuePoseurDirectionId  = '';
+let vuePoseursAllDateRef  = new Date().toISOString().split('T')[0];
 
-function setHoraireForUser(userId, weekKey, jour, champ, val) {
-  if (!horairesData[weekKey])              horairesData[weekKey]              = {};
-  if (!horairesData[weekKey][userId])      horairesData[weekKey][userId]      = {};
-  if (!horairesData[weekKey][userId][jour]) horairesData[weekKey][userId][jour] = {};
-  horairesData[weekKey][userId][jour][champ] = val;
-  saveHoraires();
-  // Recalcul live du total affiché
-  const jr = horairesData[weekKey][userId][jour];
-  let h = null;
-  if (jr.deb && jr.fin) {
-    h = calcHeures(jr.deb, jr.fin);
-    if (h !== null && jr.pauseExtra) h = Math.max(0, h - (parseFloat(jr.pauseExtra)||0) / 60);
-  }
-  const el = document.getElementById('vpd-total');
-  if (el) el.textContent = h !== null ? fmtH(h) : '—';
-}
-
-function vuePoseurNavAll(delta) {
-  const d = new Date(vuePoseurDateIso + 'T12:00:00');
-  d.setDate(d.getDate() + delta);
-  vuePoseurDateIso = d.toISOString().split('T')[0];
+function vuePoseursAllNavWeek(delta) {
+  const d = new Date(vuePoseursAllDateRef + 'T12:00:00');
+  d.setDate(d.getDate() + delta * 7);
+  vuePoseursAllDateRef = d.toISOString().split('T')[0];
   renderVuePoseursAll();
 }
 
@@ -5381,118 +5365,130 @@ function renderVuePoseursAll() {
     mc.innerHTML = `<div style="padding:32px;text-align:center;color:var(--ink-faint)"><i class="ti ti-user-off" style="font-size:32px;display:block;margin-bottom:10px"></i>Aucun poseur configuré.<br>Créez des comptes avec le rôle <strong>Poseur</strong>.</div>`;
     return;
   }
-
-  // Sélection par défaut sur le premier poseur
   if (!vuePoseurDirectionId || !poseurs.find(p => p.id === vuePoseurDirectionId)) {
     vuePoseurDirectionId = poseurs[0].id;
   }
 
-  const selPoseur  = poseurs.find(p => p.id === vuePoseurDirectionId);
-  const dateObj    = new Date(vuePoseurDateIso + 'T12:00:00');
-  const isToday_   = vuePoseurDateIso === new Date().toISOString().split('T')[0];
-  const dateLabel  = dateObj.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
-  const dayKey     = getDayKeyFr(dateObj);
-  const weekKey    = getWeekKeyForDate(dateObj);
+  const selPoseur = poseurs.find(p => p.id === vuePoseurDirectionId);
+  const refDate   = new Date(vuePoseursAllDateRef + 'T12:00:00');
+  const weekKey   = getWeekKeyForDate(refDate);
 
-  const posesJour  = dossiers.filter(d =>
-    d.needPose && d.poseDate === vuePoseurDateIso && d.poseurId === vuePoseurDirectionId
-  );
+  // Lundi de la semaine
+  const dow     = refDate.getDay() === 0 ? 6 : refDate.getDay() - 1;
+  const monday  = new Date(refDate);
+  monday.setDate(refDate.getDate() - dow);
 
-  if (!horairesData[weekKey])                          horairesData[weekKey]                          = {};
-  if (!horairesData[weekKey][vuePoseurDirectionId])    horairesData[weekKey][vuePoseurDirectionId]    = {};
-  const jour = horairesData[weekKey][vuePoseurDirectionId][dayKey] || {};
+  const isCurrentWeek = weekKey === getWeekKeyForDate(new Date());
 
-  let total = null;
-  if (jour.deb && jour.fin) {
-    total = calcHeures(jour.deb, jour.fin);
-    if (total !== null && jour.pauseExtra) total = Math.max(0, total - (parseFloat(jour.pauseExtra)||0) / 60);
-  }
+  const JOURS = ['lun','mar','mer','jeu','ven'];
+  const JOURS_L = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi'];
 
-  const uid = vuePoseurDirectionId;
+  const semaineDu   = monday.toLocaleDateString('fr-FR', {day:'numeric', month:'long'});
+  const semaineFin  = new Date(monday);
+  semaineFin.setDate(monday.getDate() + 4);
+  const semaineAu   = semaineFin.toLocaleDateString('fr-FR', {day:'numeric', month:'long', year:'numeric'});
+
+  // Calcul des lignes jours
+  let totalSemaine = 0;
+  const rows = JOURS.map((k, i) => {
+    const dayDate = new Date(monday);
+    dayDate.setDate(monday.getDate() + i);
+    const dateStr = dayDate.toLocaleDateString('fr-FR', {day:'numeric', month:'short'});
+    const isToday = dayDate.toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
+    const d = horairesData[weekKey]?.[vuePoseurDirectionId]?.[k] || {};
+    let net = null;
+    if (d.deb && d.fin) {
+      net = calcHeures(d.deb, d.fin);
+      if (net !== null && d.pauseExtra) net = Math.max(0, net - parseFloat(d.pauseExtra) / 60);
+    }
+    if (net !== null) totalSemaine += net;
+    return { k, label: JOURS_L[i], dateStr, isToday, d, net };
+  });
 
   mc.innerHTML = `
   <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
     <div>
-      <div class="page-header-label">Direction · Journées poseurs</div>
+      <div class="page-header-label">Direction · Heures déclarées</div>
       <h1>Poseurs</h1>
     </div>
   </div>
 
   <!-- Sélecteur poseur -->
-  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px">
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px">
     ${poseurs.map(p => {
-      const poses = dossiers.filter(d => d.needPose && d.poseDate === vuePoseurDateIso && d.poseurId === p.id).length;
       const active = p.id === vuePoseurDirectionId;
+      // Total semaine pour ce poseur
+      let tot = 0;
+      JOURS.forEach(k => {
+        const dd = horairesData[weekKey]?.[p.id]?.[k] || {};
+        if (dd.deb && dd.fin) {
+          let h = calcHeures(dd.deb, dd.fin);
+          if (h !== null && dd.pauseExtra) h = Math.max(0, h - parseFloat(dd.pauseExtra)/60);
+          if (h !== null) tot += h;
+        }
+      });
       return `<button onclick="vuePoseurDirectionId='${p.id}';renderVuePoseursAll()"
-        style="display:flex;align-items:center;gap:7px;padding:7px 14px;border-radius:var(--radius);border:2px solid ${active?'var(--accent)':'var(--border)'};background:${active?'var(--accent)':'var(--paper)'};color:${active?'#fff':'var(--ink)'};font-size:13px;font-weight:600;cursor:pointer;transition:.15s">
-        <i class="ti ti-hammer" style="font-size:12px"></i>
-        ${p.name || p.email}
-        ${poses > 0 ? `<span style="background:${active?'rgba(255,255,255,.25)':'var(--accent)'};color:${active?'#fff':'#fff'};border-radius:10px;padding:1px 7px;font-size:11px">${poses}</span>` : ''}
+        style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:var(--radius);border:2px solid ${active?'var(--accent)':'var(--border)'};background:${active?'var(--accent)':'var(--paper)'};color:${active?'#fff':'var(--ink)'};font-size:13px;font-weight:600;cursor:pointer">
+        <i class="ti ti-hammer" style="font-size:12px;opacity:.8"></i>
+        ${p.name||p.email}
+        ${tot > 0 ? `<span style="opacity:.75;font-weight:400;font-size:12px">${fmtH(tot)}</span>` : ''}
       </button>`;
     }).join('')}
   </div>
 
-  <!-- Navigation date -->
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap">
-    <button class="btn btn-ghost btn-sm" onclick="vuePoseurNavAll(-1)"><i class="ti ti-chevron-left"></i> Préc.</button>
-    <div style="font-size:15px;font-weight:600;text-transform:capitalize;padding:0 4px">
-      ${dateLabel}${isToday_ ? ' <span style="font-size:11px;background:var(--accent);color:#fff;padding:2px 7px;border-radius:10px;font-weight:600;vertical-align:middle;margin-left:6px">Aujourd\'hui</span>' : ''}
+  <!-- Navigation semaine -->
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+    <button class="btn btn-ghost btn-sm" onclick="vuePoseursAllNavWeek(-1)"><i class="ti ti-chevron-left"></i> Semaine préc.</button>
+    <div style="font-size:14px;font-weight:600;padding:0 4px">
+      ${semaineDu} – ${semaineAu}
+      ${isCurrentWeek ? '<span style="font-size:11px;background:var(--accent);color:#fff;padding:2px 7px;border-radius:10px;font-weight:600;vertical-align:middle;margin-left:6px">Semaine en cours</span>' : ''}
     </div>
-    <button class="btn btn-ghost btn-sm" onclick="vuePoseurNavAll(1)">Suiv. <i class="ti ti-chevron-right"></i></button>
-    ${!isToday_ ? `<button class="btn btn-ghost btn-sm" onclick="vuePoseurDateIso=new Date().toISOString().split('T')[0];renderVuePoseursAll()"><i class="ti ti-calendar-event"></i> Aujourd'hui</button>` : ''}
+    <button class="btn btn-ghost btn-sm" onclick="vuePoseursAllNavWeek(1)">Semaine suiv. <i class="ti ti-chevron-right"></i></button>
+    ${!isCurrentWeek ? `<button class="btn btn-ghost btn-sm" onclick="vuePoseursAllDateRef=new Date().toISOString().split('T')[0];renderVuePoseursAll()"><i class="ti ti-calendar-event"></i> Aujourd'hui</button>` : ''}
   </div>
 
-  <!-- Chantiers du poseur sélectionné -->
-  <div class="card" style="margin-bottom:16px">
-    <div class="card-hd">
-      <span class="card-title"><i class="ti ti-map-pin" style="margin-right:6px"></i>Chantiers de ${selPoseur.name||selPoseur.email}</span>
-      <span style="font-size:12px;color:var(--ink-faint)">${posesJour.length} pose${posesJour.length>1?'s':''} prévue${posesJour.length>1?'s':''}</span>
-    </div>
-    <div class="card-body" style="padding:0">
-      ${posesJour.length === 0
-        ? `<div style="padding:28px;text-align:center;color:var(--ink-faint)"><i class="ti ti-calendar-off" style="font-size:28px;display:block;margin-bottom:10px"></i>Aucune pose planifiée ce jour</div>`
-        : posesJour.map(d => `
-          <div style="padding:14px 18px;border-bottom:1px solid var(--border)">
-            <div style="font-weight:700;font-size:16px;margin-bottom:2px">${d.client}</div>
-            <div style="font-size:13px;color:var(--ink-soft)">${[d.adresse, d.cp, d.ville].filter(Boolean).join(' · ')}</div>
-            ${d.structure ? `<div style="font-size:12px;color:var(--accent);margin-top:5px"><i class="ti ti-box" style="margin-right:4px"></i>${d.structure}</div>` : ''}
-            ${d.autres ? `<div style="font-size:12px;background:var(--red-light,#FEE2E2);color:var(--red,#DC2626);padding:7px 10px;border-radius:var(--radius-sm);margin-top:7px"><i class="ti ti-alert-triangle" style="margin-right:5px"></i>${d.autres}</div>` : ''}
-            ${d.contraintes ? `<div style="font-size:12px;background:#FEF3C7;color:#92400E;padding:7px 10px;border-radius:var(--radius-sm);margin-top:5px"><i class="ti ti-info-circle" style="margin-right:5px"></i>${d.contraintes}</div>` : ''}
-          </div>`).join('')}
-    </div>
-  </div>
-
-  <!-- Saisie heures (modifiable par direction) -->
+  <!-- Tableau semaine -->
   <div class="card">
     <div class="card-hd">
-      <span class="card-title"><i class="ti ti-clock" style="margin-right:6px"></i>Heures de ${selPoseur.name||selPoseur.email}</span>
-      <span id="vpd-total" style="font-size:${total!==null?'17':'13'}px;font-weight:${total!==null?'700':'400'};color:${total!==null?'var(--accent)':'var(--ink-faint)'}">
-        ${total !== null ? fmtH(total) : '—'}
-      </span>
+      <span class="card-title"><i class="ti ti-clock" style="margin-right:6px"></i>Heures déclarées — ${selPoseur.name||selPoseur.email}</span>
+      ${totalSemaine > 0 ? `<span style="font-size:16px;font-weight:700;color:var(--accent)">${fmtH(totalSemaine)} cette semaine</span>` : '<span style="font-size:12px;color:var(--ink-faint)">Aucune heure saisie</span>'}
     </div>
-    <div class="card-body">
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;max-width:380px">
-        <div>
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:7px">Arrivée</div>
-          <input type="text" placeholder="7:30" value="${jour.deb||''}"
-            style="width:100%;padding:12px 8px;font-size:18px;font-family:'JetBrains Mono',monospace;text-align:center;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"
-            oninput="setHoraireForUser('${uid}','${weekKey}','${dayKey}','deb',this.value)">
-        </div>
-        <div>
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:7px">Départ</div>
-          <input type="text" placeholder="17:00" value="${jour.fin||''}"
-            style="width:100%;padding:12px 8px;font-size:18px;font-family:'JetBrains Mono',monospace;text-align:center;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"
-            oninput="setHoraireForUser('${uid}','${weekKey}','${dayKey}','fin',this.value)">
-        </div>
-        <div>
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:7px">Pause (min)</div>
-          <input type="number" min="0" max="120" placeholder="0" value="${jour.pauseExtra||''}"
-            style="width:100%;padding:12px 8px;font-size:18px;font-family:'JetBrains Mono',monospace;text-align:center;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"
-            oninput="setHoraireForUser('${uid}','${weekKey}','${dayKey}','pauseExtra',this.value)">
-        </div>
-      </div>
-      ${total !== null ? `<div style="margin-top:14px;padding:12px 16px;background:var(--accent-light);border-radius:var(--radius)"><span style="font-size:15px;font-weight:600;color:var(--accent-deep)">Total journée : ${fmtH(total)}</span></div>` : ''}
-      <div style="margin-top:12px;font-size:12px;color:var(--ink-faint)"><i class="ti ti-info-circle" style="margin-right:4px"></i>Saisie modifiable par la direction. Visible dans l'onglet Horaires poseurs.</div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border)">
+            <th style="padding:10px 18px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint)">Jour</th>
+            <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint)">Arrivée</th>
+            <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint)">Départ</th>
+            <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint)">Pause (min)</th>
+            <th style="padding:10px 18px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint)">Total net</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => `
+          <tr style="border-bottom:1px solid var(--border);background:${r.isToday?'var(--accent-light)':'transparent'}">
+            <td style="padding:12px 18px">
+              <span style="font-weight:${r.isToday?'700':'500'};color:${r.isToday?'var(--accent-deep)':'var(--ink)'}">${r.label}</span>
+              <span style="font-size:11px;color:var(--ink-faint);margin-left:6px">${r.dateStr}</span>
+              ${r.isToday?'<span style="font-size:10px;background:var(--accent);color:#fff;padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:600">Aujourd\'hui</span>':''}
+            </td>
+            <td style="padding:12px 14px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:14px;color:${r.d.deb?'var(--ink)':'var(--ink-faint)'}">${r.d.deb||'—'}</td>
+            <td style="padding:12px 14px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:14px;color:${r.d.fin?'var(--ink)':'var(--ink-faint)'}">${r.d.fin||'—'}</td>
+            <td style="padding:12px 14px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:14px;color:${r.d.pauseExtra?'var(--ink)':'var(--ink-faint)'}">${r.d.pauseExtra||'0'}</td>
+            <td style="padding:12px 18px;text-align:right;font-weight:700;font-size:15px;color:${r.net!==null?'var(--accent)':'var(--ink-faint)'}">${r.net!==null?fmtH(r.net):'—'}</td>
+          </tr>`).join('')}
+        </tbody>
+        ${totalSemaine > 0 ? `
+        <tfoot>
+          <tr style="border-top:2px solid var(--border);background:var(--surface)">
+            <td colspan="4" style="padding:12px 18px;font-weight:700;font-size:13px;color:var(--ink)">Total semaine</td>
+            <td style="padding:12px 18px;text-align:right;font-weight:700;font-size:17px;color:var(--accent)">${fmtH(totalSemaine)}</td>
+          </tr>
+        </tfoot>` : ''}
+      </table>
+    </div>
+    <div style="padding:10px 18px;font-size:11px;color:var(--ink-faint);border-top:1px solid var(--border)">
+      <i class="ti ti-info-circle" style="margin-right:4px"></i>Heures déclarées par le poseur via "Ma journée". Pour valider et saisir les heures retenues, utilisez l'onglet <strong>Horaires poseurs</strong>.
     </div>
   </div>`;
 }
