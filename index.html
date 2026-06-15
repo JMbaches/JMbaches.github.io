@@ -6121,7 +6121,22 @@ function dosProgressBar(d) {
   const pct  = Math.round(step / 8 * 100);
   const cols  = {nouveau:'var(--purple)',admin:'var(--accent)',verif:'#0891B2',production:'var(--amber)',emballage:'#D97706',stocké:'#4338CA',expédié:'var(--green)',livré:'#047857',posé:'var(--green)',retiré:'var(--ink-faint)'};
   const col = cols[d.statut] || 'var(--accent)';
-  return `<div title="Étape ${step}/6" style="height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:5px;width:100%"><div style="height:100%;width:${pct}%;background:${col};border-radius:2px;transition:width .4s"></div></div>`;
+  const bar = `<div title="Étape ${step}/8" style="height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:5px;width:100%"><div style="height:100%;width:${pct}%;background:${col};border-radius:2px;transition:width .4s"></div></div>`;
+
+  // Complétude — uniquement utile en saisie/vérif
+  if (!['admin','verif','nouveau'].includes(d.statut)) return bar;
+  const checks = [
+    {k:'Transport',  ok: !!d.transport},
+    {k:'Date livr.', ok: !!d.dateLivraison},
+    {k:'Structure',  ok: !!d.structure},
+    {k:'Dimensions', ok: !!(d.largeur||d.longueur||d.surface)},
+    {k:'Documents',  ok: (d.documents||[]).length > 0},
+  ];
+  const missing = checks.filter(c => !c.ok);
+  const chips = missing.length === 0
+    ? `<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--green-light);color:var(--green);font-weight:600"><i class="ti ti-circle-check" style="font-size:9px;vertical-align:0"></i> Complet</span>`
+    : missing.map(c=>`<span title="${c.k} manquant" style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--red-light);color:var(--red)"><i class="ti ti-alert-circle" style="font-size:9px;vertical-align:0"></i> ${c.k}</span>`).join('');
+  return bar + `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:5px">${chips}</div>`;
 }
 
 // ----- RACCOURCIS CLAVIER -----
