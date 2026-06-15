@@ -1300,7 +1300,7 @@ const ALL_PERMS = [
 const ROLE_DEFAULT_PERMS = {
   direction: ['view_all','create','edit','advance','view_prod','adv_prod','atelier_grand','emballage','emballage_grand','metreur','planning','compta','horaires_poseurs','users','journal','suivi'],
   admin:     ['view_all','create','edit','advance','view_prod','emballage','planning','compta','horaires_poseurs','journal','suivi'],
-  verif:     ['view_all','advance','journal'],
+  verif:     ['view_all','advance','metreur','journal'],
   commercial:['view_all','create','edit','suivi'],
   compta:    ['view_all','compta','horaires_poseurs','users','journal','suivi'],
   ouvrier:   ['view_prod','adv_prod','atelier_grand'],
@@ -1666,7 +1666,7 @@ const TAB_GROUPS = {
   'dos-g':      { icon:'ti-clipboard-list', label:'Dossiers',    show:()=>can('view_all')||can('create'),
     tabs:[{id:'dos',icon:'ti-list',label:'Liste'},{id:'archives',icon:'ti-archive',label:'Archives'}]},
   'admin-g':    { icon:'ti-file-description',label:'Admin',      show:()=>currentUser&&['admin','verif','direction'].includes(currentUser.role),
-    tabs:[{id:'admin_saisie',icon:'ti-pencil',label:'Saisie'},{id:'admin_verif',icon:'ti-check',label:'Vérification'}]},
+    tabs:[{id:'admin_saisie',icon:'ti-pencil',label:'Saisie'},{id:'admin_verif',icon:'ti-check',label:'Vérification'},{id:'metreur',icon:'ti-ruler',label:'Fiches techniques',show:()=>can('metreur')}]},
   'atelier-g':  { icon:'ti-tool',            label:'Atelier',    show:()=>can('view_prod'),
     tabs:[{id:'atelier',icon:'ti-tool',label:'Atelier',show:()=>can('view_prod')},{id:'atelier_grand',icon:'ti-layout-grid',label:'Grand écran',show:()=>can('view_prod')&&can('atelier_grand')}]},
   'emballage-g':{ icon:'ti-package',         label:'Emballage',  show:()=>can('emballage'),
@@ -1693,7 +1693,6 @@ function buildNav() {
     }
   }
 
-  if(can('metreur')) mainTabs.push({id:'metreur',icon:'ti-ruler',label:'Fiches techniques'});
   if(can('suivi')||can('view_all')||can('view_prod')) mainTabs.push({id:'suivi',icon:'ti-chart-bar',label:'Suivi'});
   if(can('planning')) mainTabs.push({id:'planning',icon:'ti-calendar',label:'Planning'});
   if(can('compta')) mainTabs.push({id:'compta',icon:'ti-receipt',label:'Comptabilité'});
