@@ -28,10 +28,10 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node megao-sync.js
 
-      - name: Planifier la prochaine sync dans 15 min
+      - name: Planifier la prochaine sync dans 5 min
         if: always()   # relancer même si la sync a échoué
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          sleep 900
+          sleep 300
           gh workflow run megao-sync.yml --ref main
