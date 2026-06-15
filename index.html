@@ -142,6 +142,13 @@ button { cursor: pointer; border: none; background: transparent; }
 }
 .sub-nav-btn:hover { color: var(--ink); }
 .sub-nav-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.pd-folder-item {
+  display: flex; align-items: center; gap: 8px; padding: 7px 12px;
+  font-size: 13px; cursor: pointer; border-radius: 0; transition: background .12s;
+  color: var(--ink-faint); user-select: none;
+}
+.pd-folder-item:hover { background: var(--bg-alt); color: var(--ink); }
+.pd-folder-active { background: var(--accent-light) !important; color: var(--accent-deep) !important; font-weight: 500; }
 .nav-btn {
   padding: 12px 16px; font-size: 12px; font-family: var(--font-display);
   font-weight: 500; letter-spacing: .06em; text-transform: uppercase;
@@ -1235,6 +1242,32 @@ a:focus-visible, button:focus-visible,
 </div>
 </div>
 
+<!-- MODAL PORTE-DOCUMENT -->
+<div class="modal-overlay" id="modal-portedoc">
+  <div class="modal" style="max-width:820px;height:80vh;display:flex;flex-direction:column">
+    <div class="modal-hd">
+      <div>
+        <div class="modal-title"><i class="ti ti-folder-open" style="margin-right:6px"></i>Porte-document</div>
+        <div style="font-size:12px;color:var(--ink-faint);margin-top:2px" id="pd-dos-label"></div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-portedoc')"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="display:flex;flex:1;overflow:hidden">
+      <!-- Sidebar dossiers -->
+      <div style="width:190px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden">
+        <div style="padding:10px 12px;border-bottom:1px solid var(--border)">
+          <button class="btn btn-primary btn-sm" style="width:100%;justify-content:center" onclick="addDocFolder()"><i class="ti ti-folder-plus"></i> Nouveau dossier</button>
+        </div>
+        <div id="pd-folders" style="flex:1;overflow-y:auto;padding:6px 0"></div>
+      </div>
+      <!-- Zone fichiers -->
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+        <div id="pd-files-area" style="flex:1;overflow-y:auto;padding:14px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL EXPORT EXCEL -->
 <div class="modal-overlay" id="modal-export-excel">
   <div class="modal" style="max-width:620px">
@@ -2284,6 +2317,7 @@ function renderFiche() {
       <button class="btn btn-sm ${isUrgent(d)?'btn-danger':'btn-ghost'}" onclick="toggleUrgent()" style="${isUrgent(d)?'':'color:var(--red);border-color:rgba(163,45,45,.3)'}" title="${isUrgent(d)?'Cliquer pour retirer la priorité':'Marquer comme urgent'}">
         <i class="ti ti-alert-triangle"></i> ${isUrgent(d)?'URGENT':'Urgent ?'}
       </button>
+      <button class="btn btn-secondary" onclick="openPorteDoc('${d.id}')" title="Porte-document"><i class="ti ti-folder-open"></i> Documents${(d.documents||[]).length>0?` <span style="background:var(--accent);color:#fff;border-radius:8px;padding:0 6px;font-size:10px;margin-left:2px">${(d.documents||[]).length}</span>`:''}</button>
       <button class="btn btn-secondary" onclick="printFicheA4()"><i class="ti ti-printer"></i> Imprimer A4</button>
       <button class="btn btn-secondary" onclick="exportDossierPDF()"><i class="ti ti-file-export"></i> Exporter PDF</button>
       <button class="btn btn-primary" onclick="saveFiche()"><i class="ti ti-check"></i> Enregistrer</button>
@@ -2293,7 +2327,6 @@ function renderFiche() {
   <div class="fiche-layout">
     <div id="page-body">${renderPage(d,p)}</div>
     <div class="no-print">
-      ${renderDocumentsSection(d)}
       <div class="card" style="margin-bottom:12px">
         <div class="card-hd"><span class="card-title"><i class="ti ti-history" style="margin-right:5px"></i>Historique</span><span style="font-size:11px;color:var(--ink-faint)">${d.history.length} entrée${d.history.length>1?'s':''}</span></div>
         <div id="hist-body" style="padding:12px">
@@ -2659,81 +2692,137 @@ function fileSize(b) {
   if(b<1048576) return Math.round(b/1024)+' Ko';
   return (b/1048576).toFixed(1)+' Mo';
 }
-function renderDocumentsSection(d) {
+// ---- PORTE-DOCUMENT ----
+let _pdDosId=null, _pdFolder='Général';
+
+function openPorteDoc(dosId){
+  _pdDosId=dosId; _pdFolder='Général';
+  const d=dossiers.find(x=>x.id===dosId); if(!d) return;
+  const lbl=document.getElementById('pd-dos-label');
+  if(lbl) lbl.textContent=(d.client||'')+(d.ref?' — '+d.ref:'');
+  renderPorteDoc();
+  openModal('modal-portedoc');
+}
+
+function _pdFolderList(d){ return ['Général',...(d.docFolders||[])]; }
+
+function renderPorteDoc(){
+  const d=dossiers.find(x=>x.id===_pdDosId); if(!d) return;
+  const folders=_pdFolderList(d);
   const docs=d.documents||[];
   const editable=can('edit');
-  return `<div class="card" style="margin-bottom:12px">
-    <div class="card-hd">
-      <span class="card-title"><i class="ti ti-folder-open" style="margin-right:5px"></i>Documents</span>
-      <span style="font-size:11px;color:var(--ink-faint)">${docs.length} fichier${docs.length!==1?'s':''}</span>
+
+  // Sidebar
+  const foldEl=document.getElementById('pd-folders');
+  if(foldEl) foldEl.innerHTML=folders.map(f=>{
+    const cnt=docs.filter(doc=>(doc.folder||'Général')===f).length;
+    const active=f===_pdFolder;
+    return `<div class="pd-folder-item${active?' pd-folder-active':''}" onclick="selectDocFolder(${JSON.stringify(f)})">
+      <i class="ti ${f==='Général'?'ti-inbox':'ti-folder'}" style="font-size:14px;flex-shrink:0"></i>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f}</span>
+      ${cnt>0?`<span style="font-size:10px;color:var(--ink-faint)">${cnt}</span>`:''}
+      ${f!=='Général'&&editable?`<button class="btn btn-ghost btn-sm" style="padding:0 3px;color:var(--red);flex-shrink:0" onclick="event.stopPropagation();deleteDocFolder(${JSON.stringify(f)})" title="Supprimer"><i class="ti ti-x" style="font-size:11px"></i></button>`:''}
+    </div>`;
+  }).join('');
+
+  // Zone fichiers
+  const filesEl=document.getElementById('pd-files-area'); if(!filesEl) return;
+  const folderDocs=docs.filter(doc=>(doc.folder||'Général')===_pdFolder);
+  filesEl.innerHTML=`
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px">
+        <i class="ti ${_pdFolder==='Général'?'ti-inbox':'ti-folder'}" style="color:var(--accent)"></i>${_pdFolder}
+      </div>
+      <span style="font-size:12px;color:var(--ink-faint)">${folderDocs.length} fichier${folderDocs.length!==1?'s':''}</span>
     </div>
-    <div style="padding:12px">
-      ${editable?`<label style="display:flex;align-items:center;justify-content:center;gap:10px;padding:18px;border:2px dashed var(--border);border-radius:var(--radius);cursor:pointer;color:var(--ink-faint);font-size:13px;margin-bottom:12px;transition:all .15s"
-        ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='var(--accent-light)'"
-        ondragleave="this.style.borderColor='';this.style.background=''"
-        ondrop="event.preventDefault();this.style.borderColor='';this.style.background='';handleDocDrop(event,'${d.id}')">
-        <i class="ti ti-cloud-upload" style="font-size:20px"></i>
-        <span>Glisser des fichiers ici ou <u>cliquer pour parcourir</u></span>
-        <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style="display:none" onchange="handleDocInput(this,'${d.id}')">
-      </label>
-      <div id="doc-upload-progress" style="display:none;padding:8px 12px;background:var(--accent-light);border-radius:var(--radius);font-size:12px;color:var(--accent-deep);margin-bottom:12px;display:flex;align-items:center;gap:8px">
-        <i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Upload en cours…
-      </div>`:''}
-      ${docs.length===0?`<div style="text-align:center;color:var(--ink-faint);font-size:13px;padding:8px 0">Aucun document</div>`:`
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px">
-        ${docs.map(doc=>{
+    ${editable?`<label style="display:flex;align-items:center;justify-content:center;gap:10px;padding:16px;border:2px dashed var(--border);border-radius:var(--radius);cursor:pointer;color:var(--ink-faint);font-size:13px;margin-bottom:14px;transition:all .15s"
+      ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='var(--accent-light)'"
+      ondragleave="this.style.borderColor='';this.style.background=''"
+      ondrop="event.preventDefault();this.style.borderColor='';this.style.background='';handlePorteDocDrop(event)">
+      <i class="ti ti-cloud-upload" style="font-size:20px"></i>
+      <span>Glisser des fichiers ici ou <u>cliquer pour parcourir</u></span>
+      <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style="display:none" onchange="handlePorteDocInput(this)">
+    </label>
+    <div id="pd-upload-progress" style="display:none;padding:8px 12px;background:var(--accent-light);border-radius:var(--radius);font-size:12px;color:var(--accent-deep);margin-bottom:12px;align-items:center;gap:8px">
+      <i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Upload en cours…
+    </div>`:''}
+    ${folderDocs.length===0
+      ?`<div style="text-align:center;color:var(--ink-faint);font-size:13px;padding:24px 0">Aucun document dans ce dossier</div>`
+      :`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
+        ${folderDocs.map(doc=>{
           const isImg=doc.type&&doc.type.startsWith('image/');
           return `<div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column">
-            <a href="${doc.url}" target="_blank" style="display:flex;align-items:center;justify-content:center;height:90px;background:var(--bg);overflow:hidden;text-decoration:none;color:var(--ink-faint)">
-              ${isImg?`<img src="${doc.url}" style="width:100%;height:100%;object-fit:cover" loading="lazy">`:`<i class="ti ${fileIcon(doc.type)}" style="font-size:34px"></i>`}
+            <a href="${doc.url}" target="_blank" style="display:flex;align-items:center;justify-content:center;height:88px;background:var(--bg);overflow:hidden;text-decoration:none;color:var(--ink-faint)">
+              ${isImg?`<img src="${doc.url}" style="width:100%;height:100%;object-fit:cover" loading="lazy">`:`<i class="ti ${fileIcon(doc.type)}" style="font-size:32px"></i>`}
             </a>
             <div style="padding:6px 8px;display:flex;flex-direction:column;gap:3px">
               <div style="font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${doc.name}">${doc.name}</div>
               <div style="font-size:10px;color:var(--ink-faint)">${fileSize(doc.size)} · ${(doc.uploadedAt||'').split(' ')[0]||''}</div>
               <div style="display:flex;gap:4px;margin-top:4px">
                 <a href="${doc.url}" target="_blank" class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;padding:3px" title="Ouvrir"><i class="ti ti-external-link"></i></a>
-                ${editable?`<button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;padding:3px;color:var(--red)" onclick="deleteDossierDoc('${d.id}','${doc.id}')" title="Supprimer"><i class="ti ti-trash"></i></button>`:''}
+                ${editable?`<button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;padding:3px;color:var(--red)" onclick="deleteDossierDoc('${_pdDosId}','${doc.id}')" title="Supprimer"><i class="ti ti-trash"></i></button>`:''}
               </div>
             </div>
           </div>`;
         }).join('')}
-      </div>`}
-    </div>
-  </div>`;
+      </div>`}`;
 }
-async function handleDocDrop(e,dosId) { await uploadDossierFiles(dosId,[...e.dataTransfer.files]); }
-async function handleDocInput(input,dosId) { await uploadDossierFiles(dosId,[...input.files]); input.value=''; }
-async function uploadDossierFiles(dosId,files) {
+
+function selectDocFolder(name){ _pdFolder=name; renderPorteDoc(); }
+
+async function addDocFolder(){
+  const name=prompt('Nom du dossier :'); if(!name||!name.trim()) return;
+  const trimmed=name.trim();
+  const d=dossiers.find(x=>x.id===_pdDosId); if(!d) return;
+  if(!d.docFolders) d.docFolders=[];
+  if(d.docFolders.includes(trimmed)||trimmed==='Général'){showToast('Ce dossier existe déjà');return;}
+  d.docFolders.push(trimmed);
+  _pdFolder=trimmed;
+  await saveData(); renderPorteDoc();
+}
+
+async function deleteDocFolder(name){
+  if(!confirm(`Supprimer le dossier "${name}" ? Les fichiers seront déplacés dans "Général".`)) return;
+  const d=dossiers.find(x=>x.id===_pdDosId); if(!d) return;
+  (d.documents||[]).forEach(doc=>{ if((doc.folder||'Général')===name) doc.folder='Général'; });
+  d.docFolders=(d.docFolders||[]).filter(f=>f!==name);
+  if(_pdFolder===name) _pdFolder='Général';
+  await saveData(); renderPorteDoc();
+}
+
+async function handlePorteDocDrop(e){ await uploadPorteDocFiles([...e.dataTransfer.files]); }
+async function handlePorteDocInput(input){ await uploadPorteDocFiles([...input.files]); input.value=''; }
+async function uploadPorteDocFiles(files){
   if(!window._storage){showToast('⚠ Storage non configuré');return;}
   if(!files.length) return;
-  const prog=document.getElementById('doc-upload-progress');
+  const prog=document.getElementById('pd-upload-progress');
   if(prog) prog.style.display='flex';
-  const d=dossiers.find(x=>x.id===dosId); if(!d) return;
+  const d=dossiers.find(x=>x.id===_pdDosId); if(!d) return;
   if(!d.documents) d.documents=[];
-  for(const file of files) {
+  for(const file of files){
     const safe=file.name.replace(/[^a-zA-Z0-9.\-_]/g,'_');
-    const path=`dossiers/${dosId}/${Date.now()}_${safe}`;
-    try {
+    const path=`dossiers/${_pdDosId}/${Date.now()}_${safe}`;
+    try{
       const snap=await window._storage.ref(path).put(file);
       const url=await snap.ref.getDownloadURL();
-      d.documents.push({id:Date.now()+'_'+Math.random().toString(36).slice(2),name:file.name,url,path,type:file.type,size:file.size,uploadedBy:currentUser.id,uploadedAt:now()});
-      logHistory(dosId,'document','Document ajouté',file.name);
-    } catch(e){ console.error(e); showToast('Erreur upload : '+file.name); }
+      d.documents.push({id:Date.now()+'_'+Math.random().toString(36).slice(2),name:file.name,url,path,type:file.type,size:file.size,folder:_pdFolder,uploadedBy:currentUser.id,uploadedAt:now()});
+      logHistory(_pdDosId,'document','Document ajouté',file.name);
+    }catch(e){console.error(e);showToast('Erreur upload : '+file.name);}
   }
   await saveData();
   if(prog) prog.style.display='none';
-  renderFiche();
+  renderPorteDoc();
 }
-async function deleteDossierDoc(dosId,docId) {
+
+async function deleteDossierDoc(dosId,docId){
   if(!confirm('Supprimer ce document ?')) return;
   const d=dossiers.find(x=>x.id===dosId); if(!d||!d.documents) return;
   const doc=d.documents.find(x=>x.id===docId);
-  if(doc?.path && window._storage) {
-    try { await window._storage.ref(doc.path).delete(); } catch(e){ console.warn(e); }
-  }
+  if(doc?.path&&window._storage){try{await window._storage.ref(doc.path).delete();}catch(e){console.warn(e);}}
   d.documents=d.documents.filter(x=>x.id!==docId);
   logHistory(dosId,'document','Document supprimé',doc?.name||'');
-  await saveData(); renderFiche();
+  await saveData();
+  if(_pdDosId===dosId) renderPorteDoc(); else renderFiche();
 }
 
 function addComment() {
