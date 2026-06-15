@@ -6896,7 +6896,6 @@ function renderPilotage(){
   </div>
   <div class="stats-grid" style="margin-top:-8px">
     ${kpi('Devis en attente', piloEUR(caEnAttente), enAttente.length+' à relancer')}
-    ${kpi('Délai moyen', delaiMoy+' j', 'création → livraison')}
     ${kpi('Dossiers actifs', actifs.length, 'en cours de traitement')}
     ${kpi('En retard', retards.length, retards.length?'livraison dépassée':'aucun retard', retards.length?'var(--red)':'var(--green)')}
   </div>
