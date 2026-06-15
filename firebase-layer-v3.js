@@ -55,6 +55,9 @@ function startFirestoreListeners() {
       if (_firestoreReady) {
         buildLoginSelect?.();
         if (typeof currentTab !== 'undefined' && currentTab === 'users') renderUsers?.();
+        if (typeof currentTab !== 'undefined' && currentTab === 'planning_avance') {
+          typeof _planningAvanceAutoSync === 'function' && _planningAvanceAutoSync();
+        }
       }
       check();
     }, e => { handleFirestoreError(e, 'users'); check(); });
