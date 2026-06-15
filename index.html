@@ -2372,6 +2372,21 @@ function renderFiche() {
         </div>
       </div>` : statBadge(d.statut)}
       ${(()=>{const t=tempsStatut(d);return t?`<span style="font-size:11px;color:${tempsStatutColor(d)};display:flex;align-items:center;gap:3px" title="Dans ce statut depuis ${t}"><i class="ti ti-clock" style="font-size:11px"></i>${t}</span>`:''})()}
+      ${can('edit')?`<div style="position:relative;display:inline-block">
+        <button onclick="togglePaiementMenu('${d.id}',event)" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:var(--radius);border:1px solid ${d.devisStatut==='paye'?'#A7F3D0':'var(--border)'};background:${d.devisStatut==='paye'?'#D1FAE5':d.devisStatut==='facture'?'#FEF3C7':'var(--bg)'};cursor:pointer;font-size:12px;font-weight:500;color:${d.devisStatut==='paye'?'#065F46':d.devisStatut==='facture'?'#92400E':'var(--ink-soft)'}">
+          <i class="ti ti-${d.devisStatut==='paye'?'circle-check':d.devisStatut==='facture'?'receipt':'credit-card'}" style="font-size:13px"></i>
+          ${{en_attente:'Non payé',accepte:'Accepté',facture:'Facturé',paye:'Payé',refuse:'Refusé'}[d.devisStatut]||'Paiement'}
+          <i class="ti ti-chevron-down" style="font-size:9px;opacity:.6"></i>
+        </button>
+        <div id="paiement-menu-${d.id}" style="display:none;position:absolute;top:100%;right:0;z-index:500;background:var(--paper);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(22,24,29,.12);min-width:150px;padding:4px;margin-top:2px">
+          ${[['en_attente','Non payé','ti-clock'],['accepte','Accepté','ti-check'],['facture','Facturé','ti-receipt'],['paye','Payé ✓','ti-circle-check'],['refuse','Refusé','ti-x']].map(([k,v,ic])=>`
+          <button onclick="changerDevisStatut('${d.id}','${k}');document.getElementById('paiement-menu-${d.id}').style.display='none';renderFiche()" style="display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;background:${d.devisStatut===k?'var(--accent-light)':'none'};border:none;border-radius:4px;font-size:12px;cursor:pointer;color:var(--ink);font-weight:${d.devisStatut===k?'600':'400'}">
+            <i class="ti ${ic}" style="font-size:12px"></i>${v}
+          </button>`).join('')}
+        </div>
+      </div>` : `<span style="font-size:12px;padding:4px 10px;border-radius:var(--radius);background:${d.devisStatut==='paye'?'#D1FAE5':'var(--bg)'};color:${d.devisStatut==='paye'?'#065F46':'var(--ink-soft)'}">
+        ${{en_attente:'Non payé',accepte:'Accepté',facture:'Facturé',paye:'✓ Payé',refuse:'Refusé'}[d.devisStatut]||'—'}
+      </span>`}
       <button class="btn btn-sm ${isUrgent(d)?'btn-danger':'btn-ghost'}" onclick="toggleUrgent()" style="${isUrgent(d)?'':'color:var(--red);border-color:rgba(163,45,45,.3)'}" title="${isUrgent(d)?'Cliquer pour retirer la priorité':'Marquer comme urgent'}">
         <i class="ti ti-alert-triangle"></i> ${isUrgent(d)?'URGENT':'Urgent ?'}
       </button>
@@ -3010,6 +3025,17 @@ function toggleStatutMenu(dosId, e) {
   if (!isOpen) menu.style.display = 'block';
 }
 
+function togglePaiementMenu(dosId, e) {
+  e.stopPropagation();
+  const menu = document.getElementById('paiement-menu-' + dosId);
+  if (!menu) return;
+  const isOpen = menu.style.display !== 'none';
+  // Fermer tous les menus paiement ouverts
+  document.querySelectorAll('[id^="paiement-menu-"]').forEach(m => m.style.display = 'none');
+  closeAllStatutMenus();
+  if (!isOpen) menu.style.display = 'block';
+}
+
 // Changer le statut directement depuis la liste
 function changerStatutDirect(dosId, newStatut, e) {
   e.stopPropagation();
@@ -3026,7 +3052,10 @@ function changerStatutDirect(dosId, newStatut, e) {
 }
 
 // Fermer les menus si on clique ailleurs
-document.addEventListener('click', () => closeAllStatutMenus());
+document.addEventListener('click', () => {
+  closeAllStatutMenus();
+  document.querySelectorAll('[id^="paiement-menu-"]').forEach(m => m.style.display = 'none');
+});
 
 function avancerDos(id,e) {
   if(e) e.stopPropagation();
