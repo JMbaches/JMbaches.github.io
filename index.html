@@ -1778,6 +1778,7 @@ function goGroup(gId) {
 }
 
 function goTab(tab) {
+  if(currentTab==='fiche') clearPresence();
   currentTab=tab; currentDosId=null;
   buildNav();
   const gsi=document.getElementById('global-search-input');
@@ -2249,7 +2250,10 @@ function renderDos() {
         return `<tr class="clickable" onclick="openFiche('${d.id}')" style="${retard?'background:rgba(163,45,45,.04)':''}">
           <td style="font-size:11px;color:var(--ink-faint);font-family:'JetBrains Mono',monospace;font-weight:500">${highlight(d.id, globalSearchQuery)}</td>
           <td>
-            <div style="font-weight:600;font-size:13px">${highlight(d.client, globalSearchQuery)}</div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-weight:600;font-size:13px">${highlight(d.client, globalSearchQuery)}</span>
+              ${(()=>{const w=users.filter(u=>u.id!==currentUser.id&&u.presenceDos===d.id);return w.length?`<span title="${w.map(u=>u.prenom||u.name).join(', ')} sur ce dossier" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:1px 6px;border-radius:3px;background:#FEF3C7;color:#92400E"><i class="ti ti-eye" style="font-size:10px"></i>${w.map(u=>(u.prenom||u.name||'?')[0]).join('')}</span>`:''})()}
+            </div>
             <div style="font-size:11px;color:var(--ink-faint);margin-top:1px;display:flex;align-items:center;gap:4px">
               ${d.tel ? `<span>${d.tel}</span><button onclick="event.stopPropagation();copyPhone('${d.tel}',this)" class="btn btn-xs btn-ghost" style="padding:1px 4px;min-height:0;line-height:1" title="Copier le téléphone"><i class="ti ti-copy" style="font-size:10px"></i></button>` : ''}
             </div>
@@ -2294,9 +2298,18 @@ function renderDos() {
 /* ================================================================
    FICHE DOSSIER
    ================================================================ */
+async function setPresence(dosId) {
+  if (!currentUser || !window._db) return;
+  try { await window._db.collection('users').doc(currentUser.id).update({presenceDos: dosId||null}); }
+  catch(e) { /* silent */ }
+  const u=users.find(x=>x.id===currentUser.id); if(u) u.presenceDos=dosId||null;
+}
+function clearPresence() { setPresence(null); }
+
 function openFiche(id) {
   currentDosId=id; currentPageIdx=0;
   currentTab='fiche'; buildNav();
+  setPresence(id);
   renderFiche();
 }
 function renderFiche() {
@@ -2334,6 +2347,15 @@ function renderFiche() {
       <button class="btn btn-primary" onclick="saveFiche()"><i class="ti ti-check"></i> Enregistrer</button>
     </div>
   </div>
+  ${(()=>{
+    const others=users.filter(u=>u.id!==currentUser.id&&u.presenceDos===currentDosId);
+    if(!others.length) return '';
+    const noms=others.map(u=>`<span style="display:inline-flex;align-items:center;gap:5px"><span class="avatar" style="width:20px;height:20px;font-size:9px;background:${ROLE_COLORS[u.role]?.bg||'var(--accent-light)'};color:${ROLE_COLORS[u.role]?.c||'var(--accent-deep)'}">${(u.prenom||u.name||'?')[0].toUpperCase()}</span>${u.prenom||u.name}</span>`).join(', ');
+    return `<div class="no-print" style="display:flex;align-items:center;gap:8px;padding:7px 14px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:var(--radius);margin-bottom:10px;font-size:13px;color:#92400E">
+      <i class="ti ti-eye" style="font-size:15px;flex-shrink:0"></i>
+      <span>${noms} ${others.length>1?'sont':'est'} également sur ce dossier</span>
+    </div>`;
+  })()}
   <div class="pages-nav no-print">${tabs}</div>
   <div class="fiche-layout">
     <div id="page-body">${renderPage(d,p)}</div>
@@ -6140,6 +6162,8 @@ function dosProgressBar(d) {
 }
 
 // ----- RACCOURCIS CLAVIER -----
+window.addEventListener('beforeunload', () => { if(currentDosId) clearPresence(); });
+
 document.addEventListener('keydown', function(e) {
   // Échap : fermer modal → fiche → chat → dropdown recherche
   if (e.key === 'Escape') {

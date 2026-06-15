@@ -201,7 +201,8 @@ window.doLogout = async function doLogout() {
   if (chatPanel) chatPanel.classList.remove('open');
   const chatBtn = document.getElementById('chat-btn');
   if (chatBtn) chatBtn.style.display = 'none';
-  // 2. Arrêter tous les listeners (plus aucun callback après ça)
+  // 2. Effacer la présence avant de couper les listeners
+  if (typeof clearPresence === 'function') clearPresence();
   stopFirestoreListeners();
   // 3. Déconnecter Auth
   await _auth.signOut();
