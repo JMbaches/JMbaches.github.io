@@ -4633,50 +4633,72 @@ window.addEventListener('message', (e) => {
 });
 
 function _envoyerDossiersPlanning(frame) {
-  const chantiers = dossiers
-    .filter(d => d.transport === 'liv_pose' || d.needPose)
-    .map(d => ({
-      id:              d.id,          // utilisé comme id interne dans planning.html
-      externalId:      d.id,          // clé de liaison retour → Firebase
-      clientName:      d.client    || '',
-      clientPhone:     d.tel       || '',
-      clientEmail:     d.email     || '',
-      address:         d.adresse   || '',
-      city:            d.ville     || '',
-      postalCode:      d.cp        || '',
-      type:            d.structure || '',
-      dimensions:      [d.largeur && `L:${d.largeur}m`, d.longueur && `L:${d.longueur}m`].filter(Boolean).join(' · '),
-      constraints:     [d.contraintes, d.autres].filter(Boolean).join(' — '),
-      notes:           d.remarques || '',
-      estimatedDuration: 2.5,
-      materials:       [],
-      weatherSensitive: true,
-      status:          d.poseDate ? 'planifie' : 'a_planifier',
-      scheduledDate:   d.poseDate  || '',
-      scheduledBinome: '',
-      fixedTime:       '',
-      notBefore:       d.dateFrom  || '',
-      notAfter:        d.dateLivraison || '',
-      linkId: '', linkRole: 0, linkGap: 0, archived: false,
-    }));
+  if (!frame || !frame.contentWindow) return;
+  const liste = dossiers.filter(d => d.transport === 'liv_pose' || d.needPose);
+  const chantiers = liste.map(d => ({
+    id:               d.id,
+    externalId:       d.id,
+    clientName:       d.client       || '',
+    clientPhone:      d.tel          || '',
+    clientEmail:      d.email        || '',
+    address:          d.adresse      || '',
+    city:             d.ville        || '',
+    postalCode:       d.cp           || '',
+    type:             d.structure    || '',
+    dimensions:       [d.largeur && `L:${d.largeur}m`, d.longueur && `l:${d.longueur}m`].filter(Boolean).join(' · '),
+    constraints:      [d.contraintes, d.autres].filter(Boolean).join(' — '),
+    notes:            d.remarques    || '',
+    estimatedDuration: 2.5,
+    materials:        [],
+    weatherSensitive: true,
+    status:           d.poseDate ? 'planifie' : 'a_planifier',
+    scheduledDate:    d.poseDate     || '',
+    scheduledBinome:  '',
+    fixedTime:        '',
+    notBefore:        d.dateFrom     || '',
+    notAfter:         d.dateLivraison|| '',
+    linkId: '', linkRole: 0, linkGap: 0, archived: false,
+  }));
   frame.contentWindow.postMessage({ type: 'JMBACH_INIT', dossiers: chantiers }, '*');
+  // Mettre à jour la barre de statut
+  const bar = document.getElementById('planning-sync-bar');
+  if (bar) {
+    const t = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+    bar.innerHTML = `<i class="ti ti-circle-check" style="color:var(--green)"></i> ${liste.length} dossier${liste.length>1?'s':''} synchronisé${liste.length>1?'s':''} · dernière sync ${t}
+      <button onclick="syncPlanningMaintenant()" style="margin-left:12px;padding:3px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--paper);font-size:12px;cursor:pointer"><i class="ti ti-refresh"></i> Synchroniser</button>`;
+  }
+}
+
+function syncPlanningMaintenant() {
+  const frame = document.getElementById('planning-ia-frame');
+  if (frame) _envoyerDossiersPlanning(frame);
 }
 
 function renderPlanningAvance() {
   const mc = document.getElementById('main-content');
   mc.style.padding = '0';
-  mc.innerHTML = `<iframe id="planning-ia-frame" src="planning.html"
-    style="width:100%;height:calc(100vh - 112px);border:none;display:block"
-    allow="clipboard-write; geolocation"></iframe>`;
+  const liste = dossiers.filter(d => d.transport === 'liv_pose' || d.needPose);
+  mc.innerHTML = `
+    <div id="planning-sync-bar" style="display:flex;align-items:center;gap:8px;padding:6px 16px;background:var(--surface);border-bottom:1px solid var(--border);font-size:12px;color:var(--ink-soft)">
+      <i class="ti ti-loader" style="animation:spin .8s linear infinite"></i> Connexion à l'app planning…
+    </div>
+    <iframe id="planning-ia-frame" src="planning.html"
+      style="width:100%;height:calc(100vh - 140px);border:none;display:block"
+      allow="clipboard-write; geolocation"></iframe>`;
 
   const frame = document.getElementById('planning-ia-frame');
-  // L'événement JMBACH_READY (postMessage) déclenchera l'envoi des dossiers
-  // Fallback si le READY n'arrive pas (cache, rechargement partiel)
   frame.addEventListener('load', () => {
-    setTimeout(() => {
-      if (frame.contentWindow) _envoyerDossiersPlanning(frame);
-    }, 800);
+    // Double tentative : 500ms et 1500ms (cache vs premier chargement)
+    setTimeout(() => _envoyerDossiersPlanning(frame), 500);
+    setTimeout(() => _envoyerDossiersPlanning(frame), 1500);
   });
+}
+
+// Auto-sync quand Firestore met à jour les dossiers et que l'onglet Planning IA est actif
+function _planningAvanceAutoSync() {
+  if (currentTab !== 'planning_avance') return;
+  const frame = document.getElementById('planning-ia-frame');
+  if (frame && frame.contentWindow) _envoyerDossiersPlanning(frame);
 }
 
 function renderPlanning() {

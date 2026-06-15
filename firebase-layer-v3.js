@@ -311,6 +311,7 @@ function refreshCurrentView() {
     emballage_grand: () => typeof renderEmballageGrand === 'function' && renderEmballageGrand(),
     planning:        () => typeof renderPlanning       === 'function' && renderPlanning(),
     users:           () => typeof renderUsers          === 'function' && renderUsers(),
+    planning_avance: () => typeof _planningAvanceAutoSync === 'function' && _planningAvanceAutoSync(),
   };
   const fn = map[currentTab];
   if (fn) fn();
