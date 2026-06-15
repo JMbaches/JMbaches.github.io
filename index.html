@@ -1216,6 +1216,32 @@ a:focus-visible, button:focus-visible,
 </div>
 </div>
 
+<!-- MODAL EXPORT EXCEL -->
+<div class="modal-overlay" id="modal-export-excel">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-hd">
+      <div>
+        <div class="modal-title">Export Excel</div>
+        <div style="font-size:12px;color:var(--ink-faint);margin-top:2px">Sélectionnez les dossiers à inclure dans le fichier</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-export-excel')"><i class="ti ti-x"></i></button>
+    </div>
+    <div style="padding:10px 20px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-sm btn-ghost" onclick="selectExportGroup('actifs')"><i class="ti ti-circle-check"></i> Actifs</button>
+      <button class="btn btn-sm btn-ghost" onclick="selectExportGroup('archives')"><i class="ti ti-archive"></i> Archivés</button>
+      <button class="btn btn-sm btn-ghost" onclick="selectExportGroup('tous')"><i class="ti ti-checks"></i> Tous</button>
+      <button class="btn btn-sm btn-ghost" onclick="selectExportGroup('none')"><i class="ti ti-square"></i> Aucun</button>
+      <input type="text" id="export-excel-search" placeholder="Rechercher un client…" oninput="renderExportList()" style="margin-left:auto;padding:5px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--ink);font-size:13px;width:185px">
+    </div>
+    <div id="export-excel-list" style="max-height:42vh;overflow-y:auto;padding:4px 16px"></div>
+    <div class="modal-ft">
+      <div style="flex:1;font-size:13px;color:var(--ink-faint)"><span id="export-excel-count">0</span> dossier(s) sélectionné(s)</div>
+      <button class="btn btn-secondary" onclick="closeModal('modal-export-excel')">Annuler</button>
+      <button class="btn btn-primary" onclick="exportExcelDossiers()"><i class="ti ti-file-spreadsheet"></i> Télécharger Excel</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ================================================================
    DONNÉES & CONSTANTES
@@ -2026,6 +2052,7 @@ function renderDos() {
         </button>
         ${(()=>{const n=dossiers.filter(d=>isArchivable(d)).length;return n>0?`<button class="btn btn-ghost btn-sm" onclick="showArchived=!showArchived;renderDos()" style="${showArchived?'color:var(--accent);border-color:var(--accent)':'color:var(--ink-faint)'}"><i class="ti ti-archive"></i> Archives${showArchived?' (visible)':' ('+n+')'}
         </button>`:'';})()}
+        <button class="btn btn-ghost btn-sm" onclick="openExportExcel()" title="Exporter en Excel"><i class="ti ti-file-spreadsheet"></i> Excel</button>
         <button class="btn btn-ghost btn-sm" onclick="exportDossiersCSV()" title="Exporter en CSV"><i class="ti ti-table-export"></i> CSV</button>
         ${can('create')?`<button class="btn btn-primary" onclick="openNewDos()"><i class="ti ti-plus"></i> Nouveau dossier</button>`:''}
       </div>
@@ -5851,6 +5878,138 @@ function calcDelaiMoyen() {
 }
 
 // ----- EXPORT CSV DOSSIERS -----
+// ---- EXPORT EXCEL ----
+let _exportSelectedIds = new Set();
+
+function openExportExcel() {
+  selectExportGroup('actifs');
+  openModal('modal-export-excel');
+}
+
+function selectExportGroup(type) {
+  if (type === 'actifs')   _exportSelectedIds = new Set(dossiers.filter(d => !isDossierCloture(d)).map(d => d.id));
+  else if (type === 'archives') _exportSelectedIds = new Set(dossiers.filter(d => isDossierCloture(d)).map(d => d.id));
+  else if (type === 'tous') _exportSelectedIds = new Set(dossiers.map(d => d.id));
+  else _exportSelectedIds = new Set();
+  renderExportList();
+}
+
+function renderExportList() {
+  const q = (document.getElementById('export-excel-search')?.value || '').toLowerCase();
+  const list = dossiers
+    .filter(d => !q || (d.client||'').toLowerCase().includes(q) || d.id.toLowerCase().includes(q))
+    .sort((a, b) => b.id.localeCompare(a.id));
+  const el = document.getElementById('export-excel-list');
+  if (!el) return;
+  const TRANSPORT_SHORT = { enlvt: 'Enlèvement', livraison: 'Livraison', liv_pose: 'Liv. + Pose' };
+  el.innerHTML = list.map(d => `
+    <label style="display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid var(--border);cursor:pointer">
+      <input type="checkbox" value="${d.id}" ${_exportSelectedIds.has(d.id)?'checked':''} onchange="_exportToggle('${d.id}',this.checked)" style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0">
+      <span style="flex:1;font-size:13px;font-weight:500">${d.client||'—'}</span>
+      <span style="font-size:11px;color:var(--ink-faint)">${d.id}</span>
+      <span style="font-size:10px;color:var(--ink-faint)">${TRANSPORT_SHORT[d.transport]||''}</span>
+      ${statBadge(d.statut)}
+    </label>`).join('');
+  document.getElementById('export-excel-count').textContent = _exportSelectedIds.size;
+}
+
+function _exportToggle(id, checked) {
+  if (checked) _exportSelectedIds.add(id); else _exportSelectedIds.delete(id);
+  document.getElementById('export-excel-count').textContent = _exportSelectedIds.size;
+}
+
+function exportExcelDossiers() {
+  if (!window.XLSX) { alert('Bibliothèque Excel non chargée — vérifiez votre connexion.'); return; }
+  const selected = dossiers.filter(d => _exportSelectedIds.has(d.id)).sort((a,b) => b.id.localeCompare(a.id));
+  if (!selected.length) { alert('Sélectionnez au moins un dossier.'); return; }
+
+  const TRANSPORT_LABEL = { enlvt:'Enlèvement', livraison:'Livraison', liv_pose:'Livraison + Pose' };
+  const DEVIS_LABEL = { accepte:'Accepté', paye:'Payé', en_attente:'En attente', refuse:'Refusé' };
+  const STATUT_CLR = {
+    nouveau:'6D28D9', admin:'D97706', production:'1D4ED8', emballage:'C05621',
+    stocké:'4338CA', expédié:'047857', livré:'065F46', posé:'064E3B', retiré:'374151'
+  };
+
+  const COLS = [
+    { key:'id',            label:'N° Dossier',       w:16, num:false },
+    { key:'client',        label:'Client',            w:24, num:false },
+    { key:'contact',       label:'Contact',           w:20, num:false },
+    { key:'tel',           label:'Téléphone',         w:14, num:false },
+    { key:'ville',         label:'Ville',             w:16, num:false },
+    { key:'cp',            label:'CP',                w:7,  num:false },
+    { key:'structure',     label:'Structure',         w:34, num:false },
+    { key:'transport',     label:'Transport',         w:18, num:false },
+    { key:'statut',        label:'Statut',            w:14, num:false },
+    { key:'dateFrom',      label:'Création',          w:13, num:false },
+    { key:'dateLivraison', label:'Livraison prévue',  w:16, num:false },
+    { key:'poseDate',      label:'Date pose',         w:13, num:false },
+    { key:'ht',            label:'Montant HT (€)',    w:15, num:true  },
+    { key:'ttcVal',        label:'Montant TTC (€)',   w:15, num:true  },
+    { key:'devisStatut',   label:'Devis',             w:12, num:false },
+    { key:'remarques',     label:'Remarques',         w:38, num:false },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const ws = {};
+  const enc = XLSX.utils.encode_cell;
+
+  const hdrStyle = (num) => ({
+    font: { bold:true, color:{ rgb:'FFFFFF' }, sz:11, name:'Calibri' },
+    fill: { fgColor:{ rgb:'1A1D2E' }, patternType:'solid' },
+    alignment: { horizontal: num ? 'right' : 'center', vertical:'center' },
+    border: { bottom:{ style:'medium', color:{ rgb:'4F7FFF' } } }
+  });
+  const cellStyle = (bg, num, statut, isId) => ({
+    font: {
+      sz:10, name:'Calibri', bold: isId || !!statut,
+      color:{ rgb: statut ? (STATUT_CLR[statut]||'1A1D2E') : '1A1D2E' }
+    },
+    fill: { fgColor:{ rgb: bg }, patternType:'solid' },
+    alignment: { horizontal: num ? 'right' : 'left', vertical:'center', wrapText: false },
+    border: { bottom:{ style:'thin', color:{ rgb:'E5E7EB' } } },
+    ...(num ? { numFmt:'#,##0.00' } : {})
+  });
+
+  COLS.forEach((col, ci) => {
+    ws[enc({r:0,c:ci})] = { v:col.label, t:'s', s:hdrStyle(col.num) };
+  });
+
+  selected.forEach((d, ri) => {
+    const bg = ri % 2 === 0 ? 'FFFFFF' : 'F4F5FA';
+    const values = [
+      d.id,
+      d.client||'', d.contact||'', d.tel||'', d.ville||'', d.cp||'',
+      d.structure||'',
+      TRANSPORT_LABEL[d.transport]||d.transport||'',
+      STATUT_LABEL[d.statut]||d.statut||'',
+      d.dateFrom||'', d.dateLivraison||'', d.poseDate||'',
+      d.ht||0, ttc(d),
+      DEVIS_LABEL[d.devisStatut]||d.devisStatut||'',
+      d.remarques||''
+    ];
+    values.forEach((val, ci) => {
+      const col = COLS[ci];
+      const isStatut = ci === 8;
+      const r = ri + 1;
+      ws[enc({r,c:ci})] = {
+        v: val, t: col.num ? 'n' : 's',
+        s: cellStyle(bg, col.num, isStatut ? d.statut : null, ci === 0)
+      };
+    });
+  });
+
+  ws['!ref'] = XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:selected.length, c:COLS.length-1} });
+  ws['!cols'] = COLS.map(c => ({ wch:c.w }));
+  ws['!rows'] = [{ hpt:26 }, ...Array(selected.length).fill({ hpt:20 })];
+  ws['!sheetViews'] = [{ state:'frozen', ySplit:1, topLeftCell:'A2' }];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Dossiers JM Bâches');
+  const today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `jmbaches-export-${today}.xlsx`);
+  closeModal('modal-export-excel');
+  showToast(`✓ Excel exporté — ${selected.length} dossier(s)`);
+}
+
 function exportDossiersCSV() {
   const list = applyDosFilters(dossiers).filter(d => showArchived || !isArchivable(d));
   const headers = ['N°','Client','Structure','Statut','Date livraison','HT','TTC','Devis','Tél','Ville'];
@@ -6376,6 +6535,7 @@ function piloExportCSV(){
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
