@@ -3156,7 +3156,7 @@ function saveDossier() {
     needPose:document.getElementById('f-need-pose')?.checked||false,
     transport:'',remarques:document.getElementById('f-remarques').value,
     autres:document.getElementById('f-autres').value,
-    statut:'nouveau',createdBy:currentUser.id,
+    statut:'admin',createdBy:currentUser.id,
     history:[{id:Date.now(),type:'création',action:'Dossier créé',detail:'',user:currentUser.id,at:now()}],
     pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]
   };
