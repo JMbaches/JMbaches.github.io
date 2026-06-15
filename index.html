@@ -4979,7 +4979,7 @@ let horSemaine = getWeekKey();
 let horPoseurFilter = 'tous';
 
 function getPoseurs() {
-  return users.filter(u => u.active && (u.role==='poseur'||u.role==='ouvrier'||u.role==='planning'));
+  return users.filter(u => u.active && u.role === 'poseur');
 }
 
 function renderHoraires() {
