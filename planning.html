@@ -1230,6 +1230,8 @@ function App() {
   useEffect(() => {
     const handler = (e) => {
       if (!e.data || e.data.type !== 'JMBACH_INIT') return;
+      // Poseurs Firebase comme binômes
+      if (e.data.binomes && e.data.binomes.length > 0) setBinomes(e.data.binomes);
       const incoming = e.data.dossiers || [];
       setChantiers(prev => {
         const result = [...prev];

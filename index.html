@@ -4624,9 +4624,10 @@ window.addEventListener('message', (e) => {
     updates.forEach(upd => {
       const d = dossiers.find(x => x.id === upd.externalId);
       if (!d) return;
-      // Sync poseDate ← scheduledDate de l'app planning
-      const newDate = upd.scheduledDate || '';
-      if (d.poseDate !== newDate) { d.poseDate = newDate; changed = true; }
+      const newDate     = upd.scheduledDate  || '';
+      const newPoseurId = upd.scheduledBinome || '';
+      if (d.poseDate  !== newDate)     { d.poseDate  = newDate;     changed = true; }
+      if (d.poseurId  !== newPoseurId) { d.poseurId  = newPoseurId; changed = true; }
     });
     if (changed) { saveData(); showToast('✓ Planning synchronisé avec Firebase'); }
   }
@@ -4653,13 +4654,21 @@ function _envoyerDossiersPlanning(frame) {
     weatherSensitive: true,
     status:           d.poseDate ? 'planifie' : 'a_planifier',
     scheduledDate:    d.poseDate     || '',
-    scheduledBinome:  '',
+    scheduledBinome:  d.poseurId     || '',
     fixedTime:        '',
     notBefore:        d.dateFrom     || '',
     notAfter:         d.dateLivraison|| '',
     linkId: '', linkRole: 0, linkGap: 0, archived: false,
   }));
-  frame.contentWindow.postMessage({ type: 'JMBACH_INIT', dossiers: chantiers }, '*');
+  const binomes = getPoseurs().map(u => ({
+    id:      u.id,
+    name:    u.name || u.email || u.id,
+    members: [u.name || u.email || ''],
+    color:   '#1B5FCC',
+    phone:   u.tel   || '',
+    email:   u.email || '',
+  }));
+  frame.contentWindow.postMessage({ type: 'JMBACH_INIT', dossiers: chantiers, binomes }, '*');
   // Mettre à jour la barre de statut
   const bar = document.getElementById('planning-sync-bar');
   if (bar) {
@@ -5250,7 +5259,11 @@ function renderVuePoseur() {
   const dayKey = getDayKeyFr(dateObj);
   const weekKey = getWeekKeyForDate(dateObj);
 
-  const posesJour = dossiers.filter(d => d.needPose && d.poseDate === vuePoseurDateIso);
+  const posesJour = dossiers.filter(d =>
+    d.needPose &&
+    d.poseDate === vuePoseurDateIso &&
+    (!d.poseurId || d.poseurId === currentUser.id)
+  );
 
   if(!horairesData[weekKey]) horairesData[weekKey] = {};
   if(!horairesData[weekKey][currentUser.id]) horairesData[weekKey][currentUser.id] = {};
