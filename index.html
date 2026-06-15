@@ -127,6 +127,21 @@ button { cursor: pointer; border: none; background: transparent; }
   border-bottom: 3px solid var(--accent);
   overflow-x: auto;
 }
+.sub-nav {
+  display: flex; gap: 2px; padding: 0 32px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.sub-nav-btn {
+  padding: 8px 16px; font-size: 12px; font-weight: 600;
+  color: var(--ink-faint); background: none; border: none;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 6px;
+  transition: color .15s, border-color .15s;
+}
+.sub-nav-btn:hover { color: var(--ink); }
+.sub-nav-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
 .nav-btn {
   padding: 12px 16px; font-size: 12px; font-family: var(--font-display);
   font-weight: 500; letter-spacing: .06em; text-transform: uppercase;
@@ -227,6 +242,7 @@ button { cursor: pointer; border: none; background: transparent; }
 .b-admin { background: var(--accent-light); color: var(--accent-deep); }
 .b-production { background: var(--amber-light); color: var(--amber); }
 .b-emballage { background: #FEF3C7; color: #92400E; }
+.b-verif  { background: #CFFAFE; color: #0E7490; }
 .b-stocke { background: #E0E7FF; color: #3730A3; }
 .b-expedie { background: #D1FAE5; color: #065F46; }
 .b-livre  { background: #A7F3D0; color: #064E3B; }
@@ -714,6 +730,7 @@ tr.clickable:hover td { background: var(--accent-light); cursor: pointer; }
 .b-admin      { background: #E6EEFE; color: #1B47C2; }
 .b-production { background: #FCE7D3; color: #9A4A07; }
 .b-emballage  { background: #FBF0CD; color: #876008; }
+.b-verif      { background: #CFFAFE; color: #0E7490; }
 .b-stocke     { background: #E5E9FC; color: #33308F; }
 .b-expedie    { background: #DEF2E4; color: #1C6A39; }
 .b-livre      { background: #BBFCD8; color: #064E3B; }
@@ -994,6 +1011,7 @@ a:focus-visible, button:focus-visible,
     </div>
   </div>
   <div class="nav" id="main-nav"></div>
+  <div class="sub-nav" id="sub-nav" style="display:none"></div>
   <div class="content" id="main-content"></div>
 </div>
 
@@ -1147,7 +1165,8 @@ a:focus-visible, button:focus-visible,
         <div class="form-group"><label class="form-label">Rôle</label>
           <select id="u-role" onchange="syncPerms()">
             <option value="direction">Direction</option>
-            <option value="admin">Administration</option>
+            <option value="admin">Administration (Saisie)</option>
+            <option value="verif">Vérification admin</option>
             <option value="commercial">Commercial</option>
             <option value="compta">Comptabilité</option>
             <option value="ouvrier">Ouvrier atelier</option>
@@ -1249,6 +1268,7 @@ a:focus-visible, button:focus-visible,
 const ROLE_COLORS = {
   direction:  {bg:'#EEEDFE',c:'#3C3489'},
   admin:      {bg:'#EAF0F9',c:'#14479B'},
+  verif:      {bg:'#CFFAFE',c:'#0E7490'},
   commercial: {bg:'#FBEAF0',c:'#72243E'},
   compta:     {bg:'#E1F5EE',c:'#085041'},
   ouvrier:    {bg:'#FAEEDA',c:'#633806'},
@@ -1257,7 +1277,7 @@ const ROLE_COLORS = {
   metreur:    {bg:'#F7EBA0',c:'#6B5A0E'},
   emballage:  {bg:'#D1FAE5',c:'#065F46'},
 };
-const ROLE_LABELS = {direction:'Direction',admin:'Administration',commercial:'Commercial',compta:'Comptabilité',ouvrier:'Ouvrier atelier',emballage:'Emballage',sav:'SAV',planning:'Planning',metreur:'Métreur / Technicien'};
+const ROLE_LABELS = {direction:'Direction',admin:'Administration',verif:'Vérification admin',commercial:'Commercial',compta:'Comptabilité',ouvrier:'Ouvrier atelier',emballage:'Emballage',sav:'SAV',planning:'Planning',metreur:'Métreur / Technicien'};
 const ALL_PERMS = [
   {id:'view_all',         label:'Voir tous les dossiers'},
   {id:'create',           label:'Créer des dossiers'},
@@ -1280,6 +1300,7 @@ const ALL_PERMS = [
 const ROLE_DEFAULT_PERMS = {
   direction: ['view_all','create','edit','advance','view_prod','adv_prod','atelier_grand','emballage','emballage_grand','metreur','planning','compta','horaires_poseurs','users','journal','suivi'],
   admin:     ['view_all','create','edit','advance','view_prod','emballage','planning','compta','horaires_poseurs','journal','suivi'],
+  verif:     ['view_all','advance','journal'],
   commercial:['view_all','create','edit','suivi'],
   compta:    ['view_all','compta','horaires_poseurs','users','journal','suivi'],
   ouvrier:   ['view_prod','adv_prod','atelier_grand'],
@@ -1288,10 +1309,10 @@ const ROLE_DEFAULT_PERMS = {
   metreur:   ['view_all','metreur','edit'],
   emballage: ['emballage','emballage_grand'],
 };
-const STATUT_NEXT = {nouveau:'admin',admin:'production',production:'emballage',emballage:'stocké',stocké:'expédié',expédié:'expédié',terminé:'emballage',posé:'posé',retiré:'retiré'};
-const STATUT_LABEL = {nouveau:'Nouveau',admin:'Traitement admin',production:'En production',emballage:'Emballage',stocké:'Stocké',expédié:'Expédié',livré:'Livré',posé:'Posé',retiré:'Enlevé'};
-const STATUT_COLORS = {nouveau:'#7C3AED',admin:'#D97706',production:'#2563EB',emballage:'#D97706',stocké:'#4338CA',expédié:'#059669',livré:'#047857',posé:'#065F46',retiré:'#374151'};
-const STATUT_NEXT_BTN = {nouveau:'→ Envoyer en admin',admin:'→ Envoyer en production',production:'→ Envoyer en emballage',emballage:'→ Marquer stocké',stocké:'→ Marquer expédié',expédié:'→ Marquer livré',livré:'Dossier clôturé',posé:'Dossier clôturé',retiré:'Dossier clôturé',terminé:'→ Envoyer en emballage'};
+const STATUT_NEXT = {nouveau:'admin',admin:'verif',verif:'production',production:'emballage',emballage:'stocké',stocké:'expédié',expédié:'expédié',terminé:'emballage',posé:'posé',retiré:'retiré'};
+const STATUT_LABEL = {nouveau:'Nouveau',admin:'Saisie admin',verif:'Vérification',production:'En production',emballage:'Emballage',stocké:'Stocké',expédié:'Expédié',livré:'Livré',posé:'Posé',retiré:'Enlevé'};
+const STATUT_COLORS = {nouveau:'#7C3AED',admin:'#D97706',verif:'#0891B2',production:'#2563EB',emballage:'#D97706',stocké:'#4338CA',expédié:'#059669',livré:'#047857',posé:'#065F46',retiré:'#374151'};
+const STATUT_NEXT_BTN = {nouveau:'→ Envoyer en admin',admin:'→ Envoyer en vérification',verif:'→ Envoyer en production',production:'→ Envoyer en emballage',emballage:'→ Marquer stocké',stocké:'→ Marquer expédié',expédié:'→ Marquer livré',livré:'Dossier clôturé',posé:'Dossier clôturé',retiré:'Dossier clôturé',terminé:'→ Envoyer en emballage'};
 const EVT = {
   création:     {icon:'ti-file-plus',bg:'#EAF0F9',c:'#14479B'},
   statut:       {icon:'ti-arrow-right',bg:'#FAEEDA',c:'#633806'},
@@ -1302,6 +1323,7 @@ const EVT = {
 };
 const NOTIF_RULES = [
   {trigger:'statut:admin',      targets:['admin'],              icon:'ti-file-plus',    bg:'#EAF0F9',c:'#14479B', title:d=>`Nouveau dossier à traiter`,            body:d=>`${d.client} — ${d.structure||'—'}`},
+  {trigger:'statut:verif',      targets:['verif','admin'],      icon:'ti-check',        bg:'#CFFAFE',c:'#0E7490', title:d=>`Dossier à vérifier`,                    body:d=>`${d.client} — ${d.structure||'—'}`},
   {trigger:'statut:production', targets:['ouvrier','metreur'],  icon:'ti-tool',         bg:'#FAEEDA',c:'#633806', title:d=>`Commande à fabriquer`,                 body:d=>`${d.client} — ${d.structure||'—'}${d.remarques?' · '+d.remarques.slice(0,40):''}`},
   {trigger:'statut:emballage',  targets:['emballage'],          icon:'ti-package',      bg:'#FEF3C7',c:'#92400E', title:d=>`Commande à emballer`,                  body:d=>`${d.client} — ${d.structure||'—'}`},
   {trigger:'statut:stocké',     targets:['planning','admin'],   icon:'ti-archive',      bg:'#E0E7FF',c:'#3730A3', title:d=>`Commande stockée — prête à expédier`,  body:d=>`${d.client} — ${d.structure||'—'}`},
@@ -1428,7 +1450,7 @@ function can(p) { return currentUser && currentUser.perms.includes(p); }
 function canSeeCA() { return currentUser && currentUser.role !== 'ouvrier'; }
 function userName(uid) { const u=users.find(x=>x.id===uid); return u?u.name:uid; }
 function statBadge(s) {
-  const map={nouveau:'b-nouveau',admin:'b-admin',production:'b-production',emballage:'b-emballage',stocké:'b-stocke',expédié:'b-expedie',livré:'b-livre',posé:'b-pose',retiré:'b-retire'};
+  const map={nouveau:'b-nouveau',admin:'b-admin',verif:'b-verif',production:'b-production',emballage:'b-emballage',stocké:'b-stocke',expédié:'b-expedie',livré:'b-livre',posé:'b-pose',retiré:'b-retire'};
   return `<span class="badge ${map[s]||''}">${STATUT_LABEL[s]||s}</span>`;
 }
 function initials(n) { return (n||'').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); }
@@ -1475,7 +1497,7 @@ function pushNotif(type, dosId, d, detail='') {
   users.forEach(u=>n.read[u.id]=true);
   rule.targets.forEach(t=>{
     users.forEach(u=>{
-      const roleOk = (t==='admin'&&(u.role==='admin'||u.perms.includes('users')))||(t==='ouvrier'&&u.role==='ouvrier')||(t==='emballage'&&u.role==='emballage')||(t==='planning'&&u.role==='planning')||(t==='compta'&&(u.role==='compta'||u.perms.includes('users')))||(t==='direction'&&u.perms.includes('users'))||(t==='commercial'&&u.role==='commercial')||(t==='metreur'&&u.role==='metreur');
+      const roleOk = (t==='admin'&&(u.role==='admin'||u.perms.includes('users')))||(t==='verif'&&u.role==='verif')||(t==='ouvrier'&&u.role==='ouvrier')||(t==='emballage'&&u.role==='emballage')||(t==='planning'&&u.role==='planning')||(t==='compta'&&(u.role==='compta'||u.perms.includes('users')))||(t==='direction'&&u.perms.includes('users'))||(t==='commercial'&&u.role==='commercial')||(t==='metreur'&&u.role==='metreur');
       if(roleOk) n.read[u.id]=false;
     });
   });
@@ -1639,44 +1661,90 @@ function checkLivraisonsProches() {
 /* ================================================================
    NAVIGATION
    ================================================================ */
+// Groupes de sous-onglets par poste
+const TAB_GROUPS = {
+  'dos-g':      { icon:'ti-clipboard-list', label:'Dossiers',    show:()=>can('view_all')||can('create'),
+    tabs:[{id:'dos',icon:'ti-list',label:'Liste'},{id:'archives',icon:'ti-archive',label:'Archives'}]},
+  'admin-g':    { icon:'ti-file-description',label:'Admin',      show:()=>currentUser&&['admin','verif','direction'].includes(currentUser.role),
+    tabs:[{id:'admin_saisie',icon:'ti-pencil',label:'Saisie'},{id:'admin_verif',icon:'ti-check',label:'Vérification'}]},
+  'atelier-g':  { icon:'ti-tool',            label:'Atelier',    show:()=>can('view_prod'),
+    tabs:[{id:'atelier',icon:'ti-tool',label:'Atelier',show:()=>can('view_prod')},{id:'atelier_grand',icon:'ti-layout-grid',label:'Grand écran',show:()=>can('view_prod')&&can('atelier_grand')}]},
+  'emballage-g':{ icon:'ti-package',         label:'Emballage',  show:()=>can('emballage'),
+    tabs:[{id:'emballage_view',icon:'ti-package',label:'Emballage'},{id:'emballage_grand',icon:'ti-layout-grid',label:'Grand écran',show:()=>can('emballage_grand')}]},
+};
+function _tabGroup(tabId) {
+  for(const[gId,g] of Object.entries(TAB_GROUPS)) if(g.tabs.some(t=>t.id===tabId)) return {gId,g};
+  return null;
+}
+
 function buildNav() {
   if(!currentUser) return;
   const cnt=unreadCount();
-  const tabs=[];
-  tabs.push({id:'dashboard',icon:'ti-home',label:'Accueil'});
-  if(can('compta')) tabs.push({id:'pilotage',icon:'ti-chart-pie',label:'Pilotage'});
-  if(can('view_all')||can('create')) tabs.push({id:'dos',icon:'ti-clipboard-list',label:'Dossiers'});
-  if(can('view_all')||can('create')) { const na=dossiers.filter(d=>isArchivable(d)).length; tabs.push({id:'archives',icon:'ti-archive',label:'Archives'+(na>0?' ('+na+')':'')}); }
-  if(can('view_prod')) tabs.push({id:'atelier',icon:'ti-tool',label:'Atelier'});
-  if(can('view_prod')&&can('atelier_grand')) tabs.push({id:'atelier_grand',icon:'ti-layout-grid',label:'Vue grand écran'});
-  if(can('metreur')) tabs.push({id:'metreur',icon:'ti-ruler',label:'Fiches techniques'});
-  if(can('emballage')) tabs.push({id:'emballage_view',icon:'ti-package',label:'Emballage'});
-  if(can('emballage')&&can('emballage_grand')) tabs.push({id:'emballage_grand',icon:'ti-layout-grid',label:'Vue grand écran'});
-  if(can('suivi')||can('view_all')||can('view_prod')) tabs.push({id:'suivi',icon:'ti-chart-bar',label:'Suivi'});
-  if(can('planning')) tabs.push({id:'planning',icon:'ti-calendar',label:'Planning'});
-  if(can('compta')) tabs.push({id:'compta',icon:'ti-receipt',label:'Comptabilité'});
-  if(can('horaires_poseurs')) tabs.push({id:'horaires',icon:'ti-clock',label:'Horaires poseurs'});
-  if(can('journal')||can('view_all')||can('view_prod')) tabs.push({id:'journal',icon:'ti-history',label:'Journal'});
-  tabs.push({id:'notifs',icon:'ti-bell',label:'Notifications',badge:cnt});
-  if(can('users')) tabs.push({id:'users',icon:'ti-users',label:'Comptes'});
+  const cur=currentTab;
+  const mainTabs=[];
 
-  document.getElementById('main-nav').innerHTML=tabs.map((t,idx)=>`
+  mainTabs.push({id:'dashboard',icon:'ti-home',label:'Accueil'});
+  if(can('compta')) mainTabs.push({id:'pilotage',icon:'ti-chart-pie',label:'Pilotage'});
+
+  for(const[gId,g] of Object.entries(TAB_GROUPS)) {
+    if(!g.show||g.show()) {
+      const active=g.tabs.some(t=>t.id===cur);
+      mainTabs.push({id:gId,icon:g.icon,label:g.label,isGroup:true,active});
+    }
+  }
+
+  if(can('metreur')) mainTabs.push({id:'metreur',icon:'ti-ruler',label:'Fiches techniques'});
+  if(can('suivi')||can('view_all')||can('view_prod')) mainTabs.push({id:'suivi',icon:'ti-chart-bar',label:'Suivi'});
+  if(can('planning')) mainTabs.push({id:'planning',icon:'ti-calendar',label:'Planning'});
+  if(can('compta')) mainTabs.push({id:'compta',icon:'ti-receipt',label:'Comptabilité'});
+  if(can('horaires_poseurs')) mainTabs.push({id:'horaires',icon:'ti-clock',label:'Horaires poseurs'});
+  if(can('journal')||can('view_all')||can('view_prod')) mainTabs.push({id:'journal',icon:'ti-history',label:'Journal'});
+  mainTabs.push({id:'notifs',icon:'ti-bell',label:'Notifications',badge:cnt});
+  if(can('users')) mainTabs.push({id:'users',icon:'ti-users',label:'Comptes'});
+
+  document.getElementById('main-nav').innerHTML=mainTabs.map((t,idx)=>`
     ${idx>0?'<span class="nav-diamond">◆</span>':''}
-    <button class="nav-btn${currentTab===t.id?' active':''}" onclick="${t.action ? t.action : `goTab('${t.id}')`}">
+    <button class="nav-btn${(t.isGroup?t.active:cur===t.id)?' active':''}" onclick="goGroup('${t.id}')">
       <i class="ti ${t.icon}"></i> ${t.label}
       ${t.badge>0?`<span class="nav-notif-dot"></span>`:''}
     </button>`).join('');
+
+  // Sous-nav
+  const grpInfo=_tabGroup(cur);
+  const subNav=document.getElementById('sub-nav');
+  if(grpInfo) {
+    const visibleTabs=grpInfo.g.tabs.filter(t=>!t.show||t.show());
+    subNav.style.display='flex';
+    subNav.innerHTML=visibleTabs.map(t=>`
+      <button class="sub-nav-btn${cur===t.id?' active':''}" onclick="goTab('${t.id}')">
+        <i class="ti ${t.icon}"></i> ${t.label}
+      </button>`).join('');
+  } else {
+    subNav.style.display='none';
+  }
+  updateBadge?.();
 }
+
+function goGroup(gId) {
+  const g=TAB_GROUPS[gId];
+  if(!g) { goTab(gId); return; }
+  // Si déjà dans ce groupe, ne pas changer de sous-onglet
+  if(g.tabs.some(t=>t.id===currentTab)) return;
+  // Naviguer vers le premier sous-onglet disponible
+  const first=g.tabs.find(t=>!t.show||t.show());
+  if(first) goTab(first.id);
+}
+
 function goTab(tab) {
   currentTab=tab; currentDosId=null;
   buildNav();
-  // Maintenir la valeur de recherche dans le champ
-  const gsi = document.getElementById('global-search-input');
-  if (gsi) gsi.value = globalSearchQuery;
+  const gsi=document.getElementById('global-search-input');
+  if(gsi) gsi.value=globalSearchQuery;
   const mc=document.getElementById('main-content');
   mc.innerHTML='';
   if(tab==='dashboard') renderDashboard();
-  else if(tab==='dos') renderDos();
+  else if(tab==='dos'||tab==='admin_saisie'||tab==='admin_verif') renderDos();
+  else if(tab==='archives') renderArchives();
   else if(tab==='atelier') renderAtelier();
   else if(tab==='atelier_grand') renderAtelierGrand();
   else if(tab==='metreur') renderMetreur();
@@ -1687,7 +1755,6 @@ function goTab(tab) {
   else if(tab==='pilotage') renderPilotage();
   else if(tab==='compta') renderCompta();
   else if(tab==='horaires') loadHoraires().then(()=>renderHoraires());
-  else if(tab==='archives') renderArchives();
   else if(tab==='journal') renderJournal();
   else if(tab==='notifs') renderNotifs();
   else if(tab==='users') renderUsers();
@@ -1966,7 +2033,8 @@ function renderDashboard() {
         <div style="padding:14px 16px;display:grid;gap:8px">
           ${[
             {k:'nouveau',l:'Nouveau',c:'var(--purple)',bg:'var(--purple-light)'},
-            {k:'admin',l:'Traitement admin',c:'var(--accent-deep)',bg:'var(--accent-light)'},
+            {k:'admin',l:'Saisie admin',c:'var(--accent-deep)',bg:'var(--accent-light)'},
+            {k:'verif',l:'Vérification',c:'#0E7490',bg:'#CFFAFE'},
             {k:'production',l:'En production',c:'var(--amber)',bg:'var(--amber-light)'},
             {k:'emballage',l:'Emballage',c:'#92400E',bg:'#FEF3C7'},
             {k:'stocké',l:'Stocké',c:'#3730A3',bg:'#E0E7FF'},
@@ -2034,7 +2102,7 @@ function renderDos() {
 
   <div style="margin-bottom:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px">
-      <div class="section-title" style="font-size:17px;font-weight:700;letter-spacing:-.2px">Dossiers clients</div>
+      <div class="section-title" style="font-size:17px;font-weight:700;letter-spacing:-.2px">${currentTab==='admin_saisie'?'Dossiers en saisie admin':currentTab==='admin_verif'?'Dossiers en vérification':'Dossiers clients'}</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <div style="position:relative">
           <i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--ink-faint);font-size:14px;pointer-events:none"></i>
@@ -2134,7 +2202,7 @@ function renderDos() {
         <th>Activité</th><th>Actions</th>
       </tr></thead>
       ${globalSearchQuery ? `<caption style="caption-side:top;text-align:left;padding:8px 14px;font-size:12px;color:var(--accent);font-weight:600;background:var(--accent-light);border-bottom:1px solid var(--border)"><i class="ti ti-search"></i> ${filteredDossiers(dossiers).length} résultat(s) pour « ${globalSearchQuery} » <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="document.getElementById('global-search-input').value='';globalSearch('')">✕ Effacer</button></caption>` : ""}
-      <tbody>${applyDosFilters(dossiers).filter(d=>showArchived||!isArchivable(d)).map(d=>{
+      <tbody>${(()=>{let _l=applyDosFilters(dossiers).filter(d=>showArchived||!isArchivable(d));if(currentTab==='admin_saisie')_l=_l.filter(d=>d.statut==='admin');else if(currentTab==='admin_verif')_l=_l.filter(d=>d.statut==='verif');return _l;})().map(d=>{
         const retard = d.dateLivraison && d.dateLivraison < new Date().toISOString().split('T')[0] && !['expédié','livré','posé','retiré'].includes(d.statut);
         return `<tr class="clickable" onclick="openFiche('${d.id}')" style="${retard?'background:rgba(163,45,45,.04)':''}">
           <td style="font-size:11px;color:var(--ink-faint);font-family:'JetBrains Mono',monospace;font-weight:500">${highlight(d.id, globalSearchQuery)}</td>
@@ -3892,7 +3960,8 @@ function avancerDosEmballageGrand(id) {
 function renderSuivi() {
   const cols=[
     {k:'nouveau',   l:'Nouveau',     c:'var(--purple)', bg:'var(--purple-light)'},
-    {k:'admin',     l:'Admin',        c:'var(--accent)', bg:'var(--accent-light)'},
+    {k:'admin',     l:'Saisie admin', c:'var(--accent)', bg:'var(--accent-light)'},
+    {k:'verif',     l:'Vérification', c:'#0E7490',       bg:'#CFFAFE'},
     {k:'production',l:'Production',   c:'var(--amber)',  bg:'var(--amber-light)'},
     {k:'emballage', l:'Emballage',    c:'#92400E',       bg:'#FEF3C7'},
     {k:'stocké',    l:'Stocké',       c:'#3730A3',       bg:'#E0E7FF'},
@@ -3907,7 +3976,7 @@ function renderSuivi() {
     <div class="section-title">Pipeline global</div>
     <span style="font-size:12px;color:var(--ink-faint)"><i class="ti ti-drag-drop" style="vertical-align:-1px;margin-right:4px"></i>Glisser-déposer pour changer de statut</span>
   </div>
-  <div style="display:grid;grid-template-columns:repeat(9,minmax(130px,1fr));gap:10px;overflow-x:auto;padding-bottom:8px" id="suivi-pipeline">
+  <div style="display:grid;grid-template-columns:repeat(10,minmax(130px,1fr));gap:10px;overflow-x:auto;padding-bottom:8px" id="suivi-pipeline">
     ${cols.map(col=>{
       const items=dossiers.filter(d=>d.statut===col.k);
       return `<div class="pipe-col" id="col-${col.k}"
@@ -5731,11 +5800,11 @@ function highlight(text, query) {
 }
 
 // ----- BARRE DE PROGRESSION DOSSIER -----
-const STATUT_STEP = {nouveau:1,admin:2,production:3,emballage:4,stocké:5,expédié:6,livré:7,posé:7,retiré:7};
+const STATUT_STEP = {nouveau:1,admin:2,verif:3,production:4,emballage:5,stocké:6,expédié:7,livré:8,posé:8,retiré:8};
 function dosProgressBar(d) {
   const step = STATUT_STEP[d.statut] || 0;
-  const pct  = Math.round(step / 7 * 100);
-  const cols  = {nouveau:'var(--purple)',admin:'var(--accent)',production:'var(--amber)',emballage:'#D97706',stocké:'#4338CA',expédié:'var(--green)',livré:'#047857',posé:'var(--green)',retiré:'var(--ink-faint)'};
+  const pct  = Math.round(step / 8 * 100);
+  const cols  = {nouveau:'var(--purple)',admin:'var(--accent)',verif:'#0891B2',production:'var(--amber)',emballage:'#D97706',stocké:'#4338CA',expédié:'var(--green)',livré:'#047857',posé:'var(--green)',retiré:'var(--ink-faint)'};
   const col = cols[d.statut] || 'var(--accent)';
   return `<div title="Étape ${step}/6" style="height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:5px;width:100%"><div style="height:100%;width:${pct}%;background:${col};border-radius:2px;transition:width .4s"></div></div>`;
 }
