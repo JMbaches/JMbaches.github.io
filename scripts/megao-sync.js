@@ -203,7 +203,7 @@ async function upsertDossier(data) {
       revendeur:   data.revendeur  || '',
       needPose:    data.transport  === 'liv_pose',
       poseDate:    '',
-      statut:      'nouveau',
+      statut:      'admin',
       createdBy:   'megao-sync',
       pages: [
         { type: 'commande', label: 'Fiche commande', checks: {} },

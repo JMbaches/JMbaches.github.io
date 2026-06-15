@@ -2001,7 +2001,7 @@ function renderDashboard() {
   recentActivity.sort((a,b)=>b.id-a.id);
   const top5 = recentActivity.slice(0,6);
   const hour = new Date().getHours();
-  const greeting = hour<12?'Bonjour':'Bonsoir';
+  const greeting = hour>=18?'Bonsoir':'Bonjour';
 
   mc.innerHTML=`
   <div id="toast-msg" class="toast-msg"></div>
@@ -2104,7 +2104,6 @@ function renderDashboard() {
         <div class="card-hd"><span class="card-title"><i class="ti ti-chart-bar" style="margin-right:5px"></i>Pipeline</span></div>
         <div style="padding:14px 16px;display:grid;gap:8px">
           ${[
-            {k:'nouveau',l:'Nouveau',c:'var(--purple)',bg:'var(--purple-light)'},
             {k:'admin',l:'Saisie admin',c:'var(--accent-deep)',bg:'var(--accent-light)'},
             {k:'verif',l:'Vérification',c:'#0E7490',bg:'#CFFAFE'},
             {k:'production',l:'En production',c:'var(--amber)',bg:'var(--amber-light)'},
@@ -2143,17 +2142,18 @@ function renderDos() {
   const alert=unread.length>0?`<div class="alert-banner no-print" onclick="goTab('notifs')"><i class="ti ti-bell"></i> <strong>${unread.length} notification${unread.length>1?'s':''} non lue${unread.length>1?'s':''}</strong> — Cliquer pour voir <span style="margin-left:auto">→</span></div>`:'';
   const total=dossiers.reduce((s,d)=>s+(d.ht||0),0);
   const enProd=dossiers.filter(d=>d.statut==='production').length;
-  const enAdmin=dossiers.filter(d=>d.statut==='admin').length;
+  const enAdmin=dossiers.filter(d=>d.statut==='admin'||d.statut==='nouveau').length;
+  const enVerif=dossiers.filter(d=>d.statut==='verif').length;
   const clotures=dossiers.filter(d=>['expédié','livré','posé','retiré'].includes(d.statut)).length;
   mc.innerHTML=`
   <div id="toast-msg" class="toast-msg"></div>
   ${alert}
 
   <div class="stats-grid stagger" style="margin-bottom:24px">
-    <div class="stat-card" style="border-top:3px solid var(--purple);cursor:pointer" onclick="setStatFilter('nouveau',document.querySelector('[data-s=nouveau]'))">
-      <div class="stat-label">Nouveaux dossiers</div>
-      <div class="stat-value">${dossiers.filter(d=>d.statut==='nouveau').length}</div>
-      <div class="stat-sub">en attente de traitement</div>
+    <div class="stat-card" style="border-top:3px solid #0891B2;cursor:pointer" onclick="setStatFilter('verif',document.querySelector('[data-s=verif]'))">
+      <div class="stat-label">En vérification</div>
+      <div class="stat-value">${enVerif}</div>
+      <div class="stat-sub">à valider avant production</div>
     </div>
     <div class="stat-card" style="border-top:3px solid var(--amber);cursor:pointer" onclick="setStatFilter('admin',document.querySelector('[data-s=admin]'))">
       <div class="stat-label">En administration</div>
@@ -2274,7 +2274,7 @@ function renderDos() {
         <th>Activité</th><th>Actions</th>
       </tr></thead>
       ${globalSearchQuery ? `<caption style="caption-side:top;text-align:left;padding:8px 14px;font-size:12px;color:var(--accent);font-weight:600;background:var(--accent-light);border-bottom:1px solid var(--border)"><i class="ti ti-search"></i> ${filteredDossiers(dossiers).length} résultat(s) pour « ${globalSearchQuery} » <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="document.getElementById('global-search-input').value='';globalSearch('')">✕ Effacer</button></caption>` : ""}
-      <tbody>${(()=>{let _l=applyDosFilters(dossiers).filter(d=>showArchived||!isArchivable(d));if(currentTab==='admin_saisie')_l=_l.filter(d=>d.statut==='admin');else if(currentTab==='admin_verif')_l=_l.filter(d=>d.statut==='verif');return _l;})().map(d=>{
+      <tbody>${(()=>{let _l=applyDosFilters(dossiers).filter(d=>showArchived||!isArchivable(d));if(currentTab==='admin_saisie')_l=_l.filter(d=>d.statut==='admin'||d.statut==='nouveau');else if(currentTab==='admin_verif')_l=_l.filter(d=>d.statut==='verif');return _l;})().map(d=>{
         const retard = d.dateLivraison && d.dateLivraison < new Date().toISOString().split('T')[0] && !['expédié','livré','posé','retiré'].includes(d.statut);
         return `<tr class="clickable" onclick="openFiche('${d.id}')" style="${retard?'background:rgba(163,45,45,.04)':''}">
           <td style="font-size:11px;color:var(--ink-faint);font-family:'JetBrains Mono',monospace;font-weight:500">${highlight(d.id, globalSearchQuery)}</td>
@@ -6439,7 +6439,7 @@ function dosProgressBar(d) {
   const bar = `<div title="Étape ${step}/8" style="height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:5px;width:100%"><div style="height:100%;width:${pct}%;background:${col};border-radius:2px;transition:width .4s"></div></div>`;
 
   // Complétude — uniquement utile en saisie/vérif
-  if (!['admin','verif','nouveau'].includes(d.statut)) return bar;
+  if (!['admin','verif'].includes(d.statut)) return bar;
   const checks = [
     {k:'Transport',  ok: !!d.transport},
     {k:'Date livr.', ok: !!d.dateLivraison},
