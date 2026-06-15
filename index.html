@@ -1342,6 +1342,7 @@ const ALL_PERMS = [
   {id:'journal',          label:'Voir le journal d\'activité'},
   {id:'suivi',            label:'Vue suivi / statistiques'},
   {id:'reset_dossiers',    label:'Réinitialiser tous les dossiers'},
+  {id:'vue_poseur',        label:'Vue journée poseur'},
 ];
 const ROLE_DEFAULT_PERMS = {
   direction: ['view_all','create','edit','advance','view_prod','adv_prod','atelier_grand','emballage','emballage_grand','metreur','planning','compta','horaires_poseurs','users','journal','suivi'],
@@ -1350,7 +1351,7 @@ const ROLE_DEFAULT_PERMS = {
   commercial:['view_all','create','edit','suivi'],
   compta:    ['view_all','compta','horaires_poseurs','users','journal','suivi'],
   ouvrier:   ['view_prod','adv_prod','atelier_grand'],
-  poseur:    ['horaires_poseurs','suivi'],
+  poseur:    ['vue_poseur'],
   sav:       ['view_all','create','edit','advance','journal'],
   planning:  ['view_all','planning','horaires_poseurs','suivi'],
   metreur:   ['view_all','metreur','edit'],
@@ -1762,6 +1763,7 @@ function buildNav() {
   if(can('suivi')||can('view_all')||can('view_prod')) mainTabs.push({id:'suivi',icon:'ti-chart-bar',label:'Suivi'});
   if(can('planning')) mainTabs.push({id:'planning',icon:'ti-calendar',label:'Planning'});
   if(can('compta')) mainTabs.push({id:'compta',icon:'ti-receipt',label:'Comptabilité'});
+  if(can('vue_poseur')) mainTabs.push({id:'poseur_view',icon:'ti-hammer',label:'Ma journée'});
   if(can('horaires_poseurs')) mainTabs.push({id:'horaires',icon:'ti-clock',label:'Horaires poseurs'});
   if(can('journal')||can('view_all')||can('view_prod')) mainTabs.push({id:'journal',icon:'ti-history',label:'Journal'});
   mainTabs.push({id:'notifs',icon:'ti-bell',label:'Notifications',badge:cnt});
@@ -1819,6 +1821,7 @@ function goTab(tab) {
   else if(tab==='planning') renderPlanning();
   else if(tab==='pilotage') renderPilotage();
   else if(tab==='compta') renderCompta();
+  else if(tab==='poseur_view') loadHoraires().then(()=>renderVuePoseur());
   else if(tab==='horaires') loadHoraires().then(()=>renderHoraires());
   else if(tab==='journal') renderJournal();
   else if(tab==='notifs') renderNotifs();
@@ -5101,6 +5104,132 @@ function exportHoraires() {
   a.href = URL.createObjectURL(blob);
   a.download = `horaires_poseurs_${horSemaine}.csv`;
   a.click();
+}
+
+/* ================================================================
+   VUE POSEUR — Ma journée
+   ================================================================ */
+
+let vuePoseurDateIso = new Date().toISOString().split('T')[0];
+
+function getWeekKeyForDate(d) {
+  const jan4 = new Date(d.getFullYear(), 0, 4);
+  const week = Math.ceil(((d - jan4) / 86400000 + jan4.getDay() + 1) / 7);
+  return `${d.getFullYear()}-W${String(week).padStart(2,'0')}`;
+}
+function getDayKeyFr(d) {
+  return ['dim','lun','mar','mer','jeu','ven','sam'][d.getDay()];
+}
+function vuePoseurNav(delta) {
+  const d = new Date(vuePoseurDateIso + 'T12:00:00');
+  d.setDate(d.getDate() + delta);
+  vuePoseurDateIso = d.toISOString().split('T')[0];
+  renderVuePoseur();
+}
+function setVuePoseurVal(weekKey, jour, champ, val) {
+  if(!horairesData[weekKey]) horairesData[weekKey] = {};
+  if(!horairesData[weekKey][currentUser.id]) horairesData[weekKey][currentUser.id] = {};
+  if(!horairesData[weekKey][currentUser.id][jour]) horairesData[weekKey][currentUser.id][jour] = {};
+  horairesData[weekKey][currentUser.id][jour][champ] = val;
+  saveHoraires();
+  // Recalcul total en live
+  const jr = horairesData[weekKey][currentUser.id][jour];
+  let h = null;
+  if(jr.deb && jr.fin) h = calcHeures(jr.deb, jr.fin);
+  if(h !== null && jr.pauseExtra) h = Math.max(0, h - (parseFloat(jr.pauseExtra)||0)/60);
+  const totalEl = document.getElementById('vp-total');
+  if(totalEl) totalEl.textContent = h !== null ? fmtH(h) : '—';
+  const boxEl = document.getElementById('vp-total-box');
+  if(boxEl) boxEl.style.display = h !== null ? '' : 'none';
+  if(boxEl && h !== null) boxEl.querySelector('span').textContent = 'Total journée : ' + fmtH(h);
+}
+
+function renderVuePoseur() {
+  const mc = document.getElementById('main-content');
+  const dateObj = new Date(vuePoseurDateIso + 'T12:00:00');
+  const isToday_ = vuePoseurDateIso === new Date().toISOString().split('T')[0];
+  const dateLabel = dateObj.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const dayKey = getDayKeyFr(dateObj);
+  const weekKey = getWeekKeyForDate(dateObj);
+
+  const posesJour = dossiers.filter(d => d.needPose && d.poseDate === vuePoseurDateIso);
+
+  if(!horairesData[weekKey]) horairesData[weekKey] = {};
+  if(!horairesData[weekKey][currentUser.id]) horairesData[weekKey][currentUser.id] = {};
+  const jour = horairesData[weekKey][currentUser.id][dayKey] || {};
+
+  let total = null;
+  if(jour.deb && jour.fin) {
+    total = calcHeures(jour.deb, jour.fin);
+    if(total !== null && jour.pauseExtra) total = Math.max(0, total - (parseFloat(jour.pauseExtra)||0)/60);
+  }
+
+  mc.innerHTML = `
+  <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+    <div>
+      <div class="page-header-label">Poseur · ${currentUser.name||''}</div>
+      <h1>Ma journée</h1>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+    <button class="btn btn-ghost btn-sm" onclick="vuePoseurNav(-1)"><i class="ti ti-chevron-left"></i> Jour préc.</button>
+    <div style="font-size:15px;font-weight:600;text-transform:capitalize;padding:0 4px">${dateLabel}${isToday_?' <span style="font-size:11px;background:var(--accent);color:#fff;padding:2px 7px;border-radius:10px;font-weight:600;vertical-align:middle;margin-left:6px">Aujourd\'hui</span>':''}</div>
+    <button class="btn btn-ghost btn-sm" onclick="vuePoseurNav(1)">Jour suiv. <i class="ti ti-chevron-right"></i></button>
+    ${!isToday_?`<button class="btn btn-ghost btn-sm" onclick="vuePoseurDateIso=new Date().toISOString().split('T')[0];renderVuePoseur()"><i class="ti ti-calendar-event"></i> Aujourd'hui</button>`:''}
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-hd">
+      <span class="card-title"><i class="ti ti-map-pin" style="margin-right:6px"></i>Chantiers du jour</span>
+      <span style="font-size:12px;color:var(--ink-faint)">${posesJour.length} pose${posesJour.length>1?'s':''} prévue${posesJour.length>1?'s':''}</span>
+    </div>
+    <div class="card-body" style="padding:0">
+      ${posesJour.length === 0
+        ? `<div style="padding:28px;text-align:center;color:var(--ink-faint)"><i class="ti ti-calendar-off" style="font-size:28px;display:block;margin-bottom:10px"></i>Aucune pose planifiée ce jour</div>`
+        : posesJour.map(d => `
+          <div style="padding:14px 18px;border-bottom:1px solid var(--border)">
+            <div style="font-weight:700;font-size:16px;margin-bottom:2px">${d.client}</div>
+            <div style="font-size:13px;color:var(--ink-soft)">${[d.adresse,d.cp,d.ville].filter(Boolean).join(' · ')}</div>
+            ${d.structure?`<div style="font-size:12px;color:var(--accent);margin-top:5px"><i class="ti ti-box" style="margin-right:4px"></i>${d.structure}</div>`:''}
+            ${d.autres?`<div style="font-size:12px;background:var(--red-light,#FEE2E2);color:var(--red,#DC2626);padding:7px 10px;border-radius:var(--radius-sm);margin-top:7px"><i class="ti ti-alert-triangle" style="margin-right:5px"></i>${d.autres}</div>`:''}
+            ${d.contraintes?`<div style="font-size:12px;background:#FEF3C7;color:#92400E;padding:7px 10px;border-radius:var(--radius-sm);margin-top:5px"><i class="ti ti-info-circle" style="margin-right:5px"></i>${d.contraintes}</div>`:''}
+          </div>`).join('')}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd">
+      <span class="card-title"><i class="ti ti-clock" style="margin-right:6px"></i>Mes heures</span>
+      ${total!==null?`<span id="vp-total" style="font-size:17px;font-weight:700;color:var(--accent)">${fmtH(total)}</span>`:`<span id="vp-total" style="font-size:13px;color:var(--ink-faint)">—</span>`}
+    </div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;max-width:380px">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:7px">Arrivée</div>
+          <input type="text" placeholder="7:30" value="${jour.deb||''}"
+            style="width:100%;padding:12px 8px;font-size:18px;font-family:'JetBrains Mono',monospace;text-align:center;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"
+            oninput="setVuePoseurVal('${weekKey}','${dayKey}','deb',this.value)">
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:7px">Départ</div>
+          <input type="text" placeholder="17:00" value="${jour.fin||''}"
+            style="width:100%;padding:12px 8px;font-size:18px;font-family:'JetBrains Mono',monospace;text-align:center;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"
+            oninput="setVuePoseurVal('${weekKey}','${dayKey}','fin',this.value)">
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:7px">Pause (min)</div>
+          <input type="number" min="0" max="120" placeholder="0" value="${jour.pauseExtra||''}"
+            style="width:100%;padding:12px 8px;font-size:18px;font-family:'JetBrains Mono',monospace;text-align:center;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)"
+            oninput="setVuePoseurVal('${weekKey}','${dayKey}','pauseExtra',this.value)">
+        </div>
+      </div>
+      <div id="vp-total-box" style="${total!==null?'':'display:none'};margin-top:14px;padding:12px 16px;background:var(--accent-light);border-radius:var(--radius)">
+        <span style="font-size:15px;font-weight:600;color:var(--accent-deep)">Total journée : ${fmtH(total)}</span>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:var(--ink-faint)"><i class="ti ti-info-circle" style="margin-right:4px"></i>Total = arrivée → départ, moins la pause saisie en minutes.</div>
+    </div>
+  </div>`;
 }
 
 function renderCompta() {
