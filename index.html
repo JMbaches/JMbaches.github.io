@@ -1490,6 +1490,25 @@ let showArchived       = false; // Afficher les dossiers clôturés archivés
 function ttc(d) { return (d.ht||0) * (1 + (d.tva||20)/100); }
 function fmt(s) { if(!s) return '—'; const d=new Date(s); return isNaN(d)?s:d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'}); }
 function now() { const d=new Date(); return d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); }
+function nowISO() { return new Date().toISOString(); }
+function tempsStatut(d) {
+  if (!d.statutChangedAt) return null;
+  const ms = Date.now() - new Date(d.statutChangedAt).getTime();
+  if (ms < 0) return null;
+  const h = Math.floor(ms / 3600000);
+  const j = Math.floor(h / 24);
+  if (j >= 14) return `${Math.floor(j/7)} sem.`;
+  if (j >= 1)  return `${j}j`;
+  if (h >= 1)  return `${h}h`;
+  return `< 1h`;
+}
+function tempsStatutColor(d) {
+  if (!d.statutChangedAt) return 'var(--ink-faint)';
+  const j = Math.floor((Date.now() - new Date(d.statutChangedAt).getTime()) / 86400000);
+  if (j >= 5) return 'var(--red)';
+  if (j >= 2) return 'var(--amber)';
+  return 'var(--ink-faint)';
+}
 function can(p) { return currentUser && currentUser.perms.includes(p); }
 function canSeeCA() { return currentUser && currentUser.role !== 'ouvrier'; }
 function userName(uid) { const u=users.find(x=>x.id===uid); return u?u.name:uid; }
@@ -2279,6 +2298,7 @@ function renderDos() {
           <td style="font-size:12px;color:${retard?'var(--red)':'var(--ink-faint)'};font-weight:${retard?'600':'400'}">
             ${fmt(d.dateLivraison)||'—'}
             ${retard?'<div style="font-size:10px;font-weight:700;color:var(--red)">EN RETARD</div>':''}
+            ${(()=>{const t=tempsStatut(d);return t?`<div style="font-size:10px;color:${tempsStatutColor(d)};margin-top:2px;display:flex;align-items:center;gap:2px"><i class="ti ti-clock" style="font-size:10px"></i> ${t}</div>`:''})()}
           </td>
           ${canSeeCA()?`<td style="font-size:13px;font-weight:600;font-family:'JetBrains Mono',monospace">${(d.ht||0).toLocaleString('fr-FR',{minimumFractionDigits:2})} €</td>`:''}
           <td><span style="font-size:12px;color:var(--ink-faint)">${d.history.length} action${d.history.length>1?'s':''}</span></td>
@@ -2338,6 +2358,7 @@ function renderFiche() {
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       ${statBadge(d.statut)}
+      ${(()=>{const t=tempsStatut(d);return t?`<span style="font-size:11px;color:${tempsStatutColor(d)};display:flex;align-items:center;gap:3px" title="Dans ce statut depuis ${t}"><i class="ti ti-clock" style="font-size:11px"></i>${t}</span>`:''})()}
       <button class="btn btn-sm ${isUrgent(d)?'btn-danger':'btn-ghost'}" onclick="toggleUrgent()" style="${isUrgent(d)?'':'color:var(--red);border-color:rgba(163,45,45,.3)'}" title="${isUrgent(d)?'Cliquer pour retirer la priorité':'Marquer comme urgent'}">
         <i class="ti ti-alert-triangle"></i> ${isUrgent(d)?'URGENT':'Urgent ?'}
       </button>
@@ -2916,7 +2937,7 @@ function getNextBtnLabel(d) {
 }
 function renvoyerSaisie() {
   const d=dossiers.find(x=>x.id===currentDosId); if(!d||d.statut!=='verif') return;
-  d.statut='admin';
+  d.statut='admin'; d.statutChangedAt=nowISO();
   logHistory(currentDosId,'statut','Renvoyé en saisie admin');
   pushNotif('statut:admin',currentDosId,d);
   saveData(); renderFiche();
@@ -2933,7 +2954,7 @@ function avancerFiche() {
   } else {
     next=getNextStatut(d);
   }
-  const prev=d.statut; d.statut=next;
+  const prev=d.statut; d.statut=next; d.statutChangedAt=nowISO();
   logHistory(currentDosId,'statut',`Statut changé : ${STATUT_LABEL[prev]} → ${STATUT_LABEL[next]}`);
   pushNotif('statut:'+next,d.id,d);
   saveData(); showToast(`Statut mis à jour : ${STATUT_LABEL[next]}`); renderFiche();
@@ -2960,7 +2981,7 @@ function changerStatutDirect(dosId, newStatut, e) {
   const d = dossiers.find(x => x.id === dosId);
   if (!d || d.statut === newStatut) return;
   const prev = d.statut;
-  d.statut = newStatut;
+  d.statut = newStatut; d.statutChangedAt = nowISO();
   logHistory(dosId, 'statut', `Statut changé : ${STATUT_LABEL[prev]} → ${STATUT_LABEL[newStatut]}`);
   pushNotif('statut:' + newStatut, dosId, d);
   saveData();
@@ -2983,7 +3004,7 @@ function avancerDos(id,e) {
   } else {
     next=getNextStatut(d);
   }
-  const prev=d.statut; d.statut=next;
+  const prev=d.statut; d.statut=next; d.statutChangedAt=nowISO();
   logHistory(id,'statut',`Statut changé : ${STATUT_LABEL[prev]} → ${STATUT_LABEL[next]}`);
   pushNotif('statut:'+next,id,d);
   saveData();
@@ -3395,7 +3416,7 @@ function saveDossier() {
     needPose:document.getElementById('f-need-pose')?.checked||false,
     transport:'',remarques:document.getElementById('f-remarques').value,
     autres:document.getElementById('f-autres').value,
-    statut:'admin',createdBy:currentUser.id,
+    statut:'admin',statutChangedAt:nowISO(),createdBy:currentUser.id,
     history:[{id:Date.now(),type:'création',action:'Dossier créé',detail:'',user:currentUser.id,at:now()}],
     pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]
   };
@@ -3419,7 +3440,8 @@ function renderAtelier() {
         <div style="padding:12px 14px">
           <div style="font-size:11px;color:var(--ink-faint);margin-bottom:3px;font-family:'JetBrains Mono',monospace">${d.id}${urg?' <span style="color:var(--red);font-weight:600">URGENT</span>':''}</div>
           <div style="font-size:15px;font-weight:600;margin-bottom:4px">${d.client}</div>
-          <div style="font-size:13px;color:var(--ink-soft);margin-bottom:8px">${d.structure||'—'}</div>
+          <div style="font-size:13px;color:var(--ink-soft);margin-bottom:4px">${d.structure||'—'}</div>
+          ${(()=>{const t=tempsStatut(d);return t?`<div style="font-size:11px;color:${tempsStatutColor(d)};margin-bottom:6px;display:flex;align-items:center;gap:3px"><i class="ti ti-clock" style="font-size:11px"></i> En production depuis ${t}</div>`:''})()}
           ${d.options?`<div style="font-size:12px;color:var(--ink-faint);margin-bottom:8px">${d.options}</div>`:''}
           ${d.remarques?`<div style="font-size:12px;background:var(--bg);padding:7px 10px;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:8px">${d.remarques}</div>`:''}
           ${d.autres?`<div style="font-size:12px;color:var(--red);background:var(--red-light);padding:7px 10px;border-radius:var(--radius);border:1px solid #F09595;margin-bottom:8px">${d.autres}</div>`:''}
@@ -3550,7 +3572,8 @@ function renderAtelierGrand() {
             </div>
           </div>
           <div style="font-size:22px;font-weight:700;color:var(--ink);margin-bottom:2px;letter-spacing:-.3px">${d.client}</div>
-          <div style="font-size:15px;color:var(--ink-soft);font-weight:500">${d.structure||'&#8212;'}</div>
+          <div style="font-size:15px;color:var(--ink-soft);font-weight:500;margin-bottom:4px">${d.structure||'&#8212;'}</div>
+          ${(()=>{const t=tempsStatut(d);return t?`<div style="font-size:12px;color:${tempsStatutColor(d)};display:flex;align-items:center;gap:4px"><i class="ti ti-clock" style="font-size:12px"></i> En production depuis ${t}</div>`:''})()}
         </div>
         <div style="padding:15px 18px">
           ${d.lames||d.pieds||d.alim||d.moteur?`<div class="spec-grid" style="margin-bottom:13px">
