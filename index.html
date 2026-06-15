@@ -1985,7 +1985,7 @@ function renderDashboard() {
   const retard = dossiers.filter(d=>d.dateLivraison&&d.dateLivraison<today&&!isCloture(d.statut));
   const prod = dossiers.filter(d=>d.statut==='production');
   const nouveaux = dossiers.filter(d=>d.statut==='nouveau');
-  const total = dossiers.reduce((s,d)=>s+ttc(d),0);
+  const total = dossiers.reduce((s,d)=>s+(d.ht||0),0);
   const recentActivity = [];
   dossiers.forEach(d=>d.history.forEach(h=>recentActivity.push({...h,dosId:d.id,dosClient:d.client})));
   recentActivity.sort((a,b)=>b.id-a.id);
@@ -2031,7 +2031,7 @@ function renderDashboard() {
     ${canSeeCA()?`<div class="dash-card" onclick="goTab('compta')">
       <div class="dash-card-icon" style="background:var(--accent-light);color:var(--accent)"><i class="ti ti-receipt"></i></div>
       <div class="dash-card-value">${Math.round(total/1000)}k</div>
-      <div class="dash-card-label">CA total TTC</div>
+      <div class="dash-card-label">CA total HT</div>
       <div class="dash-card-sub">${total.toLocaleString('fr-FR',{minimumFractionDigits:0})} €</div>
     </div>`:`<div class="dash-card" onclick="goTab('notifs')">
       <div class="dash-card-icon" style="background:var(--red-light);color:var(--red)"><i class="ti ti-bell"></i></div>
@@ -6809,6 +6809,25 @@ function renderPilotage(){
   D.forEach(d=>{ const c=piloCreatedDate(d), l=piloParseDate(d.dateLivraison); if(c&&l){ const j=Math.round((l-c)/86400000); if(j>=0 && j<400) delais.push(j); } });
   const delaiMoy = delais.length ? Math.round(delais.reduce((a,b)=>a+b,0)/delais.length) : 0;
 
+  // Délai moyen création -> atelier (statut:production)
+  const delaisAdminProd = [];
+  D.forEach(d => {
+    const c = piloCreatedDate(d);
+    const hProd = (d.history||[]).find(h => (h.action||'').toLowerCase().includes('→ en production') || (h.action||'').toLowerCase().includes('production'));
+    if (c && hProd) { const p = parseFrDate(hProd.at); if (p) { const j = Math.round((p-c)/86400000); if(j>=0&&j<400) delaisAdminProd.push(j); } }
+  });
+  const delaiAdminProd = delaisAdminProd.length ? Math.round(delaisAdminProd.reduce((a,b)=>a+b,0)/delaisAdminProd.length) : null;
+
+  // Délai moyen atelier -> livraison
+  const delaisAtelierLiv = [];
+  D.forEach(d => {
+    const l = piloParseDate(d.dateLivraison);
+    const hProd = (d.history||[]).find(h => (h.action||'').toLowerCase().includes('→ en production') || (h.action||'').toLowerCase().includes('production'));
+    if (l && hProd) { const p = parseFrDate(hProd.at); if (p) { const j = Math.round((l-p)/86400000); if(j>=0&&j<400) delaisAtelierLiv.push(j); } }
+  });
+  const delaiAtelierLiv = delaisAtelierLiv.length ? Math.round(delaisAtelierLiv.reduce((a,b)=>a+b,0)/delaisAtelierLiv.length) : null;
+  const delaiTotal = (delaiAdminProd !== null && delaiAtelierLiv !== null) ? delaiAdminProd + delaiAtelierLiv : null;
+
   // Série mensuelle (12 mois) — ancrée sur la date la plus récente présente dans les données
   const wonDates = won.map(piloBizDate).filter(Boolean);
   const anchor = wonDates.length ? new Date(Math.max(...wonDates.map(d=>d.getTime()))) : new Date();
@@ -6880,6 +6899,12 @@ function renderPilotage(){
     ${kpi('Délai moyen', delaiMoy+' j', 'création → livraison')}
     ${kpi('Dossiers actifs', actifs.length, 'en cours de traitement')}
     ${kpi('En retard', retards.length, retards.length?'livraison dépassée':'aucun retard', retards.length?'var(--red)':'var(--green)')}
+  </div>
+  <div class="stats-grid" style="margin-top:-8px">
+    ${kpi('Saisie → Atelier', delaiAdminProd!==null ? delaiAdminProd+' j' : '—', 'délai moyen création → production')}
+    ${kpi('Atelier → Livraison', delaiAtelierLiv!==null ? delaiAtelierLiv+' j' : '—', 'délai moyen production → livraison')}
+    ${kpi('Délai total', delaiTotal!==null ? delaiTotal+' j' : '—', 'saisie + atelier + expédition', delaiTotal!==null&&delaiTotal>30?'var(--red)':delaiTotal!==null&&delaiTotal>20?'var(--amber)':'var(--ink)')}
+    ${kpi('Échantillon délais', delaisAdminProd.length+' dos.', 'dossiers avec historique complet')}
   </div>
 
   <div class="card" style="margin-bottom:14px">
