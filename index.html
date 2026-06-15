@@ -1842,6 +1842,7 @@ function filteredDossiers(liste) {
     (d.ville||'').toLowerCase().includes(q) ||
     (d.cp||'').toLowerCase().includes(q) ||
     (d.ref||'').toLowerCase().includes(q) ||
+    (d.refCommande||'').toLowerCase().includes(q) ||
     (d.revendeur||'').toLowerCase().includes(q) ||
     (d.lames||'').toLowerCase().includes(q)
   );
@@ -1913,7 +1914,7 @@ function globalSearch(val) {
     return `<div class="gs-item" onclick="globalSearchGoTo('${d.id}')">
       <div class="gs-item-dot" style="background:${dot}"></div>
       <div class="gs-item-main">
-        <div class="gs-item-client">${highlight(d.client, globalSearchQuery)}</div>
+        <div class="gs-item-client">${highlight(d.client, globalSearchQuery)}${d.refCommande?` <span style="font-size:10px;font-family:'JetBrains Mono',monospace;background:var(--accent-light);color:var(--accent-deep);padding:1px 5px;border-radius:3px;margin-left:4px">${highlight(d.refCommande,globalSearchQuery)}</span>`:''}</div>
         <div class="gs-item-sub">${highlight(d.id, globalSearchQuery)} · ${highlight(d.structure||'—', globalSearchQuery)} · ${STATUT_LABEL[d.statut]||d.statut}</div>
       </div>
     </div>`;
@@ -2271,6 +2272,7 @@ function renderDos() {
           <td>
             <div style="display:flex;align-items:center;gap:6px">
               <span style="font-weight:600;font-size:13px">${highlight(d.client, globalSearchQuery)}</span>
+              ${d.refCommande?`<span style="font-size:10px;font-family:'JetBrains Mono',monospace;background:var(--accent-light);color:var(--accent-deep);padding:1px 6px;border-radius:3px">${highlight(d.refCommande, globalSearchQuery)}</span>`:''}
               ${(()=>{const w=users.filter(u=>u.id!==currentUser.id&&u.presenceDos===d.id);return w.length?`<span title="${w.map(u=>u.prenom||u.name).join(', ')} sur ce dossier" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:1px 6px;border-radius:3px;background:#FEF3C7;color:#92400E"><i class="ti ti-eye" style="font-size:10px"></i>${w.map(u=>(u.prenom||u.name||'?')[0]).join('')}</span>`:''})()}
             </div>
             <div style="font-size:11px;color:var(--ink-faint);margin-top:1px;display:flex;align-items:center;gap:4px">
@@ -2357,7 +2359,18 @@ function renderFiche() {
       <button class="btn btn-ghost btn-sm" onclick="copyDosId('${d.id}',this)" title="Copier le N°" style="padding:2px 6px;min-height:0"><i class="ti ti-copy" style="font-size:11px"></i></button>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
-      ${statBadge(d.statut)}
+      ${can('advance')&&!isDossierCloture(d)?`
+      <div style="position:relative;display:inline-block">
+        <button class="badge-btn-statut" onclick="toggleStatutMenu('${d.id}',event)" style="cursor:pointer;border:none;background:none;padding:0">
+          ${statBadge(d.statut)}<i class="ti ti-chevron-down" style="font-size:9px;margin-left:3px;opacity:.6;vertical-align:middle"></i>
+        </button>
+        <div id="statut-menu-${d.id}" style="display:none;position:absolute;top:100%;left:0;z-index:500;background:var(--paper);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(22,24,29,.12);min-width:170px;padding:4px">
+          ${Object.entries(STATUT_LABEL).map(([k,v])=>`
+            <button onclick="changerStatutDirect('${d.id}','${k}',event);renderFiche()" style="display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;background:${d.statut===k?'var(--accent-light)':'none'};border:none;border-radius:4px;font-size:12px;cursor:pointer;text-align:left;color:var(--ink);font-weight:${d.statut===k?'600':'400'}">
+              ${d.statut===k?'<i class="ti ti-check" style="font-size:11px;color:var(--accent)"></i>':'<span style="width:11px"></span>'}${v}
+            </button>`).join('')}
+        </div>
+      </div>` : statBadge(d.statut)}
       ${(()=>{const t=tempsStatut(d);return t?`<span style="font-size:11px;color:${tempsStatutColor(d)};display:flex;align-items:center;gap:3px" title="Dans ce statut depuis ${t}"><i class="ti ti-clock" style="font-size:11px"></i>${t}</span>`:''})()}
       <button class="btn btn-sm ${isUrgent(d)?'btn-danger':'btn-ghost'}" onclick="toggleUrgent()" style="${isUrgent(d)?'':'color:var(--red);border-color:rgba(163,45,45,.3)'}" title="${isUrgent(d)?'Cliquer pour retirer la priorité':'Marquer comme urgent'}">
         <i class="ti ti-alert-triangle"></i> ${isUrgent(d)?'URGENT':'Urgent ?'}
@@ -2496,7 +2509,16 @@ body { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #16181D; back
   <div class="field"><label>Email</label><div class="val">${d.email||'—'}</div></div>
   <div class="field"><label>Contact sur place</label><div class="val">${d.contact||'—'}</div></div>
   <div class="field"><label>Référence devis</label><div class="val accent">${d.ref||'—'}</div></div>
-  <div class="field"><label>Statut devis</label><div class="val">${DEVIS_LABEL[d.devisStatut]||d.devisStatut||'—'}</div></div>
+  <div class="field"><label>Référence commande</label>${can('edit')?`<input value="${d.refCommande||''}" placeholder="ex: 114308-01/1" onchange="setDosField('refCommande',this.value)" style="font-weight:600;color:var(--accent-deep)">` : `<div class="val accent">${d.refCommande||'—'}</div>`}</div>
+  <div class="field"><label>Statut paiement</label>
+    ${can('edit')?`<select onchange="changerDevisStatut('${d.id}',this.value)" style="font-weight:500">
+      <option value="en_attente" ${d.devisStatut==='en_attente'?'selected':''}>En attente</option>
+      <option value="accepte"    ${d.devisStatut==='accepte'   ?'selected':''}>Accepté</option>
+      <option value="facture"    ${d.devisStatut==='facture'   ?'selected':''}>Facturé</option>
+      <option value="paye"       ${d.devisStatut==='paye'      ?'selected':''}>✓ Payé</option>
+      <option value="refuse"     ${d.devisStatut==='refuse'    ?'selected':''}>Refusé</option>
+    </select>` : `<div class="val">${DEVIS_LABEL[d.devisStatut]||d.devisStatut||'—'}</div>`}
+  </div>
 </div>
 
 <div class="section-title">Adresse du chantier</div>
@@ -2935,6 +2957,20 @@ function getNextBtnLabel(d) {
   if (d.statut === 'livré'   && d.transport === 'liv_pose')  return '→ Marquer posé';
   return STATUT_NEXT_BTN[d.statut] || '—';
 }
+function changerDevisStatut(dosId, val) {
+  const d = dossiers.find(x => x.id === dosId); if (!d) return;
+  const prev = d.devisStatut;
+  d.devisStatut = val;
+  logHistory(dosId, 'paiement', `Statut paiement : ${DEVIS_LABEL[prev]||prev} → ${DEVIS_LABEL[val]||val}`);
+  if (val === 'paye') {
+    pushNotif('statut:livré', dosId, d);
+    showToast(`✓ Dossier marqué comme payé — compta et direction notifiés`);
+  } else {
+    showToast(`Statut paiement mis à jour : ${DEVIS_LABEL[val]||val}`);
+  }
+  saveData();
+}
+
 function renvoyerSaisie() {
   const d=dossiers.find(x=>x.id===currentDosId); if(!d||d.statut!=='verif') return;
   d.statut='admin'; d.statutChangedAt=nowISO();

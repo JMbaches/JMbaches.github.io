@@ -118,7 +118,7 @@ function parseMegaoText(text) {
   const ht  = htM ? parseFloat(htM[1].replace(/\s/g, '').replace(',', '.')) : 0;
 
   return {
-    ref, client, contact, tel, email, adresse, cp, ville,
+    ref, refCommande: ref, client, contact, tel, email, adresse, cp, ville,
     structure, lames, pieds: '', alim, moteur,
     options: '', remarques: '', autres: '',
     largeur, longueur, revendeur,
@@ -158,7 +158,7 @@ async function upsertDossier(data) {
     const prev   = doc.data();
     const fields = ['client','tel','email','contact','adresse','cp','ville',
                     'structure','lames','pieds','alim','moteur','options','remarques','autres','transport',
-                    'largeur','longueur','revendeur'];
+                    'largeur','longueur','revendeur','refCommande'];
     const update = {};
     for (const f of fields) {
       if (data[f]) update[f] = data[f];
@@ -189,7 +189,8 @@ async function upsertDossier(data) {
       moteur:      data.moteur     || '',
       ht:          data.ht         || 0,
       tva:         20,
-      ref:         data.ref,
+      ref:          data.ref,
+      refCommande:  data.ref,
       devisStatut: 'accepte',
       dateFrom:    data.dateFrom   || today,
       dateTo:      '',
