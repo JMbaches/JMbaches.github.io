@@ -1762,8 +1762,7 @@ function buildNav() {
   }
 
   if(can('suivi')||can('view_all')||can('view_prod')) mainTabs.push({id:'suivi',icon:'ti-chart-bar',label:'Suivi'});
-  if(can('planning')) mainTabs.push({id:'planning',icon:'ti-calendar',label:'Planning'});
-  if(can('planning')) mainTabs.push({id:'planning_avance',icon:'ti-calendar-stats',label:'Planning IA'});
+  if(can('planning')) mainTabs.push({id:'planning_avance',icon:'ti-calendar-stats',label:'Planning'});
   if(can('compta')) mainTabs.push({id:'compta',icon:'ti-receipt',label:'Comptabilité'});
   if(can('vue_poseur') && currentUser.role === 'poseur') mainTabs.push({id:'poseur_view',icon:'ti-hammer',label:'Ma journée'});
   if(can('vue_poseurs_all')) mainTabs.push({id:'poseurs_direction',icon:'ti-users',label:'Poseurs'});
