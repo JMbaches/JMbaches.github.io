@@ -6048,8 +6048,15 @@ document.addEventListener('keydown', function(e) {
     if (typeof currentDosId !== 'undefined' && currentDosId && typeof saveFiche === 'function') { saveFiche(); }
     else { if (window.saveDataNow) saveDataNow(); else if (window.saveData) saveData(); showToast('Données sauvegardées'); }
   }
-  // Ctrl+K / ⌘K : focus recherche
+  // Ctrl+K / ⌘K ou / : focus recherche
+  const activeTag = document.activeElement?.tagName;
+  const inInput = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    const si = document.getElementById('global-search-input');
+    if (si) { si.focus(); si.select(); }
+  }
+  if (e.key === '/' && !inInput && !e.ctrlKey && !e.metaKey) {
     e.preventDefault();
     const si = document.getElementById('global-search-input');
     if (si) { si.focus(); si.select(); }
