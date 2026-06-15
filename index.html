@@ -4676,14 +4676,22 @@ function _envoyerDossiersPlanning(frame) {
   const bar = document.getElementById('planning-sync-bar');
   if (bar) {
     const t = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
-    bar.innerHTML = `<i class="ti ti-circle-check" style="color:var(--green)"></i> ${liste.length} dossier${liste.length>1?'s':''} synchronisé${liste.length>1?'s':''} · dernière sync ${t}
-      <button onclick="syncPlanningMaintenant()" style="margin-left:12px;padding:3px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--paper);font-size:12px;cursor:pointer"><i class="ti ti-refresh"></i> Synchroniser</button>`;
+    bar.innerHTML = `<i class="ti ti-circle-check" style="color:var(--green)"></i> ${liste.length} dossier${liste.length>1?'s':''} envoyé${liste.length>1?'s':''} · ${t}
+      <button onclick="syncPlanningMaintenant()" style="margin-left:12px;padding:3px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--paper);font-size:12px;cursor:pointer"><i class="ti ti-upload"></i> Envoyer dossiers</button>
+      <button onclick="recupererPlanningIA()" style="margin-left:6px;padding:3px 10px;border:1px solid var(--accent);border-radius:var(--radius-sm);background:var(--accent-light);color:var(--accent-deep);font-size:12px;cursor:pointer;font-weight:600"><i class="ti ti-download"></i> Récupérer le planning</button>`;
   }
 }
 
 function syncPlanningMaintenant() {
   const frame = document.getElementById('planning-ia-frame');
   if (frame) _envoyerDossiersPlanning(frame);
+}
+
+function recupererPlanningIA() {
+  const frame = document.getElementById('planning-ia-frame');
+  if (!frame || !frame.contentWindow) { showToast('⚠ Ouvrez d\'abord l\'onglet Planning IA'); return; }
+  frame.contentWindow.postMessage({ type: 'JMBACH_REQUEST_UPDATE' }, '*');
+  showToast('⟳ Récupération du planning en cours…');
 }
 
 function renderPlanningAvance() {
@@ -4715,8 +4723,8 @@ function _planningAvanceAutoSync() {
 
 function renderPlanning() {
   const mc = document.getElementById('main-content');
-  const aPlaner = dossiers.filter(d => d.needPose && !d.poseDate);
-  const planifies = dossiers.filter(d => d.needPose && d.poseDate);
+  const aPlaner = dossiers.filter(d => (d.needPose || d.transport === 'liv_pose') && !d.poseDate);
+  const planifies = dossiers.filter(d => (d.needPose || d.transport === 'liv_pose') && d.poseDate);
 
   mc.innerHTML = `
   <div class="edt-toolbar">
@@ -4773,7 +4781,7 @@ function renderEdtWeek(container) {
 
   const cols = days.map((d,i) => {
     const iso = toISODate(d);
-    const dosJour = dossiers.filter(x => x.needPose && x.poseDate === iso);
+    const dosJour = dossiers.filter(x => (x.needPose || x.transport === 'liv_pose') && x.poseDate === iso);
     const todayCls = isToday(d) ? ' today' : '';
     return `
       <div class="edt-head-cell${todayCls}">
@@ -4785,7 +4793,7 @@ function renderEdtWeek(container) {
 
   const cells = days.map(d => {
     const iso = toISODate(d);
-    const dosJour = dossiers.filter(x => x.needPose && x.poseDate === iso);
+    const dosJour = dossiers.filter(x => (x.needPose || x.transport === 'liv_pose') && x.poseDate === iso);
     const todayCls = isToday(d) ? ' today' : '';
     return `
       <div class="edt-col${todayCls}" id="edtcol-${iso}"

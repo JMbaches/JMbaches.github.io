@@ -1229,7 +1229,16 @@ function App() {
   // ── Pont postMessage ↔ app principale JM Bâches (Firebase) ──────────────
   useEffect(() => {
     const handler = (e) => {
-      if (!e.data || e.data.type !== 'JMBACH_INIT') return;
+      if (!e.data) return;
+      // Demande explicite d'export depuis l'app principale
+      if (e.data.type === 'JMBACH_REQUEST_UPDATE') {
+        const toSend = _prevCh.current
+          .filter(c => c.externalId)
+          .map(c => ({ externalId: c.externalId, scheduledDate: c.scheduledDate || '', scheduledBinome: c.scheduledBinome || '', status: c.status }));
+        window.parent.postMessage({ type: 'JMBACH_UPDATE', updates: toSend }, '*');
+        return;
+      }
+      if (e.data.type !== 'JMBACH_INIT') return;
       // Poseurs Firebase comme binômes — mise à jour état + localStorage
       if (e.data.binomes && e.data.binomes.length > 0) {
         setBinomes(e.data.binomes);
