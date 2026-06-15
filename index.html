@@ -2293,6 +2293,7 @@ function renderFiche() {
   <div class="fiche-layout">
     <div id="page-body">${renderPage(d,p)}</div>
     <div class="no-print">
+      ${renderDocumentsSection(d)}
       <div class="card" style="margin-bottom:12px">
         <div class="card-hd"><span class="card-title"><i class="ti ti-history" style="margin-right:5px"></i>Historique</span><span style="font-size:11px;color:var(--ink-faint)">${d.history.length} entrée${d.history.length>1?'s':''}</span></div>
         <div id="hist-body" style="padding:12px">
@@ -2643,6 +2644,98 @@ function addVerifRow() {
   if(!p.rows) p.rows=[...VERIF_ROWS];
   p.rows.push(name); saveData(); renderFiche();
 }
+// ---- DOCUMENTS DOSSIER (Firebase Storage) ----
+function fileIcon(type) {
+  if(!type) return 'ti-file';
+  if(type.startsWith('image/')) return 'ti-photo';
+  if(type==='application/pdf') return 'ti-file-type-pdf';
+  if(type.includes('word')||type.includes('document')) return 'ti-file-type-doc';
+  if(type.includes('excel')||type.includes('sheet')) return 'ti-file-type-xls';
+  return 'ti-file';
+}
+function fileSize(b) {
+  if(!b) return '';
+  if(b<1024) return b+' o';
+  if(b<1048576) return Math.round(b/1024)+' Ko';
+  return (b/1048576).toFixed(1)+' Mo';
+}
+function renderDocumentsSection(d) {
+  const docs=d.documents||[];
+  const editable=can('edit');
+  return `<div class="card" style="margin-bottom:12px">
+    <div class="card-hd">
+      <span class="card-title"><i class="ti ti-folder-open" style="margin-right:5px"></i>Documents</span>
+      <span style="font-size:11px;color:var(--ink-faint)">${docs.length} fichier${docs.length!==1?'s':''}</span>
+    </div>
+    <div style="padding:12px">
+      ${editable?`<label style="display:flex;align-items:center;justify-content:center;gap:10px;padding:18px;border:2px dashed var(--border);border-radius:var(--radius);cursor:pointer;color:var(--ink-faint);font-size:13px;margin-bottom:12px;transition:all .15s"
+        ondragover="event.preventDefault();this.style.borderColor='var(--accent)';this.style.background='var(--accent-light)'"
+        ondragleave="this.style.borderColor='';this.style.background=''"
+        ondrop="event.preventDefault();this.style.borderColor='';this.style.background='';handleDocDrop(event,'${d.id}')">
+        <i class="ti ti-cloud-upload" style="font-size:20px"></i>
+        <span>Glisser des fichiers ici ou <u>cliquer pour parcourir</u></span>
+        <input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style="display:none" onchange="handleDocInput(this,'${d.id}')">
+      </label>
+      <div id="doc-upload-progress" style="display:none;padding:8px 12px;background:var(--accent-light);border-radius:var(--radius);font-size:12px;color:var(--accent-deep);margin-bottom:12px;display:flex;align-items:center;gap:8px">
+        <i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Upload en cours…
+      </div>`:''}
+      ${docs.length===0?`<div style="text-align:center;color:var(--ink-faint);font-size:13px;padding:8px 0">Aucun document</div>`:`
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px">
+        ${docs.map(doc=>{
+          const isImg=doc.type&&doc.type.startsWith('image/');
+          return `<div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column">
+            <a href="${doc.url}" target="_blank" style="display:flex;align-items:center;justify-content:center;height:90px;background:var(--bg);overflow:hidden;text-decoration:none;color:var(--ink-faint)">
+              ${isImg?`<img src="${doc.url}" style="width:100%;height:100%;object-fit:cover" loading="lazy">`:`<i class="ti ${fileIcon(doc.type)}" style="font-size:34px"></i>`}
+            </a>
+            <div style="padding:6px 8px;display:flex;flex-direction:column;gap:3px">
+              <div style="font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${doc.name}">${doc.name}</div>
+              <div style="font-size:10px;color:var(--ink-faint)">${fileSize(doc.size)} · ${(doc.uploadedAt||'').split(' ')[0]||''}</div>
+              <div style="display:flex;gap:4px;margin-top:4px">
+                <a href="${doc.url}" target="_blank" class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;padding:3px" title="Ouvrir"><i class="ti ti-external-link"></i></a>
+                ${editable?`<button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;padding:3px;color:var(--red)" onclick="deleteDossierDoc('${d.id}','${doc.id}')" title="Supprimer"><i class="ti ti-trash"></i></button>`:''}
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>`}
+    </div>
+  </div>`;
+}
+async function handleDocDrop(e,dosId) { await uploadDossierFiles(dosId,[...e.dataTransfer.files]); }
+async function handleDocInput(input,dosId) { await uploadDossierFiles(dosId,[...input.files]); input.value=''; }
+async function uploadDossierFiles(dosId,files) {
+  if(!window._storage){showToast('⚠ Storage non configuré');return;}
+  if(!files.length) return;
+  const prog=document.getElementById('doc-upload-progress');
+  if(prog) prog.style.display='flex';
+  const d=dossiers.find(x=>x.id===dosId); if(!d) return;
+  if(!d.documents) d.documents=[];
+  for(const file of files) {
+    const safe=file.name.replace(/[^a-zA-Z0-9.\-_]/g,'_');
+    const path=`dossiers/${dosId}/${Date.now()}_${safe}`;
+    try {
+      const snap=await window._storage.ref(path).put(file);
+      const url=await snap.ref.getDownloadURL();
+      d.documents.push({id:Date.now()+'_'+Math.random().toString(36).slice(2),name:file.name,url,path,type:file.type,size:file.size,uploadedBy:currentUser.id,uploadedAt:now()});
+      logHistory(dosId,'document','Document ajouté',file.name);
+    } catch(e){ console.error(e); showToast('Erreur upload : '+file.name); }
+  }
+  await saveData();
+  if(prog) prog.style.display='none';
+  renderFiche();
+}
+async function deleteDossierDoc(dosId,docId) {
+  if(!confirm('Supprimer ce document ?')) return;
+  const d=dossiers.find(x=>x.id===dosId); if(!d||!d.documents) return;
+  const doc=d.documents.find(x=>x.id===docId);
+  if(doc?.path && window._storage) {
+    try { await window._storage.ref(doc.path).delete(); } catch(e){ console.warn(e); }
+  }
+  d.documents=d.documents.filter(x=>x.id!==docId);
+  logHistory(dosId,'document','Document supprimé',doc?.name||'');
+  await saveData(); renderFiche();
+}
+
 function addComment() {
   const txt=document.getElementById('comment-input')?.value?.trim(); if(!txt) return;
   logHistory(currentDosId,'commentaire','Note ajoutée',txt);
@@ -6561,6 +6654,7 @@ function piloExportCSV(){
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-check-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script src="firebase-layer-v3.js"></script>
 <script>
 /* Debounce saveData — regroupe les écritures Firestore rapprochées */

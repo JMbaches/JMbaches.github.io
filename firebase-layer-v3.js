@@ -25,6 +25,7 @@ const _auth = firebase.auth();
 const _db   = firebase.firestore();
 window._db  = _db;
 window._FieldValue = firebase.firestore.FieldValue;
+try { window._storage = firebase.storage(); } catch(e) { console.warn('Firebase Storage non disponible'); }
 
 let _firestoreReady = false;
 let _unsubUsers, _unsubDossiers, _unsubNotifs, _unsubMessages;
