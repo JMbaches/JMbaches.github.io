@@ -1762,6 +1762,7 @@ function buildNav() {
 
   if(can('suivi')||can('view_all')||can('view_prod')) mainTabs.push({id:'suivi',icon:'ti-chart-bar',label:'Suivi'});
   if(can('planning')) mainTabs.push({id:'planning',icon:'ti-calendar',label:'Planning'});
+  if(can('planning')) mainTabs.push({id:'planning_avance',icon:'ti-calendar-stats',label:'Planning IA'});
   if(can('compta')) mainTabs.push({id:'compta',icon:'ti-receipt',label:'Comptabilité'});
   if(can('vue_poseur')) mainTabs.push({id:'poseur_view',icon:'ti-hammer',label:'Ma journée'});
   if(can('horaires_poseurs')) mainTabs.push({id:'horaires',icon:'ti-clock',label:'Horaires poseurs'});
@@ -1808,6 +1809,7 @@ function goTab(tab) {
   const gsi=document.getElementById('global-search-input');
   if(gsi) gsi.value=globalSearchQuery;
   const mc=document.getElementById('main-content');
+  mc.style.padding=''; // reset si on venait du Planning IA (iframe plein écran)
   mc.innerHTML='';
   if(tab==='dashboard') renderDashboard();
   else if(tab==='dos'||tab==='admin_saisie'||tab==='admin_verif') renderDos();
@@ -1819,6 +1821,7 @@ function goTab(tab) {
   else if(tab==='emballage_grand') renderEmballageGrand();
   else if(tab==='suivi') renderSuivi();
   else if(tab==='planning') renderPlanning();
+  else if(tab==='planning_avance') renderPlanningAvance();
   else if(tab==='pilotage') renderPilotage();
   else if(tab==='compta') renderCompta();
   else if(tab==='poseur_view') loadHoraires().then(()=>renderVuePoseur());
@@ -4601,6 +4604,79 @@ function edtCardHTML(d, opts={}) {
       <button class="btn btn-ghost btn-xs" onclick="openFiche('${d.id}')" title="Ouvrir le dossier"><i class="ti ti-external-link"></i></button>
     </div>
   </div>`;
+}
+
+/* ================================================================
+   PLANNING IA — iframe vers planning.html + pont postMessage
+   ================================================================ */
+
+// Écoute en permanence les mises à jour de planning.html → Firebase
+window.addEventListener('message', (e) => {
+  if (!e.data) return;
+  if (e.data.type === 'JMBACH_READY') {
+    // L'iframe vient de charger et signale qu'elle est prête : on envoie les dossiers
+    const frame = document.getElementById('planning-ia-frame');
+    if (frame) _envoyerDossiersPlanning(frame);
+  }
+  if (e.data.type === 'JMBACH_UPDATE') {
+    const updates = e.data.updates || [];
+    let changed = false;
+    updates.forEach(upd => {
+      const d = dossiers.find(x => x.id === upd.externalId);
+      if (!d) return;
+      // Sync poseDate ← scheduledDate de l'app planning
+      const newDate = upd.scheduledDate || '';
+      if (d.poseDate !== newDate) { d.poseDate = newDate; changed = true; }
+    });
+    if (changed) { saveData(); showToast('✓ Planning synchronisé avec Firebase'); }
+  }
+});
+
+function _envoyerDossiersPlanning(frame) {
+  const chantiers = dossiers
+    .filter(d => d.transport === 'liv_pose' || d.needPose)
+    .map(d => ({
+      id:              d.id,          // utilisé comme id interne dans planning.html
+      externalId:      d.id,          // clé de liaison retour → Firebase
+      clientName:      d.client    || '',
+      clientPhone:     d.tel       || '',
+      clientEmail:     d.email     || '',
+      address:         d.adresse   || '',
+      city:            d.ville     || '',
+      postalCode:      d.cp        || '',
+      type:            d.structure || '',
+      dimensions:      [d.largeur && `L:${d.largeur}m`, d.longueur && `L:${d.longueur}m`].filter(Boolean).join(' · '),
+      constraints:     [d.contraintes, d.autres].filter(Boolean).join(' — '),
+      notes:           d.remarques || '',
+      estimatedDuration: 2.5,
+      materials:       [],
+      weatherSensitive: true,
+      status:          d.poseDate ? 'planifie' : 'a_planifier',
+      scheduledDate:   d.poseDate  || '',
+      scheduledBinome: '',
+      fixedTime:       '',
+      notBefore:       d.dateFrom  || '',
+      notAfter:        d.dateLivraison || '',
+      linkId: '', linkRole: 0, linkGap: 0, archived: false,
+    }));
+  frame.contentWindow.postMessage({ type: 'JMBACH_INIT', dossiers: chantiers }, '*');
+}
+
+function renderPlanningAvance() {
+  const mc = document.getElementById('main-content');
+  mc.style.padding = '0';
+  mc.innerHTML = `<iframe id="planning-ia-frame" src="planning.html"
+    style="width:100%;height:calc(100vh - 112px);border:none;display:block"
+    allow="clipboard-write; geolocation"></iframe>`;
+
+  const frame = document.getElementById('planning-ia-frame');
+  // L'événement JMBACH_READY (postMessage) déclenchera l'envoi des dossiers
+  // Fallback si le READY n'arrive pas (cache, rechargement partiel)
+  frame.addEventListener('load', () => {
+    setTimeout(() => {
+      if (frame.contentWindow) _envoyerDossiersPlanning(frame);
+    }, 800);
+  });
 }
 
 function renderPlanning() {
