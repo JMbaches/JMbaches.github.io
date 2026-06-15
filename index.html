@@ -2717,11 +2717,12 @@ function renderPorteDoc(){
   if(foldEl) foldEl.innerHTML=folders.map(f=>{
     const cnt=docs.filter(doc=>(doc.folder||'Général')===f).length;
     const active=f===_pdFolder;
-    return `<div class="pd-folder-item${active?' pd-folder-active':''}" onclick="selectDocFolder(${JSON.stringify(f)})">
+    const fEsc=f.replace(/"/g,'&quot;');
+    return `<div class="pd-folder-item${active?' pd-folder-active':''}" data-folder="${fEsc}" onclick="selectDocFolder(this.dataset.folder)">
       <i class="ti ${f==='Général'?'ti-inbox':'ti-folder'}" style="font-size:14px;flex-shrink:0"></i>
       <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f}</span>
       ${cnt>0?`<span style="font-size:10px;color:var(--ink-faint)">${cnt}</span>`:''}
-      ${f!=='Général'&&editable?`<button class="btn btn-ghost btn-sm" style="padding:0 3px;color:var(--red);flex-shrink:0" onclick="event.stopPropagation();deleteDocFolder(${JSON.stringify(f)})" title="Supprimer"><i class="ti ti-x" style="font-size:11px"></i></button>`:''}
+      ${f!=='Général'&&editable?`<button class="btn btn-ghost btn-sm" style="padding:0 3px;color:var(--red);flex-shrink:0" data-folder="${fEsc}" onclick="event.stopPropagation();deleteDocFolder(this.dataset.folder)" title="Supprimer"><i class="ti ti-x" style="font-size:11px"></i></button>`:''}
     </div>`;
   }).join('');
 
