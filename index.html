@@ -5044,7 +5044,8 @@ function renderNotifs() {
         <div class="notif-sub">${n.body}</div>
         <div class="notif-time"><i class="ti ti-clock" style="font-size:10px;vertical-align:-1px"></i> ${n.at}${n.dosId?' · '+n.dosId:''}</div>
         <div style="display:flex;gap:6px;margin-top:6px">
-          ${n.dosId?`<button class="btn btn-primary btn-xs" onclick="markRead(${n.id});openFiche('${n.dosId}')"><i class="ti ti-external-link"></i> Voir le dossier</button>`:''}
+          ${n.trigger==='fiche_technique'&&n.dosId?`<button class="btn btn-primary btn-xs" onclick="markRead(${n.id});voirFicheTechnique('${n.dosId}')"><i class="ti ti-file-type-pdf"></i> Ouvrir la fiche PDF</button>`:''}
+          ${n.trigger!=='fiche_technique'&&n.dosId?`<button class="btn btn-primary btn-xs" onclick="markRead(${n.id});openFiche('${n.dosId}')"><i class="ti ti-external-link"></i> Voir le dossier</button>`:''}
           ${!n.read[currentUser.id]?`<button class="btn btn-ghost btn-xs" onclick="markRead(${n.id})"><i class="ti ti-check"></i> Marquer lue</button>`:''}
           <button class="btn btn-ghost btn-xs" style="color:var(--red)" onclick="deleteNotif(${n.id})"><i class="ti ti-trash"></i></button>
         </div>
