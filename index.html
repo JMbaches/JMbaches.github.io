@@ -175,6 +175,14 @@ button { cursor: pointer; border: none; background: transparent; }
 .dash-card-sub { font-size: 11px; color: var(--ink-faint); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
 .dash-section { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; }
 .dash-section-full { margin-bottom: 24px; }
+.pipeline-bar { display: grid; grid-template-columns: repeat(6,1fr); gap: 0; margin-bottom: 24px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: var(--paper); }
+.pipeline-stage { padding: 14px 12px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; border-right: 1px solid var(--border); transition: background .14s; position: relative; }
+.pipeline-stage:last-child { border-right: none; }
+.pipeline-stage:hover { background: var(--bg); }
+.pipeline-stage-count { font-size: 22px; font-weight: 700; line-height: 1; letter-spacing: -.03em; }
+.pipeline-stage-label { font-size: 11px; color: var(--ink-soft); text-align: center; white-space: nowrap; }
+.pipeline-stage-dot { width: 8px; height: 8px; border-radius: 50%; margin-bottom: 2px; }
+.pipeline-stage-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; }
 .activity-item { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); align-items: flex-start; }
 .activity-item:last-child { border-bottom: none; }
 .activity-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
@@ -415,6 +423,9 @@ tbody tr { transition: background .12s var(--ease); }
   .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
   .fiche-grid.c3 { grid-template-columns: 1fr 1fr; }
   .pilo-2col { grid-template-columns: 1fr !important; }
+  .pipeline-bar { grid-template-columns: repeat(3,1fr); }
+  .pipeline-stage:nth-child(3) { border-right: none; }
+  .pipeline-stage:nth-child(3) ~ .pipeline-stage { border-top: 1px solid var(--border); }
 }
 @media (max-width: 520px) {
   .stats-grid { grid-template-columns: 1fr 1fr; }
@@ -2054,6 +2065,29 @@ function renderDashboard() {
       <div class="dash-card-sub">non lue${unread.length>1?'s':''}</div>
     </div>`}
   </div>
+
+  ${(()=>{
+    const stages=[
+      {k:'admin',     label:'Saisie admin', color:'#D97706'},
+      {k:'verif',     label:'Vérification', color:'#0891B2'},
+      {k:'production',label:'Production',   color:'#2563EB'},
+      {k:'emballage', label:'Emballage',    color:'#D97706'},
+      {k:'stocké',    label:'Stocké',       color:'#4338CA'},
+      {k:'expédié',   label:'Expédié',      color:'#059669'},
+    ];
+    const actifs=dossiers.filter(d=>!isCloture(d.statut));
+    const total=actifs.length||1;
+    return `<div class="pipeline-bar">${stages.map(s=>{
+      const n=actifs.filter(d=>d.statut===s.k).length;
+      const pct=Math.round(n/total*100);
+      return `<div class="pipeline-stage" onclick="goTab('suivi')" title="${n} dossier${n>1?'s':''} en ${s.label}">
+        <div class="pipeline-stage-dot" style="background:${s.color}"></div>
+        <div class="pipeline-stage-count" style="color:${n>0?s.color:'var(--ink-faint)'}">${n}</div>
+        <div class="pipeline-stage-label">${s.label}</div>
+        <div class="pipeline-stage-bar" style="background:${s.color};opacity:${n>0?0.18:0}"></div>
+      </div>`;
+    }).join('')}</div>`;
+  })()}
 
   <div class="dash-section">
     <div class="card">
