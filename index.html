@@ -1634,6 +1634,7 @@ function connectUser(u) {
   buildNav();
   checkRetards();
   checkLivraisonsProches();
+  loadBinomesConfig();
   goTab('dashboard');
   initChat();
 }
@@ -4715,14 +4716,29 @@ function _envoyerDossiersPlanning(frame) {
     notAfter:         d.dateLivraison|| '',
     linkId: '', linkRole: 0, linkGap: 0, archived: false,
   }));
-  const binomes = getPoseurs().map(u => ({
-    id:      u.id,
-    name:    u.name || u.email || u.id,
-    members: [u.name || u.email || ''],
-    color:   '#1B5FCC',
-    phone:   u.tel   || '',
-    email:   u.email || '',
-  }));
+  const binomes = _binomesConfig.length > 0
+    ? _binomesConfig.map(b => {
+        const memberNames = (b.memberIds || []).map(id => {
+          const u = users.find(x => x.id === id);
+          return u ? (u.name || u.email) : '';
+        }).filter(Boolean);
+        return {
+          id:      b.id,
+          name:    b.name,
+          members: memberNames,
+          color:   '#1B5FCC',
+          phone:   '',
+          email:   '',
+        };
+      })
+    : getPoseurs().map(u => ({
+        id:      u.id,
+        name:    u.name || u.email || u.id,
+        members: [u.name || u.email || ''],
+        color:   '#1B5FCC',
+        phone:   u.tel   || '',
+        email:   u.email || '',
+      }));
   frame.contentWindow.postMessage({ type: 'JMBACH_INIT', dossiers: chantiers, binomes }, '*');
   // Mettre à jour la barre de statut
   const bar = document.getElementById('planning-sync-bar');
@@ -4751,8 +4767,11 @@ function renderPlanningAvance() {
   mc.style.padding = '0';
   const liste = dossiers.filter(d => d.transport === 'liv_pose' || d.needPose);
   mc.innerHTML = `
-    <div id="planning-sync-bar" style="display:flex;align-items:center;gap:8px;padding:6px 16px;background:var(--surface);border-bottom:1px solid var(--border);font-size:12px;color:var(--ink-soft)">
-      <i class="ti ti-loader" style="animation:spin .8s linear infinite"></i> Connexion à l'app planning…
+    <div style="display:flex;align-items:center;background:var(--surface);border-bottom:1px solid var(--border)">
+      <div id="planning-sync-bar" style="flex:1;display:flex;align-items:center;gap:8px;padding:6px 16px;font-size:12px;color:var(--ink-soft)">
+        <i class="ti ti-loader" style="animation:spin .8s linear infinite"></i> Connexion à l'app planning…
+      </div>
+      ${can('planning')||can('view_all')?`<button onclick="openModalBinomes()" style="margin-right:12px;padding:4px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--paper);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap"><i class="ti ti-users-group"></i> Binômes (${_binomesConfig.length})</button>`:''}
     </div>
     <iframe id="planning-ia-frame" src="planning.html"
       style="width:100%;height:calc(100vh - 140px);border:none;display:block"
@@ -4974,6 +4993,7 @@ function setDosFieldDirect(id,k,v) { const d=dossiers.find(x=>x.id===id); if(d){
 // Structure : { semaine: { poseurId: { lun:{deb,fin,h}, mar:..., ... } } }
 // semaine = "2024-W23" (ISO week)
 let horairesData = {};
+let _binomesConfig = []; // [{id, name, memberIds:[]}] — stocké dans meta/binomes_config
 // Horaires stockés dans Firestore (meta/horaires) — partagés entre tous les appareils
 async function loadHoraires() {
   if (!window._db) return;
@@ -5021,6 +5041,87 @@ function saveHoraires() {
       .set({ data: horairesData }, { merge: false })
       .catch(e => console.error('saveHoraires:', e));
   }
+}
+
+async function loadBinomesConfig() {
+  if (!window._db) return;
+  try {
+    const doc = await window._db.collection('meta').doc('binomes_config').get();
+    _binomesConfig = doc.exists ? (doc.data().data || []) : [];
+  } catch(e) { console.warn('loadBinomesConfig:', e); }
+}
+function saveBinomesConfig() {
+  if (!window._db) return;
+  window._db.collection('meta').doc('binomes_config').set({ data: _binomesConfig })
+    .catch(e => console.error('saveBinomesConfig:', e));
+}
+function getBinomeLabel(id) {
+  if (!id) return '';
+  const b = _binomesConfig.find(x => x.id === id);
+  if (b) return b.name;
+  const u = users.find(x => x.id === id);
+  return u ? (u.name || u.email) : id;
+}
+function openModalBinomes() {
+  renderModalBinomesContent();
+  document.getElementById('modal-binomes').style.display = 'flex';
+}
+function renderModalBinomesContent() {
+  const poseurs = getPoseurs();
+  const body = document.getElementById('modal-binomes-body');
+  if (!body) return;
+  body.innerHTML = `
+    <div style="margin-bottom:16px">
+      ${_binomesConfig.length === 0
+        ? `<div style="text-align:center;padding:20px;color:var(--ink-faint);font-size:13px"><i class="ti ti-users" style="font-size:24px;display:block;margin-bottom:8px"></i>Aucun binôme configuré</div>`
+        : _binomesConfig.map(b => {
+            const members = (b.memberIds || []).map(id => {
+              const u = users.find(x => x.id === id);
+              return u ? `<span style="background:var(--accent-light);color:var(--accent-deep);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500">${u.name||u.email}</span>` : '';
+            }).filter(Boolean).join(' ');
+            return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;background:var(--paper)">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:600;font-size:13px;margin-bottom:4px">${b.name}</div>
+                <div style="display:flex;flex-wrap:wrap;gap:4px">${members||'<span style="font-size:11px;color:var(--ink-faint)">Aucun membre</span>'}</div>
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="supprimerBinome('${b.id}')" title="Supprimer"><i class="ti ti-trash" style="color:var(--red)"></i></button>
+            </div>`;
+          }).join('')
+      }
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">Ajouter un binôme</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <input id="binome-nom-input" type="text" placeholder="Nom du binôme (ex: Pierre & Jean)" style="padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--bg)">
+        <div style="font-size:12px;color:var(--ink-soft);margin-bottom:4px">Membres :</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          ${poseurs.length === 0
+            ? '<span style="font-size:12px;color:var(--ink-faint)">Aucun poseur configuré</span>'
+            : poseurs.map(p => `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+                <input type="checkbox" class="binome-membre-cb" value="${p.id}" style="width:auto;accent-color:var(--accent)">
+                ${p.name||p.email}
+              </label>`).join('')
+          }
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="ajouterBinome()" style="align-self:flex-start"><i class="ti ti-plus"></i> Créer le binôme</button>
+      </div>
+    </div>`;
+}
+function ajouterBinome() {
+  const nom = (document.getElementById('binome-nom-input')?.value || '').trim();
+  if (!nom) { showToast('Donnez un nom au binôme'); return; }
+  const memberIds = [...document.querySelectorAll('.binome-membre-cb:checked')].map(cb => cb.value);
+  const id = 'b_' + Date.now().toString(36);
+  _binomesConfig.push({ id, name: nom, memberIds });
+  saveBinomesConfig();
+  renderModalBinomesContent();
+  showToast('Binôme créé');
+}
+function supprimerBinome(id) {
+  _binomesConfig = _binomesConfig.filter(b => b.id !== id);
+  saveBinomesConfig();
+  renderModalBinomesContent();
+  showToast('Binôme supprimé');
 }
 
 function getWeekKey(offset=0) {
