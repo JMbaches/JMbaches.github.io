@@ -5650,7 +5650,7 @@ function renderVuePoseursAll() {
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
     <button class="btn btn-ghost btn-sm" onclick="vuePoseursAllNavWeek(-1)"><i class="ti ti-chevron-left"></i> Semaine préc.</button>
     <div style="font-size:14px;font-weight:600;padding:0 4px">
-      ${semaineDu} – ${semaineAu}
+      <span style="font-size:12px;font-weight:700;background:var(--bg);border:1px solid var(--border);color:var(--ink-soft);padding:2px 7px;border-radius:4px;margin-right:8px">S${weekKey.split('-W')[1]}</span>${semaineDu} – ${semaineAu}
       ${isCurrentWeek ? '<span style="font-size:11px;background:var(--accent);color:#fff;padding:2px 7px;border-radius:10px;font-weight:600;vertical-align:middle;margin-left:6px">Semaine en cours</span>' : ''}
     </div>
     <button class="btn btn-ghost btn-sm" onclick="vuePoseursAllNavWeek(1)">Semaine suiv. <i class="ti ti-chevron-right"></i></button>
