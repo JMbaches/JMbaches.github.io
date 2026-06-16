@@ -909,6 +909,9 @@ a:focus-visible, button:focus-visible,
     <div style="text-align:center;margin-top:4px">
       <button onclick="showResetPassword()" style="background:none;border:none;color:var(--ink-faint);font-size:12px;cursor:pointer;text-decoration:underline;padding:0">Mot de passe oublié ?</button>
     </div>
+    <div style="text-align:center;margin-top:24px;padding-top:16px;border-top:1px solid var(--border)">
+      <span style="font-size:11px;color:var(--ink-faint);letter-spacing:.02em">Développé par <strong style="color:var(--ink-soft);font-weight:600">Sacha Jourdan</strong></span>
+    </div>
   </div>
 </div>
 
@@ -1996,7 +1999,6 @@ function renderDashboard() {
   const today = new Date().toISOString().split('T')[0];
   const retard = dossiers.filter(d=>d.dateLivraison&&d.dateLivraison<today&&!isCloture(d.statut));
   const prod = dossiers.filter(d=>d.statut==='production');
-  const nouveaux = dossiers.filter(d=>d.statut==='nouveau');
   const total = dossiers.reduce((s,d)=>s+(d.ht||0),0);
   const recentActivity = [];
   dossiers.forEach(d=>d.history.forEach(h=>recentActivity.push({...h,dosId:d.id,dosClient:d.client})));
@@ -2016,12 +2018,12 @@ function renderDashboard() {
   ${unread.length>0?`<div class="alert-banner no-print" onclick="goTab('notifs')" style="margin-bottom:20px"><i class="ti ti-bell"></i> <strong>${unread.length} notification${unread.length>1?'s':''} non lue${unread.length>1?'s':''}</strong> — Cliquer pour voir <span style="margin-left:auto">→</span></div>`:''}
 
   <div class="dashboard-grid">
-    <div class="dash-card" onclick="goTab('dos')">
-      <div class="dash-card-icon" style="background:var(--purple-light);color:var(--purple)"><i class="ti ti-file-plus"></i></div>
-      <div class="dash-card-value">${nouveaux.length}</div>
-      <div class="dash-card-label">Nouveau${nouveaux.length>1?'x':''} dossier${nouveaux.length>1?'s':''}</div>
-      <div class="dash-card-sub">en attente de traitement</div>
-    </div>
+    ${retard.length>0?`<div class="dash-card" onclick="goTab('dos')" style="cursor:pointer">
+      <div class="dash-card-icon" style="background:var(--red-light);color:var(--red)"><i class="ti ti-clock-exclamation"></i></div>
+      <div class="dash-card-value" style="color:var(--red)">${retard.length}</div>
+      <div class="dash-card-label">En retard</div>
+      <div class="dash-card-sub">date de livraison dépassée</div>
+    </div>`:''}
     <div class="dash-card" onclick="goTab('atelier')">
       <div class="dash-card-icon" style="background:var(--amber-light);color:var(--amber)"><i class="ti ti-tool"></i></div>
       <div class="dash-card-value">${prod.length}</div>
