@@ -4414,7 +4414,6 @@ function avancerDosEmballageGrand(id) {
 
 function renderSuivi() {
   const cols=[
-    {k:'nouveau',   l:'Nouveau',     c:'var(--purple)', bg:'var(--purple-light)'},
     {k:'admin',     l:'Saisie admin', c:'var(--accent)', bg:'var(--accent-light)'},
     {k:'verif',     l:'Vérification', c:'#0E7490',       bg:'#CFFAFE'},
     {k:'production',l:'Production',   c:'var(--amber)',  bg:'var(--amber-light)'},
@@ -4431,7 +4430,7 @@ function renderSuivi() {
     <div class="section-title">Pipeline global</div>
     <span style="font-size:12px;color:var(--ink-faint)"><i class="ti ti-drag-drop" style="vertical-align:-1px;margin-right:4px"></i>Glisser-déposer pour changer de statut</span>
   </div>
-  <div style="display:grid;grid-template-columns:repeat(10,minmax(130px,1fr));gap:10px;overflow-x:auto;padding-bottom:8px" id="suivi-pipeline">
+  <div style="display:grid;grid-template-columns:repeat(9,minmax(130px,1fr));gap:10px;overflow-x:auto;padding-bottom:8px" id="suivi-pipeline">
     ${cols.map(col=>{
       const items=dossiers.filter(d=>d.statut===col.k);
       return `<div class="pipe-col" id="col-${col.k}"
