@@ -2751,7 +2751,25 @@ function renderPageExp(d, p) { p = p || {};
 /* ================================================================
    ACTIONS FICHE
    ================================================================ */
-function setDosField(k,v) { const d=dossiers.find(x=>x.id===currentDosId); if(d){const old=d[k];d[k]=v;if(old!==v)logHistory(currentDosId,'modification',`Champ "${k}" modifié`,old?`Avant : ${old}`:'')} }
+function setDosField(k,v) {
+  const d=dossiers.find(x=>x.id===currentDosId);
+  if(!d) return;
+  const old=d[k];
+  d[k]=v;
+  if(old!==v) logHistory(currentDosId,'modification',`Champ "${k}" modifié`,old?`Avant : ${old}`:'');
+  // Quand transport change
+  if(k==='transport') {
+    if(v==='liv_pose') {
+      d.needPose=true;
+    } else if(old==='liv_pose') {
+      // Retrait de liv+pose : nettoyer planning
+      d.needPose=false; d.poseDate=''; d.poseurId='';
+      // Supprimer de l'app planning si ouverte
+      const frame=document.getElementById('planning-ia-frame');
+      if(frame&&frame.contentWindow) frame.contentWindow.postMessage({type:'JMBACH_REMOVE',ids:[d.id]},'*');
+    }
+  }
+}
 function setPageField(pi,k,v) { const d=dossiers.find(x=>x.id===currentDosId); if(d&&d.pages[pi])d.pages[pi][k]=v; }
 function toggleChk(dosId,pi,ri,type) {
   const d=dossiers.find(x=>x.id===dosId); if(!d) return;

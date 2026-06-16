@@ -1231,6 +1231,11 @@ function App() {
     const handler = (e) => {
       if (!e.data) return;
       // Demande explicite d'export depuis l'app principale
+      if (e.data.type === 'JMBACH_REMOVE') {
+        const ids = e.data.ids || [];
+        if (ids.length) setChantiers(prev => prev.map(c => ids.includes(c.externalId) ? { ...c, archived: true, scheduledDate: '', scheduledBinome: '', status: 'annule' } : c));
+        return;
+      }
       if (e.data.type === 'JMBACH_REQUEST_UPDATE') {
         const toSend = _prevCh.current
           .filter(c => c.externalId)
