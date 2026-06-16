@@ -4941,16 +4941,51 @@ function setDosFieldDirect(id,k,v) { const d=dossiers.find(x=>x.id===id); if(d){
 let horairesData = {};
 // Horaires stockés dans Firestore (meta/horaires) — partagés entre tous les appareils
 async function loadHoraires() {
-  if(!window._db) return;
+  if (!window._db) return;
   try {
-    const doc = await window._db.collection('meta').doc('horaires').get();
-    if(doc.exists) horairesData = doc.data().data || {};
+    if (currentUser && currentUser.role === 'poseur') {
+      // Poseurs lisent uniquement leur propre document
+      const doc = await window._db.collection('poseur_hours').doc(currentUser.id).get();
+      horairesData = doc.exists ? (doc.data().data || {}) : {};
+    } else {
+      // Admin/direction/compta : document principal + heures déclarées par les poseurs
+      const doc = await window._db.collection('meta').doc('horaires').get();
+      horairesData = doc.exists ? (doc.data().data || {}) : {};
+      try {
+        const snap = await window._db.collection('poseur_hours').get();
+        snap.docs.forEach(d => {
+          const pData = d.data().data || {};
+          Object.entries(pData).forEach(([wk, wData]) => {
+            if (!horairesData[wk]) horairesData[wk] = {};
+            Object.entries(wData).forEach(([uid, uData]) => {
+              if (!horairesData[wk][uid]) horairesData[wk][uid] = {};
+              // Les jours non encore saisis par l'admin sont pré-remplis avec la déclaration poseur
+              Object.entries(uData).forEach(([dk, dd]) => {
+                if (!horairesData[wk][uid][dk]) horairesData[wk][uid][dk] = dd;
+              });
+            });
+          });
+        });
+      } catch(_) {}
+    }
   } catch(e) { console.warn('loadHoraires:', e); }
 }
 function saveHoraires() {
-  if(!window._db) return;
-  window._db.collection('meta').doc('horaires').set({ data: horairesData }, { merge: false })
-    .catch(e => console.error('saveHoraires:', e));
+  if (!window._db) return;
+  if (currentUser && currentUser.role === 'poseur') {
+    // Poseur : écrit uniquement ses propres données dans sa collection dédiée
+    const myData = {};
+    Object.entries(horairesData).forEach(([wk, wData]) => {
+      if (wData[currentUser.id]) myData[wk] = { [currentUser.id]: wData[currentUser.id] };
+    });
+    window._db.collection('poseur_hours').doc(currentUser.id)
+      .set({ data: myData })
+      .catch(e => console.error('saveHoraires (poseur):', e));
+  } else {
+    window._db.collection('meta').doc('horaires')
+      .set({ data: horairesData }, { merge: false })
+      .catch(e => console.error('saveHoraires:', e));
+  }
 }
 
 function getWeekKey(offset=0) {
