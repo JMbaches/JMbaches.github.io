@@ -5965,26 +5965,33 @@ function renderUsers() {
     }).join('')}
   </div>
 
-  ${(can('view_all')||can('planning'))?`
-  <div style="margin-top:28px">
-    <div class="section-header" style="margin-bottom:14px">
-      <div class="section-title"><i class="ti ti-users-group" style="margin-right:6px;vertical-align:-2px"></i>Binômes de pose</div>
-      <button class="btn btn-primary btn-sm" onclick="openModalBinomes()"><i class="ti ti-plus"></i> Gérer les binômes</button>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">
-      ${_binomesConfig.length===0
-        ? \`<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--ink-faint);font-size:13px;border:1px dashed var(--border);border-radius:4px"><i class="ti ti-users" style="font-size:22px;display:block;margin-bottom:6px"></i>Aucun binôme configuré<br><span style="font-size:12px">Cliquez sur "Gérer les binômes" pour en créer</span></div>\`
-        : _binomesConfig.map(b=>{
-            const memberNames=(b.memberIds||[]).map(id=>{const u=users.find(x=>x.id===id);return u?u.name||u.email:'';}).filter(Boolean);
-            return \`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px">
-              <div style="font-weight:600;font-size:13px"><i class="ti ti-users-group" style="margin-right:5px;color:var(--accent)"></i>\${b.name}</div>
-              <div style="display:flex;flex-wrap:wrap;gap:4px">\${memberNames.length?memberNames.map(n=>\`<span style="background:var(--accent-light);color:var(--accent-deep);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500">\${n}</span>\`).join(''):'<span style="font-size:11px;color:var(--ink-faint)">Aucun membre</span>'}</div>
-            </div>\`;
-          }).join('')
-      }
-    </div>
-  </div>`:''}
+  ${(can('view_all')||can('planning')) ? _renderBinomesSection() : ''}
 `;
+  if (can('view_all')||can('planning')) _appendBinomesSection();
+}
+function _renderBinomesSection() {
+  return '';
+}
+function _appendBinomesSection() {
+  const mc = document.getElementById('main-content');
+  if (!mc) return;
+  const poseurs = getPoseurs();
+  let cardsHtml = '';
+  if (_binomesConfig.length === 0) {
+    cardsHtml = '<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--ink-faint);font-size:13px;border:1px dashed var(--border);border-radius:4px"><i class="ti ti-users" style="font-size:22px;display:block;margin-bottom:6px"></i>Aucun binôme configuré<br><span style="font-size:12px">Cliquez sur \'Gérer les binômes\' pour en créer</span></div>';
+  } else {
+    _binomesConfig.forEach(b => {
+      const memberNames = (b.memberIds||[]).map(id => { const u = users.find(x=>x.id===id); return u ? (u.name||u.email) : ''; }).filter(Boolean);
+      const pills = memberNames.length
+        ? memberNames.map(n => '<span style="background:var(--accent-light);color:var(--accent-deep);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500">'+n+'</span>').join('')
+        : '<span style="font-size:11px;color:var(--ink-faint)">Aucun membre</span>';
+      cardsHtml += '<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px"><div style="font-weight:600;font-size:13px"><i class="ti ti-users-group" style="margin-right:5px;color:var(--accent)"></i>'+b.name+'</div><div style="display:flex;flex-wrap:wrap;gap:4px">'+pills+'</div></div>';
+    });
+  }
+  const section = document.createElement('div');
+  section.style.marginTop = '28px';
+  section.innerHTML = '<div class="section-header" style="margin-bottom:14px"><div class="section-title"><i class="ti ti-users-group" style="margin-right:6px;vertical-align:-2px"></i>Binômes de pose</div><button class="btn btn-primary btn-sm" onclick="openModalBinomes()"><i class="ti ti-plus"></i> Gérer les binômes</button></div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">'+cardsHtml+'</div>';
+  mc.appendChild(section);
 }
 function syncPerms() {
   const role=document.getElementById('u-role').value;
