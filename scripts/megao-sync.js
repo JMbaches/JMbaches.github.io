@@ -171,6 +171,10 @@ function buildDocEntry(uploaded, filename, nowAt) {
   };
 }
 
+// ─── Helpers Dercya ──────────────────────────────────────────────────────────
+const isDercya      = d => /dercya/i.test(d.revendeur || '');
+const isParticulier = d => /particulier/i.test(d.revendeur || '');
+
 // ─── Génération ID dossier ────────────────────────────────────────────────────
 async function getNextDosId() {
   const year = new Date().getFullYear();
@@ -272,6 +276,71 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
   }
 }
 
+// ─── Fusion paire Dercya (1 BDC livraison + 1 BDC pose → 1 dossier liv_pose) ──
+async function upsertDercyaPair(dercyaItem, poseItem) {
+  const nowDate = new Date();
+  const today   = nowDate.toISOString().split('T')[0];
+  const nowAt   = nowDate.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric' })
+                + ' à ' + nowDate.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+
+  const data = { ...dercyaItem.data, transport: 'liv_pose', needPose: true };
+
+  // Cherche un dossier existant (par ref de l'une ou l'autre commande)
+  let existingDoc = null;
+  for (const ref of [dercyaItem.data.ref, poseItem.data.ref].filter(Boolean)) {
+    const snap = await db.collection('dossiers').where('ref', '==', ref).limit(1).get();
+    if (!snap.empty) { existingDoc = snap.docs[0]; break; }
+  }
+
+  const dosId = existingDoc ? existingDoc.id : await getNextDosId();
+
+  // Upload les 2 PDFs
+  const docs = [];
+  for (const { buf, name } of [
+    { buf: dercyaItem.pdfBuffer, name: dercyaItem.pdfFilename },
+    { buf: poseItem.pdfBuffer,   name: poseItem.pdfFilename   },
+  ]) {
+    if (buf) docs.push(buildDocEntry(await uploadPdfToStorage(buf, dosId, name), name, nowAt));
+  }
+
+  if (existingDoc) {
+    const prev = existingDoc.data();
+    await existingDoc.ref.update({
+      transport: 'liv_pose', needPose: true,
+      documents:  admin.firestore.FieldValue.arrayUnion(...docs),
+      docFolders: admin.firestore.FieldValue.arrayUnion(...PD_DEFAULT_FOLDERS),
+      history: [...(prev.history || []), {
+        id: Date.now(), type: 'megao',
+        action: 'Fusionné paire Dercya → liv+pose',
+        detail: `${dercyaItem.data.ref} + ${poseItem.data.ref}`,
+        user: 'megao-sync', at: nowAt,
+      }],
+    });
+    console.log(`✓ Paire Dercya mise à jour : ${dosId}`);
+  } else {
+    await db.collection('dossiers').doc(dosId).set({
+      client: data.client || '', tel: data.tel || '', email: data.email || '',
+      contact: data.contact || '', adresse: data.adresse || '', cp: data.cp || '',
+      ville: data.ville || '', contraintes: '', structure: data.structure || '',
+      options: data.options || '', lames: data.lames || '', pieds: data.pieds || '',
+      alim: data.alim || '', moteur: data.moteur || '', ht: data.ht || 0, tva: 20,
+      ref: data.ref, refCommande: data.ref, devisStatut: 'accepte',
+      dateFrom: data.dateFrom || today, dateTo: '', dateLivraison: '',
+      transport: 'liv_pose', remarques: data.remarques || '', autres: data.autres || '',
+      largeur: data.largeur || '', longueur: data.longueur || '',
+      revendeur: data.revendeur || '', needPose: true, poseDate: '', statut: 'admin',
+      createdBy: 'megao-sync',
+      pages: [
+        { type: 'commande', label: 'Fiche commande', checks: {} },
+        { type: 'verif',    label: 'Vérification atelier', checks: {}, rows: ['Rayons','Pans coupés','Lames coupées','Lames finies','Axe','Contre axe + rails','Découpe ESC en équerre','Découpe ESC en lisse','Poutre + cornière','Cloison','Caillebotis'] },
+      ],
+      documents: docs, docFolders: PD_DEFAULT_FOLDERS,
+      history: [{ id: Date.now(), type: 'création', action: 'Créé depuis Mégao — paire Dercya (liv+pose)', detail: `${dercyaItem.data.ref} + ${poseItem.data.ref}`, user: 'megao-sync', at: nowAt }],
+    });
+    console.log(`✓ Paire Dercya créée : ${dosId} (${dercyaItem.data.ref} + ${poseItem.data.ref})`);
+  }
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
   console.log(`[${new Date().toISOString()}] Démarrage sync Mégao…`);
@@ -294,6 +363,10 @@ async function main() {
     const uids = await imap.search({ seen: false }, { uid: true });
     console.log(`${uids.length} email(s) non lu(s) trouvé(s)`);
 
+    // ── Phase 1 : parser tous les PDFs ────────────────────────────────────────
+    const items   = [];  // { uid, data, pdfBuffer, pdfFilename }
+    const skipUids = []; // emails sans PDF ou sans volet → marquer lu seulement
+
     for (const uid of uids) {
       const msg    = await imap.fetchOne(uid, { source: true }, { uid: true });
       const parsed = await simpleParser(msg.source);
@@ -305,27 +378,98 @@ async function main() {
 
       if (!pdfAtt) {
         console.log(`Aucun PDF dans : "${parsed.subject}" — email marqué lu`);
-        await imap.messageFlagsAdd([uid], ['\\Seen'], { uid: true });
+        skipUids.push(uid);
         continue;
       }
 
       console.log(`PDF trouvé : ${pdfAtt.filename} (${Math.round(pdfAtt.size / 1024)}ko)`);
-
       const pdfData = await pdfParse(pdfAtt.content);
-      console.log(`Texte extrait : ${pdfData.text.length} caractères`);
-
-      const data = parseMegaoText(pdfData.text);
-      console.log(`Ref: ${data.ref || '(non trouvée)'} | Client: ${data.client || '(non trouvé)'} | Volet: ${data.isVolet}`);
+      const data    = parseMegaoText(pdfData.text);
+      console.log(`Ref: ${data.ref || '(non trouvée)'} | Client: ${data.client || '(non trouvé)'} | Revendeur: ${data.revendeur || '—'} | Volet: ${data.isVolet}`);
 
       if (!data.isVolet) {
-        console.log(`→ Pas un volet (aucun code LAM* ou VR*) — email ignoré`);
-        await imap.messageFlagsAdd([uid], ['\\Seen'], { uid: true });
+        console.log(`→ Pas un volet — email ignoré`);
+        skipUids.push(uid);
         continue;
       }
 
-      await upsertDossier(data, pdfAtt.content, pdfAtt.filename || 'bon-de-commande.pdf');
-      await imap.messageDelete([uid], { uid: true });
-      console.log(`Email supprimé`);
+      items.push({ uid, data, pdfBuffer: pdfAtt.content, pdfFilename: pdfAtt.filename || 'bon-de-commande.pdf' });
+    }
+
+    // Marquer lu les emails sans volet
+    for (const uid of skipUids) {
+      await imap.messageFlagsAdd([uid], ['\\Seen'], { uid: true });
+    }
+
+    // ── Phase 2 : détecter les paires Dercya dans ce batch ───────────────────
+    const used   = new Set();
+    const tasks  = []; // { type: 'pair'|'single', ... }
+
+    for (let i = 0; i < items.length; i++) {
+      if (used.has(i)) continue;
+      const a = items[i];
+      if (isDercya(a.data) || isParticulier(a.data)) {
+        const j = items.findIndex((b, idx) =>
+          idx !== i && !used.has(idx) &&
+          a.data.client && b.data.client &&
+          a.data.client.toLowerCase() === b.data.client.toLowerCase() &&
+          ((isDercya(a.data) && isParticulier(b.data)) || (isParticulier(a.data) && isDercya(b.data)))
+        );
+        if (j !== -1) {
+          const [dItem, pItem] = isDercya(a.data) ? [a, items[j]] : [items[j], a];
+          tasks.push({ type: 'pair', dercya: dItem, pose: pItem });
+          used.add(i); used.add(j);
+          console.log(`→ Paire Dercya détectée : "${a.data.client}" (${a.data.ref} + ${items[j].data.ref})`);
+          continue;
+        }
+      }
+      tasks.push({ type: 'single', item: a });
+      used.add(i);
+    }
+
+    // ── Phase 3 : upsert ──────────────────────────────────────────────────────
+    for (const task of tasks) {
+      if (task.type === 'pair') {
+        await upsertDercyaPair(task.dercya, task.pose);
+        await imap.messageDelete([task.dercya.uid, task.pose.uid], { uid: true });
+        console.log(`Emails paire supprimés`);
+      } else {
+        const { uid, data, pdfBuffer, pdfFilename } = task.item;
+        // Fallback cross-batch : si commande "particulier" sans partenaire dans ce batch,
+        // chercher en Firestore un dossier Dercya créé aujourd'hui avec le même client.
+        if (isParticulier(data) && data.client) {
+          const today = new Date().toISOString().split('T')[0];
+          const snap  = await db.collection('dossiers')
+            .where('client',    '==', data.client)
+            .where('dateFrom',  '==', today)
+            .where('createdBy', '==', 'megao-sync')
+            .limit(1).get();
+          if (!snap.empty && isDercya(snap.docs[0].data())) {
+            console.log(`→ Commande pose trouvée pour dossier Dercya existant : ${snap.docs[0].id}`);
+            const nowDate = new Date();
+            const nowAt   = nowDate.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric' })
+                          + ' à ' + nowDate.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+            const prev    = snap.docs[0].data();
+            const update  = { transport: 'liv_pose', needPose: true };
+            if (pdfBuffer) {
+              const up = await uploadPdfToStorage(pdfBuffer, snap.docs[0].id, pdfFilename);
+              update.documents  = admin.firestore.FieldValue.arrayUnion(buildDocEntry(up, pdfFilename, nowAt));
+              update.docFolders = admin.firestore.FieldValue.arrayUnion(...PD_DEFAULT_FOLDERS);
+            }
+            update.history = [...(prev.history || []), {
+              id: Date.now(), type: 'megao', action: 'Commande pose Dercya fusionnée',
+              detail: data.ref, user: 'megao-sync', at: nowAt,
+            }];
+            await snap.docs[0].ref.update(update);
+            await imap.messageDelete([uid], { uid: true });
+            console.log(`Email supprimé`);
+            continue;
+          }
+        }
+        await upsertDossier(data, pdfBuffer, pdfFilename);
+        await imap.messageDelete([uid], { uid: true });
+        console.log(`Email supprimé`);
+      }
     }
 
     console.log(`[${new Date().toISOString()}] Sync terminée`);
