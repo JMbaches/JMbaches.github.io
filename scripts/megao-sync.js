@@ -82,16 +82,17 @@ function parseMegaoText(text) {
   const piedRaw = piedM ? piedM[1] : '';
   const pieds   = piedRaw ? ((/^\d{4}$/).test(piedRaw) ? `RAL ${piedRaw}` : piedRaw.charAt(0).toUpperCase() + piedRaw.slice(1).toLowerCase()) : '';
 
-  // Largeur depuis le code LAM (LAM350→3.50m, LAM45→4.5m, LAM4→4m)
-  const lamCodeM = text.match(/^LAM([0-9]+)/m);
+  // Largeur depuis le code LAM — chiffre(s) à la fin du code (LAM350→3.50m, LAM45→4.5m, LAM4→4m, LAMPOL4→4m)
+  const lamCodeM = text.match(/^LAM[A-Z]*([0-9]+)/m);
   let largeur = '';
   if (lamCodeM) {
     const n = parseInt(lamCodeM[1]);
     largeur = String(lamCodeM[1].length >= 3 ? n / 100 : lamCodeM[1].length === 2 ? n / 10 : n);
   }
 
-  // Longueur : somme des quantités ML de toutes les refs LAM (lames + éventuelles lames offertes)
-  const lamLines = [...text.matchAll(/^LAM[A-Z0-9]+.+?ML\s+([\d,]+)/gm)];
+  // Longueur : somme des quantités ML de toutes les refs LAM
+  // [\s\S]*? pour gérer le cas où ML est sur la ligne suivante (LAMPOL4, etc.)
+  const lamLines = [...text.matchAll(/^LAM[A-Z0-9]+[\s\S]*?\bML\s+([\d,]+)/gm)];
   const longueur = lamLines.length
     ? String(lamLines.reduce((sum, m) => sum + parseFloat(m[1].replace(',', '.')), 0))
     : '';
