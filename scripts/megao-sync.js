@@ -5,11 +5,18 @@ const { ImapFlow }     = require('imapflow');
 const { simpleParser } = require('mailparser');
 const pdfParse         = require('pdf-parse');
 const admin            = require('firebase-admin');
+const { randomUUID }   = require('crypto');
 
 // ─── Firebase ────────────────────────────────────────────────────────────────
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-const db = admin.firestore();
+admin.initializeApp({
+  credential:    admin.credential.cert(serviceAccount),
+  storageBucket: 'jm-baches.firebasestorage.app',
+});
+const db     = admin.firestore();
+const bucket = admin.storage().bucket();
+
+const PD_DEFAULT_FOLDERS = ['Général', 'Bon de commande', 'Facture', 'Fiche de côte', 'Fiche produit'];
 
 // ─── Parser PDF Mégao ────────────────────────────────────────────────────────
 // Format réel : tableau de codes produits (VRSIL80S, LAM350, TRSPVR5…)
@@ -128,6 +135,36 @@ function parseMegaoText(text) {
   };
 }
 
+// ─── Upload PDF vers Firebase Storage ────────────────────────────────────────
+async function uploadPdfToStorage(pdfBuffer, dosId, originalFilename) {
+  const ts       = Date.now();
+  const safeName = originalFilename.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+  const path     = `dossiers/${dosId}/${ts}_${safeName}`;
+  const file     = bucket.file(path);
+
+  await file.save(pdfBuffer, { metadata: { contentType: 'application/pdf' } });
+
+  const token = randomUUID();
+  await file.setMetadata({ metadata: { firebaseStorageDownloadTokens: token } });
+
+  const url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`;
+  return { url, path, size: pdfBuffer.length };
+}
+
+function buildDocEntry(uploaded, filename, nowAt) {
+  return {
+    id:         `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    name:       filename,
+    url:        uploaded.url,
+    path:       uploaded.path,
+    type:       'application/pdf',
+    size:       uploaded.size,
+    folder:     'Bon de commande',
+    uploadedBy: 'megao-sync',
+    uploadedAt: nowAt,
+  };
+}
+
 // ─── Génération ID dossier ────────────────────────────────────────────────────
 async function getNextDosId() {
   const year = new Date().getFullYear();
@@ -144,7 +181,7 @@ async function getNextDosId() {
 }
 
 // ─── Créer ou mettre à jour le dossier ───────────────────────────────────────
-async function upsertDossier(data) {
+async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
   if (!data.ref) { console.warn('Ref absente — dossier ignoré'); return; }
 
   const nowDate  = new Date();
@@ -166,6 +203,11 @@ async function upsertDossier(data) {
       if (data[f]) update[f] = data[f];
     }
     if (data.ht > 0 && !prev.ht) update.ht = data.ht;
+    if (pdfBuffer && pdfFilename) {
+      const uploaded = await uploadPdfToStorage(pdfBuffer, doc.id, pdfFilename);
+      update.documents  = admin.firestore.FieldValue.arrayUnion(buildDocEntry(uploaded, pdfFilename, nowAt));
+      update.docFolders = admin.firestore.FieldValue.arrayUnion(...PD_DEFAULT_FOLDERS);
+    }
     update.history = [
       ...(prev.history || []),
       { id: Date.now(), type: 'megao', action: 'Mis à jour depuis Mégao', detail: '', user: 'megao-sync', at: nowAt }
@@ -174,6 +216,11 @@ async function upsertDossier(data) {
     console.log(`✓ Mis à jour : ${doc.id} (ref: ${data.ref})`);
   } else {
     const id = await getNextDosId();
+    let initialDocs = [];
+    if (pdfBuffer && pdfFilename) {
+      const uploaded = await uploadPdfToStorage(pdfBuffer, id, pdfFilename);
+      initialDocs = [buildDocEntry(uploaded, pdfFilename, nowAt)];
+    }
     await db.collection('dossiers').doc(id).set({
       client:      data.client     || '',
       tel:         data.tel        || '',
@@ -211,6 +258,8 @@ async function upsertDossier(data) {
         { type: 'commande', label: 'Fiche commande', checks: {} },
         { type: 'verif', label: 'Vérification atelier', checks: {}, rows: ['Rayons','Pans coupés','Lames coupées','Lames finies','Axe','Contre axe + rails','Découpe ESC en équerre','Découpe ESC en lisse','Poutre + cornière','Cloison','Caillebotis'] }
       ],
+      documents:   initialDocs,
+      docFolders:  PD_DEFAULT_FOLDERS,
       history:     [{ id: Date.now(), type: 'création', action: 'Créé automatiquement depuis Mégao', detail: '', user: 'megao-sync', at: nowAt }]
     });
     console.log(`✓ Créé : ${id} (ref: ${data.ref}, client: ${data.client})`);
@@ -268,7 +317,7 @@ async function main() {
         continue;
       }
 
-      await upsertDossier(data);
+      await upsertDossier(data, pdfAtt.content, pdfAtt.filename || 'bon-de-commande.pdf');
       await imap.messageDelete([uid], { uid: true });
       console.log(`Email supprimé`);
     }
