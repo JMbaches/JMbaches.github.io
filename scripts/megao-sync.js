@@ -175,19 +175,9 @@ function buildDocEntry(uploaded, filename, nowAt) {
 const isDercya      = d => /dercya/i.test(d.revendeur || '');
 const isParticulier = d => /particulier/i.test(d.revendeur || '');
 
-// ─── Génération ID dossier ────────────────────────────────────────────────────
-async function getNextDosId() {
-  const year = new Date().getFullYear();
-  const snap = await db.collection('dossiers')
-    .orderBy(admin.firestore.FieldPath.documentId(), 'desc')
-    .limit(1)
-    .get();
-  if (snap.empty) return `D-${year}-001`;
-  const match = snap.docs[0].id.match(/D-(\d{4})-(\d+)/);
-  if (!match) return `D-${year}-001`;
-  const [, lastYear, lastNum] = match;
-  if (parseInt(lastYear) === year) return `D-${year}-${String(parseInt(lastNum) + 1).padStart(3, '0')}`;
-  return `D-${year}-001`;
+// ─── Ref Mégao → ID Firestore (remplace "/" par "-") ─────────────────────────
+function refToId(ref) {
+  return (ref || '').replace(/\//g, '-').replace(/\s+/g, '_').trim();
 }
 
 // ─── Créer ou mettre à jour le dossier ───────────────────────────────────────
@@ -200,11 +190,13 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
   const nowAt    = nowDate.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})
                  + ' à ' + nowDate.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
 
-  const existing = await db.collection('dossiers').where('ref', '==', data.ref).limit(1).get();
+  const dosId    = refToId(data.ref);
+  const docRef   = db.collection('dossiers').doc(dosId);
+  const existing = await docRef.get();
 
-  if (!existing.empty) {
-    const doc    = existing.docs[0];
-    const prev   = doc.data();
+  if (existing.exists) {
+    const doc    = { id: dosId, ref: docRef };
+    const prev   = existing.data();
     const fields = ['client','tel','email','contact','adresse','cp','ville',
                     'structure','lames','pieds','alim','moteur','options','remarques','autres','transport',
                     'largeur','longueur','revendeur','refCommande'];
@@ -214,7 +206,7 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
     }
     if (data.ht > 0 && !prev.ht) update.ht = data.ht;
     if (pdfBuffer && pdfFilename) {
-      const uploaded = await uploadPdfToStorage(pdfBuffer, doc.id, pdfFilename);
+      const uploaded = await uploadPdfToStorage(pdfBuffer, dosId, pdfFilename);
       update.documents  = admin.firestore.FieldValue.arrayUnion(buildDocEntry(uploaded, pdfFilename, nowAt));
       update.docFolders = admin.firestore.FieldValue.arrayUnion(...PD_DEFAULT_FOLDERS);
     }
@@ -222,16 +214,15 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
       ...(prev.history || []),
       { id: Date.now(), type: 'megao', action: 'Mis à jour depuis Mégao', detail: '', user: 'megao-sync', at: nowAt }
     ];
-    await doc.ref.update(update);
-    console.log(`✓ Mis à jour : ${doc.id} (ref: ${data.ref})`);
+    await docRef.update(update);
+    console.log(`✓ Mis à jour : ${dosId} (ref: ${data.ref})`);
   } else {
-    const id = await getNextDosId();
     let initialDocs = [];
     if (pdfBuffer && pdfFilename) {
-      const uploaded = await uploadPdfToStorage(pdfBuffer, id, pdfFilename);
+      const uploaded = await uploadPdfToStorage(pdfBuffer, dosId, pdfFilename);
       initialDocs = [buildDocEntry(uploaded, pdfFilename, nowAt)];
     }
-    await db.collection('dossiers').doc(id).set({
+    await docRef.set({
       client:      data.client     || '',
       tel:         data.tel        || '',
       email:       data.email      || '',
@@ -272,7 +263,7 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
       docFolders:  PD_DEFAULT_FOLDERS,
       history:     [{ id: Date.now(), type: 'création', action: 'Créé automatiquement depuis Mégao', detail: '', user: 'megao-sync', at: nowAt }]
     });
-    console.log(`✓ Créé : ${id} (ref: ${data.ref}, client: ${data.client})`);
+    console.log(`✓ Créé : ${dosId} (ref: ${data.ref}, client: ${data.client})`);
   }
 }
 
@@ -285,14 +276,11 @@ async function upsertDercyaPair(dercyaItem, poseItem) {
 
   const data = { ...dercyaItem.data, transport: 'liv_pose', needPose: true };
 
-  // Cherche un dossier existant (par ref de l'une ou l'autre commande)
-  let existingDoc = null;
-  for (const ref of [dercyaItem.data.ref, poseItem.data.ref].filter(Boolean)) {
-    const snap = await db.collection('dossiers').where('ref', '==', ref).limit(1).get();
-    if (!snap.empty) { existingDoc = snap.docs[0]; break; }
-  }
-
-  const dosId = existingDoc ? existingDoc.id : await getNextDosId();
+  // L'ID = ref Mégao de la commande Dercya (source principale)
+  const dosId      = refToId(dercyaItem.data.ref);
+  const pairDocRef = db.collection('dossiers').doc(dosId);
+  const existingSnap = await pairDocRef.get();
+  const existingDoc  = existingSnap.exists ? { id: dosId, ref: pairDocRef, data: () => existingSnap.data() } : null;
 
   // Upload les 2 PDFs
   const docs = [];
@@ -305,7 +293,7 @@ async function upsertDercyaPair(dercyaItem, poseItem) {
 
   if (existingDoc) {
     const prev = existingDoc.data();
-    await existingDoc.ref.update({
+    await pairDocRef.update({
       transport: 'liv_pose', needPose: true,
       documents:  admin.firestore.FieldValue.arrayUnion(...docs),
       docFolders: admin.firestore.FieldValue.arrayUnion(...PD_DEFAULT_FOLDERS),
@@ -318,7 +306,7 @@ async function upsertDercyaPair(dercyaItem, poseItem) {
     });
     console.log(`✓ Paire Dercya mise à jour : ${dosId}`);
   } else {
-    await db.collection('dossiers').doc(dosId).set({
+    await pairDocRef.set({
       client: data.client || '', tel: data.tel || '', email: data.email || '',
       contact: data.contact || '', adresse: data.adresse || '', cp: data.cp || '',
       ville: data.ville || '', contraintes: '', structure: data.structure || '',
