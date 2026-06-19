@@ -70,11 +70,15 @@ function parseMegaoText(text) {
   const moteurM = vrCode.match(/^VR(?:SUBT|SUB|MOUV|XTR|COF|SOL|SIL)([A-Z0-9]+)$/i);
   const moteur  = moteurM ? moteurM[1] : '';
 
-  // Alim : voltage dans le texte autour de la ligne VR (la valeur est souvent sur la ligne suivante)
+  // Alim + couleur pieds : extraits du bloc de la ligne VR (400 premiers caractères)
   const vrIdx   = vrM ? text.indexOf(vrM[0]) : -1;
   const vrBlock = vrIdx >= 0 ? text.slice(vrIdx, vrIdx + 400) : text;
   const alimM   = vrBlock.match(/\b(\d{2,3})\s*V\b/i);
   const alim    = alimM ? alimM[1] + 'V' : '';
+  // Couleur pieds : code RAL 4 chiffres après "impultionnelle/impulsionnelle" ou "RAL"
+  const piedM   = vrBlock.match(/impult\w*\s+(\d{4})\b/i)
+               || vrBlock.match(/\bRAL\s*[-:]?\s*(\d{4})\b/i);
+  const pieds   = piedM ? `RAL ${piedM[1]}` : '';
 
   // Largeur depuis le code LAM (LAM350→3.50m, LAM45→4.5m, LAM4→4m)
   const lamCodeM = text.match(/^LAM([0-9]+)/m);
@@ -128,7 +132,7 @@ function parseMegaoText(text) {
 
   return {
     ref, refCommande: ref, client, contact, tel, email, adresse, cp, ville,
-    structure, lames, pieds: '', alim, moteur,
+    structure, lames, pieds, alim, moteur,
     options: '', remarques: '', autres: '',
     largeur, longueur, revendeur,
     transport, ht, dateFrom, isVolet,
