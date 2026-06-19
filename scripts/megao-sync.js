@@ -77,9 +77,11 @@ function parseMegaoText(text) {
     largeur = String(lamCodeM[1].length >= 3 ? n / 100 : lamCodeM[1].length === 2 ? n / 10 : n);
   }
 
-  // Longueur depuis la quantité ML sur la ligne LAM (= mètres linéaires = longueur bassin)
-  const lamQtyM = text.match(/^LAM[0-9]+.+?ML\s+([\d,]+)/m);
-  const longueur = lamQtyM ? lamQtyM[1].replace(',', '.') : '';
+  // Longueur : somme des quantités ML de toutes les refs LAM (lames + éventuelles lames offertes)
+  const lamLines = [...text.matchAll(/^LAM[A-Z0-9]+.+?ML\s+([\d,]+)/gm)];
+  const longueur = lamLines.length
+    ? String(lamLines.reduce((sum, m) => sum + parseFloat(m[1].replace(',', '.')), 0))
+    : '';
 
   let transport = 'liv_pose';
   if (enlevM) {
