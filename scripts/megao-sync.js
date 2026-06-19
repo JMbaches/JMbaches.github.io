@@ -41,7 +41,7 @@ function parseMegaoText(text) {
 
   // Codes produits en début de ligne, collés à la désignation
   // Backtracking : VR[A-Z0-9]+ greedy, recule jusqu'à trouver [A-Z][a-zÀ-ÿ]
-  const isVolet   = /^(VR[A-Z0-9]|LAM\d)/m.test(text);
+  const isVolet   = /^(VR[A-Z0-9]|LAM[A-Z]*\d)/m.test(text);
   const vrM       = text.match(/^(VR[A-Z0-9]+)\s*([A-Z][a-zÀ-ÿé].+)/m);
   const lamM      = text.match(/^(LAM[A-Z0-9]+)\s*([A-Z][a-zÀ-ÿé].+)/m);
   const trspM     = text.match(/^(TRSP[A-Z0-9]+)\s*([A-Z][a-zÀ-ÿé].+)/m);
@@ -61,7 +61,9 @@ function parseMegaoText(text) {
     { k: ['subwater total','vrsubt'],       v: 'Volet immergé Subwater Total (6h30)' },
     { k: ['subwater','vrsub'],              v: 'Volet immergé Subwater (5h)' },
   ];
-  const structure = STRUCT_MAP.find(m => m.k.some(k => vrText.includes(k)))?.v || vrDesig;
+  const structure = STRUCT_MAP.find(m => m.k.some(k => vrText.includes(k)))?.v
+                 || vrDesig
+                 || (/tablier\s+seul/i.test(text) ? 'Tablier seul' : '');
   const lameRaw   = lamM ? lamM[2].replace(/\s*(UN|ML|M2|PCS)\s+.*$/i, '').trim() : '';
   const lameParenIdx = lameRaw.lastIndexOf(')');
   const lames     = lameParenIdx >= 0 ? lameRaw.slice(lameParenIdx + 1).trim() : lameRaw;
