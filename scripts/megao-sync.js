@@ -29,7 +29,7 @@ function parseMegaoText(text) {
     revendeur = revLines.find(l => /^[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜ][A-ZÀÂÄÉÈÊËÎÏÔÙÛÜ\s\-&\.]+$/.test(l) && !/^\d+$/.test(l)) || '';
   }
 
-  const dateM    = text.match(/Date\s*:\s*(\d{2})\/(\d{2})\/(\d{4})/i);
+  const dateM    = text.match(/Date\s*:\s*(?:[^\d\n]{0,30}\n\s*)?(\d{2})\/(\d{2})\/(\d{4})/i);
   const dateFrom = dateM ? `${dateM[3]}-${dateM[2]}-${dateM[1]}` : '';
 
   // Codes produits en début de ligne, collés à la désignation
