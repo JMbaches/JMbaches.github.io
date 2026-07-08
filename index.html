@@ -4627,20 +4627,48 @@ async function stockConfirmAction(code, action) {
   stockHandleScan(code);
 }
 
+let stockListeQuery = ''; // recherche texte dans Stock > Références
+
+function stockFilterListe(val) {
+  stockListeQuery = val;
+  const input = document.getElementById('stock-liste-search');
+  const selStart = input ? input.selectionStart : null;
+  const selEnd = input ? input.selectionEnd : null;
+  renderStockListe();
+  const newInput = document.getElementById('stock-liste-search');
+  if (newInput) {
+    newInput.focus();
+    if (selStart !== null) newInput.setSelectionRange(selStart, selEnd);
+  }
+}
+
 function renderStockListe() {
   const mc = document.getElementById('main-content');
-  const refs = [...stockRefs].sort((a,b) => (a.type+a.finition+a.taille).localeCompare(b.type+b.finition+b.taille));
+  const allRefs = [...stockRefs].sort((a,b) => (a.type+a.finition+a.taille).localeCompare(b.type+b.finition+b.taille));
+  const q = stockListeQuery.trim().toLowerCase();
+  const refs = !q ? allRefs : allRefs.filter(r =>
+    (r.id||'').toLowerCase().includes(q) ||
+    (r.type||'').toLowerCase().includes(q) ||
+    (r.finition||'').toLowerCase().includes(q) ||
+    (r.taille||'').toLowerCase().includes(q)
+  );
   mc.innerHTML = `
   <div class="page-header">
     <h1 style="font-size:20px;font-weight:700;letter-spacing:-.2px">Stock — Références</h1>
-    <p>${refs.length} référence${refs.length>1?'s':''}</p>
+    <p>${allRefs.length} référence${allRefs.length>1?'s':''}</p>
   </div>
   <div class="section-header" style="margin-bottom:14px">
     <div class="section-title" style="font-size:15px;font-weight:700">Références</div>
-    <button class="btn btn-primary btn-sm" onclick="stockToggleManualForm()"><i class="ti ti-plus"></i> Nouvelle référence</button>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div style="position:relative">
+        <i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--ink-faint);font-size:13px;pointer-events:none"></i>
+        <input type="text" id="stock-liste-search" placeholder="Code, type, coloris, taille…" autocomplete="off" value="${stockListeQuery}" style="padding:7px 10px 7px 30px;width:220px" oninput="stockFilterListe(this.value)">
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="stockToggleManualForm()"><i class="ti ti-plus"></i> Nouvelle référence</button>
+    </div>
   </div>
   <div id="stock-manual-form-zone" style="margin-bottom:16px"></div>
-  ${refs.length===0 ? `<div class="empty-state"><i class="ti ti-box-multiple"></i>Aucune référence enregistrée — scannez une lame dans l'onglet Scanner, ou ajoutez-en une manuellement</div>` : `
+  ${refs.length===0 ? `<div class="empty-state"><i class="ti ti-box-multiple"></i>${q ? `Aucune référence ne correspond à « ${stockListeQuery} »` : `Aucune référence enregistrée — scannez une lame dans l'onglet Scanner, ou ajoutez-en une manuellement`}</div>` : `
   <div class="table-wrap" style="margin-bottom:24px">
     <table>
       <thead><tr><th>Code</th><th>Type</th><th>Finition</th><th>Taille</th><th>Quantité</th><th></th></tr></thead>
