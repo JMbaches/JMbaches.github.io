@@ -28,7 +28,7 @@ window._FieldValue = firebase.firestore.FieldValue;
 try { window._storage = firebase.storage(); } catch(e) { console.warn('Firebase Storage non disponible'); }
 
 let _firestoreReady = false;
-let _unsubUsers, _unsubDossiers, _unsubNotifs, _unsubMessages;
+let _unsubUsers, _unsubDossiers, _unsubNotifs, _unsubMessages, _unsubStockRefs, _unsubStockMouvements;
 window._chatMessages = [];
 
 // Affiche un message propre au lieu de planter sur permission-denied
@@ -108,6 +108,19 @@ function startFirestoreListeners() {
           renderChatMessages?.();
           }
       }, e => { handleFirestoreError(e, 'messages'); });
+
+    _unsubStockRefs = _db.collection('stock_refs').onSnapshot(snap => {
+      stockRefs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (_firestoreReady) refreshCurrentView();
+    }, e => { handleFirestoreError(e, 'stock_refs'); });
+
+    _unsubStockMouvements = _db.collection('stock_mouvements')
+      .orderBy('at', 'desc')
+      .limit(200)
+      .onSnapshot(snap => {
+        stockMouvements = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (_firestoreReady) refreshCurrentView();
+      }, e => { handleFirestoreError(e, 'stock_mouvements'); });
   });
 }
 
@@ -116,7 +129,9 @@ function stopFirestoreListeners() {
   _unsubDossiers?.();
   _unsubNotifs?.();
   _unsubMessages?.();
-  _unsubUsers = _unsubDossiers = _unsubNotifs = _unsubMessages = null;
+  _unsubStockRefs?.();
+  _unsubStockMouvements?.();
+  _unsubUsers = _unsubDossiers = _unsubNotifs = _unsubMessages = _unsubStockRefs = _unsubStockMouvements = null;
   _firestoreReady = false;
   window._chatMessages = [];
 }
@@ -275,6 +290,56 @@ window.seedFirestore = async function seedFirestore() {
   alert(`✓ Seed terminé : ${_users.length} users, ${_dos.length} dossiers, ${_notifs.length} notifications`);
 };
 
+/* ================================================================
+   STOCK (lames PVC/polycarbonate) — collections indépendantes de saveData()
+   ================================================================ */
+window.saveStockRef = async function saveStockRef(codeBarre, { type, finition, taille }) {
+  try {
+    const ref = _db.collection('stock_refs').doc(codeBarre);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      await ref.set({ type, finition, taille, quantite: 0, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    }
+  } catch (e) {
+    handleFirestoreError(e, 'saveStockRef');
+  }
+};
+
+window.submitStockMouvement = async function submitStockMouvement(codeBarre, action, qte) {
+  try {
+    const ref = _db.collection('stock_refs').doc(codeBarre);
+    await _db.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      const avant = snap.exists ? (snap.data().quantite || 0) : 0;
+      const delta = action === 'entree' ? qte : action === 'sortie' ? -qte : (qte - avant);
+      const quantiteApres = avant + delta;
+      tx.set(ref, { quantite: quantiteApres }, { merge: true });
+      tx.set(_db.collection('stock_mouvements').doc(), {
+        codeBarre, action, qte, delta, quantiteApres,
+        at: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+  } catch (e) {
+    handleFirestoreError(e, 'submitStockMouvement');
+  }
+};
+
+window.updateStockRef = async function updateStockRef(codeBarre, { type, finition, taille }) {
+  try {
+    await _db.collection('stock_refs').doc(codeBarre).set({ type, finition, taille }, { merge: true });
+  } catch (e) {
+    handleFirestoreError(e, 'updateStockRef');
+  }
+};
+
+window.deleteStockRef = async function deleteStockRef(codeBarre) {
+  try {
+    await _db.collection('stock_refs').doc(codeBarre).delete();
+  } catch (e) {
+    handleFirestoreError(e, 'deleteStockRef');
+  }
+};
+
 function showSaveIndicator(state) {
   const ind = document.getElementById('save-indicator');
   if (!ind) return;
@@ -315,6 +380,8 @@ function refreshCurrentView() {
     planning:        () => typeof renderPlanning       === 'function' && renderPlanning(),
     users:           () => typeof renderUsers          === 'function' && renderUsers(),
     planning_avance: () => typeof _planningAvanceAutoSync === 'function' && _planningAvanceAutoSync(),
+    stock_scan:      () => typeof renderStockScan      === 'function' && renderStockScan(),
+    stock_liste:     () => typeof renderStockListe     === 'function' && renderStockListe(),
   };
   const fn = map[currentTab];
   if (fn) fn();
