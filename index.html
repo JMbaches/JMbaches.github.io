@@ -1774,7 +1774,7 @@ const TAB_GROUPS = {
     tabs:[{id:'atelier',icon:'ti-tool',label:'Atelier',show:()=>can('view_prod')},{id:'atelier_grand',icon:'ti-layout-grid',label:'Grand écran',show:()=>can('view_prod')&&can('atelier_grand')}]},
   'emballage-g':{ icon:'ti-package',         label:'Emballage',  show:()=>can('emballage'),
     tabs:[{id:'emballage_view',icon:'ti-package',label:'Emballage'},{id:'emballage_grand',icon:'ti-layout-grid',label:'Grand écran',show:()=>can('emballage_grand')}]},
-  'stock-g':    { icon:'ti-boxes',           label:'Stock',      show:()=>can('stock'),
+  'stock-g':    { icon:'ti-box-multiple',           label:'Stock',      show:()=>can('stock'),
     tabs:[{id:'stock_scan',icon:'ti-scan',label:'Scanner'},{id:'stock_liste',icon:'ti-list',label:'Références'}]},
 };
 function _tabGroup(tabId) {
@@ -4621,7 +4621,7 @@ function renderStockListe() {
     <button class="btn btn-primary btn-sm" onclick="stockToggleManualForm()"><i class="ti ti-plus"></i> Nouvelle référence</button>
   </div>
   <div id="stock-manual-form-zone" style="margin-bottom:16px"></div>
-  ${refs.length===0 ? `<div class="empty-state"><i class="ti ti-boxes"></i>Aucune référence enregistrée — scannez une lame dans l'onglet Scanner, ou ajoutez-en une manuellement</div>` : `
+  ${refs.length===0 ? `<div class="empty-state"><i class="ti ti-box-multiple"></i>Aucune référence enregistrée — scannez une lame dans l'onglet Scanner, ou ajoutez-en une manuellement</div>` : `
   <div class="table-wrap" style="margin-bottom:24px">
     <table>
       <thead><tr><th>Code</th><th>Type</th><th>Finition</th><th>Taille</th><th>Quantité</th><th></th></tr></thead>
