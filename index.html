@@ -2626,6 +2626,7 @@ ${d.contraintes?`<div class="box danger"><div class="box-label">⚠ Contraintes 
 <div class="grid-4" style="margin-top:10px">
   <div class="field"><label>Type de lame</label><div class="val">${d.typeLame||'—'}</div></div>
   <div class="field"><label>Coloris lames</label><div class="val">${d.lames||'—'}</div></div>
+  <div class="field"><label>Taille lame</label><div class="val">${d.tailleLame||'—'}</div></div>
   <div class="field"><label>Coloris pieds</label><div class="val">${d.pieds||'—'}</div></div>
   <div class="field"><label>Alimentation</label><div class="val">${d.alim||'—'}</div></div>
   <div class="field"><label>Moteur</label><div class="val">${d.moteur||'—'}</div></div>
@@ -2713,12 +2714,24 @@ function renderPageCommande(d, p) { p = p || {};
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:10px">
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Largeur bassin (m)</div><input type="number" step="0.01" min="0" value="${d.largeur||''}" onchange="setDosField('largeur',this.value)" placeholder="ex: 3.50"></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Longueur bassin (m)</div><input type="number" step="0.01" min="0" value="${d.longueur||''}" onchange="setDosField('longueur',this.value)" placeholder="ex: 7.50"></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Type de lame</div><select onchange="setDosField('typeLame',this.value)">
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Type de lame</div><select onchange="setDosField('typeLame',this.value);setDosField('tailleLame','');renderFiche();">
             <option value=""${!d.typeLame?' selected':''}>—</option>
             <option value="PVC"${d.typeLame==='PVC'?' selected':''}>PVC</option>
             <option value="Polycarbonate"${d.typeLame==='Polycarbonate'?' selected':''}>Polycarbonate</option>
           </select></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Coloris lames</div><input value="${d.lames||''}" onchange="setDosField('lames',this.value)" placeholder="ex: Gris"></div>
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Coloris lames</div><input value="${d.lames||''}" onchange="setDosField('lames',this.value);setDosField('tailleLame','');renderFiche();" placeholder="ex: Gris"></div>
+          <div>${(() => {
+            const label = '<div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Taille lame</div>';
+            if (!d.typeLame || !d.lames) return label + '<select disabled><option>— Choisir le type et le coloris d\'abord —</option></select>';
+            const tailles = [...new Set((stockRefs||[])
+              .filter(r => r.type === d.typeLame && (r.finition||'').trim().toLowerCase() === d.lames.trim().toLowerCase())
+              .map(r => r.taille))];
+            if (!tailles.length) return label + '<select disabled><option>Aucune référence stock pour ce type/coloris</option></select>';
+            return label + `<select onchange="setDosField('tailleLame',this.value)">
+              <option value=""${!d.tailleLame?' selected':''}>—</option>
+              ${tailles.map(t=>`<option value="${t}"${d.tailleLame===t?' selected':''}>${t}</option>`).join('')}
+            </select>`;
+          })()}</div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Coloris pieds</div><input value="${d.pieds||''}" onchange="setDosField('pieds',this.value)" placeholder="ex: 7016/Gris"></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Alimentation</div><input value="${d.alim||''}" onchange="setDosField('alim',this.value)" placeholder="ex: 24V"></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Puissance moteur</div><input value="${d.moteur||''}" onchange="setDosField('moteur',this.value)" placeholder="ex: 120BD newton"></div>
