@@ -44,6 +44,8 @@ function parseMegaoText(text) {
   const isVolet   = /^(VR[A-Z0-9]|LAM[A-Z]*\d)/m.test(text);
   const vrM       = text.match(/^(VR[A-Z0-9]+)\s*([A-Z][a-zÀ-ÿé].+)/m);
   const lamM      = text.match(/^(LAM[A-Z0-9]+)\s*([A-Z][a-zÀ-ÿé].+)/m);
+  // Type de lame : le code produit distingue PVC (LAM…) et Polycarbonate (LAMPOL…)
+  const typeLame  = lamM ? (/POL/i.test(lamM[1]) ? 'Polycarbonate' : 'PVC') : '';
   const trspM     = text.match(/^(TRSP[A-Z0-9]+)\s*([A-Z][a-zÀ-ÿé].+)/m);
   const instM     = text.match(/^(TRSP[A-Z0-9]*(?:PINST|INST)(\d{2,3})[A-Z0-9]*)/im);
   const enlevM    = text.match(/^(ENLEV[A-Z0-9]+)/im);
@@ -137,7 +139,7 @@ function parseMegaoText(text) {
 
   return {
     ref, refCommande: ref, client, contact, tel, email, adresse, cp, ville,
-    structure, lames, pieds, alim, moteur,
+    structure, lames, pieds, alim, moteur, typeLame,
     options: '', remarques: '', autres: '',
     largeur, longueur, revendeur,
     transport, ht, dateFrom, isVolet,
@@ -201,7 +203,7 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
     const doc    = { id: dosId, ref: docRef };
     const prev   = existing.data();
     const fields = ['client','tel','email','contact','adresse','cp','ville',
-                    'structure','lames','pieds','alim','moteur','options','remarques','autres','transport',
+                    'structure','lames','typeLame','pieds','alim','moteur','options','remarques','autres','transport',
                     'largeur','longueur','revendeur','refCommande'];
     const update = {};
     for (const f of fields) {
@@ -237,6 +239,7 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
       structure:   data.structure  || '',
       options:     data.options    || '',
       lames:       data.lames      || '',
+      typeLame:    data.typeLame   || '',
       pieds:       data.pieds      || '',
       alim:        data.alim       || '',
       moteur:      data.moteur     || '',
@@ -313,7 +316,7 @@ async function upsertDercyaPair(dercyaItem, poseItem) {
       client: data.client || '', tel: data.tel || '', email: data.email || '',
       contact: data.contact || '', adresse: data.adresse || '', cp: data.cp || '',
       ville: data.ville || '', contraintes: '', structure: data.structure || '',
-      options: data.options || '', lames: data.lames || '', pieds: data.pieds || '',
+      options: data.options || '', lames: data.lames || '', typeLame: data.typeLame || '', pieds: data.pieds || '',
       alim: data.alim || '', moteur: data.moteur || '', ht: data.ht || 0, tva: 20,
       ref: data.ref, refCommande: data.ref, devisStatut: 'accepte',
       dateFrom: data.dateFrom || today, dateTo: '', dateLivraison: data.dateFrom || today,

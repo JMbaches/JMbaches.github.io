@@ -2624,6 +2624,7 @@ ${d.contraintes?`<div class="box danger"><div class="box-label">⚠ Contraintes 
   ${canSeeCA()?`<div class="field"><label>Montant TTC</label><div class="val big accent">${ttc(d).toLocaleString('fr-FR',{minimumFractionDigits:2})} €</div></div>`:``}
 </div>
 <div class="grid-4" style="margin-top:10px">
+  <div class="field"><label>Type de lame</label><div class="val">${d.typeLame||'—'}</div></div>
   <div class="field"><label>Coloris lames</label><div class="val">${d.lames||'—'}</div></div>
   <div class="field"><label>Coloris pieds</label><div class="val">${d.pieds||'—'}</div></div>
   <div class="field"><label>Alimentation</label><div class="val">${d.alim||'—'}</div></div>
@@ -2712,6 +2713,11 @@ function renderPageCommande(d, p) { p = p || {};
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:10px">
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Largeur bassin (m)</div><input type="number" step="0.01" min="0" value="${d.largeur||''}" onchange="setDosField('largeur',this.value)" placeholder="ex: 3.50"></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Longueur bassin (m)</div><input type="number" step="0.01" min="0" value="${d.longueur||''}" onchange="setDosField('longueur',this.value)" placeholder="ex: 7.50"></div>
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Type de lame</div><select onchange="setDosField('typeLame',this.value)">
+            <option value=""${!d.typeLame?' selected':''}>—</option>
+            <option value="PVC"${d.typeLame==='PVC'?' selected':''}>PVC</option>
+            <option value="Polycarbonate"${d.typeLame==='Polycarbonate'?' selected':''}>Polycarbonate</option>
+          </select></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Coloris lames</div><input value="${d.lames||''}" onchange="setDosField('lames',this.value)" placeholder="ex: Gris"></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Coloris pieds</div><input value="${d.pieds||''}" onchange="setDosField('pieds',this.value)" placeholder="ex: 7016/Gris"></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Alimentation</div><input value="${d.alim||''}" onchange="setDosField('alim',this.value)" placeholder="ex: 24V"></div>
