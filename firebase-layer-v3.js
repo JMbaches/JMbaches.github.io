@@ -293,12 +293,12 @@ window.seedFirestore = async function seedFirestore() {
 /* ================================================================
    STOCK (lames PVC/polycarbonate) — collections indépendantes de saveData()
    ================================================================ */
-window.saveStockRef = async function saveStockRef(codeBarre, { type, finition, taille }) {
+window.saveStockRef = async function saveStockRef(codeBarre, { type, finition, taille, minimum }) {
   try {
     const ref = _db.collection('stock_refs').doc(codeBarre);
     const snap = await ref.get();
     if (!snap.exists) {
-      await ref.set({ type, finition, taille, quantite: 0, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+      await ref.set({ type, finition, taille, minimum: minimum || 0, quantite: 0, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
     }
   } catch (e) {
     handleFirestoreError(e, 'saveStockRef');
@@ -324,9 +324,9 @@ window.submitStockMouvement = async function submitStockMouvement(codeBarre, act
   }
 };
 
-window.updateStockRef = async function updateStockRef(codeBarre, { type, finition, taille }) {
+window.updateStockRef = async function updateStockRef(codeBarre, { type, finition, taille, minimum }) {
   try {
-    await _db.collection('stock_refs').doc(codeBarre).set({ type, finition, taille }, { merge: true });
+    await _db.collection('stock_refs').doc(codeBarre).set({ type, finition, taille, minimum: minimum || 0 }, { merge: true });
   } catch (e) {
     handleFirestoreError(e, 'updateStockRef');
   }
@@ -337,6 +337,28 @@ window.deleteStockRef = async function deleteStockRef(codeBarre) {
     await _db.collection('stock_refs').doc(codeBarre).delete();
   } catch (e) {
     handleFirestoreError(e, 'deleteStockRef');
+  }
+};
+
+// Pièces détachées hors lames (alimentation, aluminium, moteur...) — pas de code-barre, ID auto
+window.saveCatStockRef = async function saveCatStockRef(categorie, { label, minimum }) {
+  try {
+    const docRef = await _db.collection('stock_refs').add({
+      categorie, label, minimum: minimum || 0, quantite: 0,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    return docRef.id;
+  } catch (e) {
+    handleFirestoreError(e, 'saveCatStockRef');
+    return null;
+  }
+};
+
+window.updateCatStockRef = async function updateCatStockRef(id, { label, minimum }) {
+  try {
+    await _db.collection('stock_refs').doc(id).set({ label, minimum: minimum || 0 }, { merge: true });
+  } catch (e) {
+    handleFirestoreError(e, 'updateCatStockRef');
   }
 };
 
@@ -370,6 +392,11 @@ function showLoadingOverlay(show) {
 
 function refreshCurrentView() {
   if (typeof currentTab === 'undefined') return;
+  if (typeof currentTab === 'string' && currentTab.startsWith('stock_cat_')) {
+    if (typeof renderStockCategorie === 'function') renderStockCategorie(currentTab.slice('stock_cat_'.length));
+    updateBadge?.();
+    return;
+  }
   const map = {
     dashboard:       () => typeof renderDashboard      === 'function' && renderDashboard(),
     dossiers:        () => typeof renderDos            === 'function' && renderDos(),
