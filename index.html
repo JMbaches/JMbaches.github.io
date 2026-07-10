@@ -3066,7 +3066,7 @@ async function deleteDossierDoc(dosId,docId){
   if(doc?.path&&window._storage){try{await window._storage.ref(doc.path).delete();}catch(e){console.warn(e);}}
   d.documents=d.documents.filter(x=>x.id!==docId);
   logHistory(dosId,'document','Document supprimé',doc?.name||'');
-  await saveData();
+  await (window.saveDataNow ? saveDataNow() : saveData());
   if(_pdDosId===dosId) renderPorteDoc(); else renderFiche();
 }
 
@@ -3774,10 +3774,12 @@ function supprimerFicheTechnique(dosId) {
   if (!confirm('Supprimer la fiche de fabrication de ce dossier ?')) return;
   const d = dossiers.find(x => x.id === dosId);
   if (!d) return;
-  delete d.ficheTechniqueB64;
-  delete d.ficheTechniqueNom;
-  delete d.ficheTechniqueDate;
-  saveData();
+  // NB: on met à null plutôt que 'delete' — saveData écrit avec merge:true, qui ne peut pas
+  // effacer un champ simplement absent de l'objet ; il faut lui donner une valeur explicite.
+  d.ficheTechniqueB64 = null;
+  d.ficheTechniqueNom = null;
+  d.ficheTechniqueDate = null;
+  saveDataNow ? saveDataNow() : saveData();
   showToast('Fiche de fabrication supprimée');
   if(_pdDosId===dosId) renderPorteDoc();
 }
@@ -6296,7 +6298,7 @@ function piloExportCSV(){
   };
   window.saveDataNow = function() {
     clearTimeout(_t);
-    if (_orig) _orig();
+    return _orig ? _orig() : Promise.resolve();
   };
 })();
 </script>
