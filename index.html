@@ -3152,7 +3152,7 @@ function ouvrirFicheCalcul(dosId) {
       <div style="font-size:13px;font-weight:600;flex:1"><i class="ti ti-calculator"></i> Fiche de calcul — ${d.client} (${d.id})</div>
       <button class="btn btn-ghost btn-sm" onclick="fermerFicheCalcul()"><i class="ti ti-x"></i> Fermer</button>
     </div>
-    <iframe id="fiche-calcul-iframe" src="subapp_calculs.html" style="flex:1;border:none;width:100%"></iframe>`;
+    <iframe id="fiche-calcul-iframe" src="subapp_calculs.html?v=${Date.now()}" style="flex:1;border:none;width:100%"></iframe>`;
   document.body.appendChild(overlay);
 }
 
