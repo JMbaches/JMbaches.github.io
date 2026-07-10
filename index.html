@@ -2918,6 +2918,11 @@ function openPorteDoc(dosId){
   if(!d.docFolders||d.docFolders.length===0){
     d.docFolders=[...PD_DEFAULT_FOLDERS];
     saveData();
+  } else if(d.docFolders.includes('Fiche produit')){
+    // Migration : renommage de l'ancien dossier "Fiche produit" en "Fiche de fabrication"
+    d.docFolders=d.docFolders.map(f=>f==='Fiche produit'?'Fiche de fabrication':f);
+    (d.documents||[]).forEach(doc=>{ if(doc.folder==='Fiche produit') doc.folder='Fiche de fabrication'; });
+    saveData();
   }
   const lbl=document.getElementById('pd-dos-label');
   if(lbl) lbl.textContent=(d.client||'')+(d.ref?' — '+d.ref:'');
@@ -3212,7 +3217,7 @@ async function receptionnerPdfFicheCalcul({ dossierId, filename, base64 }) {
     const snap = await window._storage.ref(path).put(blob);
     const url = await snap.ref.getDownloadURL();
     if (!d.documents) d.documents = [];
-    d.documents.push({ id: Date.now()+'_'+Math.random().toString(36).slice(2), name: safe, url, path, type: 'application/pdf', size: blob.size, folder: 'Général', uploadedBy: currentUser.id, uploadedAt: now() });
+    d.documents.push({ id: Date.now()+'_'+Math.random().toString(36).slice(2), name: safe, url, path, type: 'application/pdf', size: blob.size, folder: 'Fiche de fabrication', uploadedBy: currentUser.id, uploadedAt: now() });
     logHistory(dossierId, 'document', 'Fiche de calcul déposée dans le porte-document', safe);
     await saveData();
     showToast('PDF déposé dans le porte-document du dossier');
