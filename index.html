@@ -1413,7 +1413,7 @@ const NOTIF_RULES = [
   {trigger:'statut:posé',       targets:['compta','direction'], icon:'ti-circle-check', bg:'#E1F5EE',c:'#085041', title:d=>`Dossier posé et clôturé`,              body:d=>`${d.client} — TTC : ${ttc(d).toLocaleString('fr-FR',{minimumFractionDigits:2})} €`},
   {trigger:'statut:retiré',     targets:['compta','direction'], icon:'ti-circle-check', bg:'#F3F4F6',c:'#374151', title:d=>`Dossier enlevé`,                       body:d=>`${d.client} — TTC : ${ttc(d).toLocaleString('fr-FR',{minimumFractionDigits:2})} €`},
   {trigger:'commentaire',       targets:['direction','admin'],  icon:'ti-message',      bg:'#EEEDFE',c:'#3C3489', title:d=>`Note ajoutée`,                        body:(d,det)=>`${d.client} — "${(det||'').slice(0,50)}"`},
-  {trigger:'fiche_technique',   targets:['ouvrier'],            icon:'ti-file-description', bg:'#FAEEDA',c:'#633806', title:d=>`Fiche technique disponible`,      body:d=>`${d.client} — ${d.structure||'—'} · Prête pour fabrication`},
+  {trigger:'fiche_technique',   targets:['ouvrier'],            icon:'ti-file-description', bg:'#FAEEDA',c:'#633806', title:d=>`Fiche de fabrication disponible`,      body:d=>`${d.client} — ${d.structure||'—'} · Prête pour fabrication`},
 ];
 const VERIF_ROWS = ['Rayons','Pans coupés','Lames coupées','Lames finies','Axe','Contre axe + rails','Découpe ESC en équerre','Découpe ESC en lisse','Poutre + cornière','Cloison','Caillebotis'];
 const VERIF_EXP = ['Longueur','Colis'];
@@ -1778,7 +1778,7 @@ const TAB_GROUPS = {
   'dos-g':      { icon:'ti-clipboard-list', label:'Dossiers',    show:()=>can('view_all')||can('create'),
     tabs:[{id:'dos',icon:'ti-list',label:'Liste'},{id:'archives',icon:'ti-archive',label:'Archives'}]},
   'admin-g':    { icon:'ti-file-description',label:'Admin',      show:()=>currentUser&&['admin','verif','direction'].includes(currentUser.role),
-    tabs:[{id:'admin_saisie',icon:'ti-pencil',label:'Saisie'},{id:'admin_verif',icon:'ti-check',label:'Vérification'},{id:'metreur',icon:'ti-ruler',label:'Fiches techniques',show:()=>can('metreur')}]},
+    tabs:[{id:'admin_saisie',icon:'ti-pencil',label:'Saisie'},{id:'admin_verif',icon:'ti-check',label:'Vérification'}]},
   'atelier-g':  { icon:'ti-tool',            label:'Atelier',    show:()=>can('view_prod'),
     tabs:[{id:'atelier',icon:'ti-tool',label:'Atelier',show:()=>can('view_prod')},{id:'atelier_grand',icon:'ti-layout-grid',label:'Grand écran',show:()=>can('view_prod')&&can('atelier_grand')}]},
   'emballage-g':{ icon:'ti-package',         label:'Emballage',  show:()=>can('emballage'),
@@ -1864,7 +1864,6 @@ function goTab(tab) {
   else if(tab==='archives') renderArchives();
   else if(tab==='atelier') renderAtelier();
   else if(tab==='atelier_grand') renderAtelierGrand();
-  else if(tab==='metreur') renderMetreur();
   else if(tab==='emballage_view') renderEmballage();
   else if(tab==='emballage_grand') renderEmballageGrand();
   else if(tab==='stock_scan') renderStockScan();
@@ -2027,7 +2026,6 @@ function refreshGlobalSearch() {
   if (currentTab === 'dos') renderDos();
   else if (currentTab === 'atelier') renderAtelier();
   else if (currentTab === 'atelier_grand') renderAtelierGrand();
-  else if (currentTab === 'metreur') renderMetreur();
   else if (currentTab === 'emballage_view') renderEmballage();
   else if (currentTab === 'emballage_grand') renderEmballageGrand();
 }
@@ -2912,7 +2910,7 @@ function fileSize(b) {
 // ---- PORTE-DOCUMENT ----
 let _pdDosId=null, _pdFolder='Général';
 
-const PD_DEFAULT_FOLDERS=['Bon de commande','Facture','Fiche de côte','Fiche produit'];
+const PD_DEFAULT_FOLDERS=['Bon de commande','Facture','Fiche de côte','Fiche de fabrication'];
 
 function openPorteDoc(dosId){
   _pdDosId=dosId; _pdFolder='Général';
@@ -2970,13 +2968,13 @@ function renderPorteDoc(){
     <div id="pd-upload-progress" style="display:none;padding:8px 12px;background:var(--accent-light);border-radius:var(--radius);font-size:12px;color:var(--accent-deep);margin-bottom:12px;align-items:center;gap:8px">
       <i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Upload en cours…
     </div>`:''}
-    ${_pdFolder==='Fiche produit'?`<div style="margin-bottom:14px">
-      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-faint);margin-bottom:8px"><i class="ti ti-file-description" style="margin-right:4px"></i>Fiche technique PDF</div>
+    ${_pdFolder==='Fiche de fabrication'?`<div style="margin-bottom:14px">
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-faint);margin-bottom:8px"><i class="ti ti-file-description" style="margin-right:4px"></i>Fiche de fabrication</div>
       ${d.ficheTechniqueB64?`
       <div style="display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px">
         <i class="ti ti-file-type-pdf" style="font-size:22px;color:#E53E3E"></i>
         <div style="flex:1">
-          <div style="font-size:13px;font-weight:600">${d.ficheTechniqueNom||'fiche-technique.pdf'}</div>
+          <div style="font-size:13px;font-weight:600">${d.ficheTechniqueNom||'fiche-de-fabrication.pdf'}</div>
           <div style="font-size:11px;color:var(--ink-faint)">Importée le ${d.ficheTechniqueDate||'—'}</div>
         </div>
         <button class="btn btn-ghost btn-sm" onclick="voirFicheTechnique('${_pdDosId}')"><i class="ti ti-eye"></i> Voir</button>
@@ -2984,12 +2982,12 @@ function renderPorteDoc(){
       </div>`:`
       <label style="display:flex;align-items:center;gap:10px;border:2px dashed var(--border-strong);border-radius:var(--radius);padding:14px;cursor:pointer;color:var(--ink-faint);font-size:13px">
         <i class="ti ti-upload" style="font-size:20px"></i>
-        <span>Importer la fiche technique PDF <span style="font-size:11px">(max 800 Ko)</span></span>
+        <span>Importer la fiche de fabrication PDF <span style="font-size:11px">(max 800 Ko)</span></span>
         <input type="file" accept=".pdf" style="display:none" onchange="importerFicheTechnique('${_pdDosId}',this)">
       </label>`}
     </div>`:''}
     ${folderDocs.length===0
-      ?`<div style="text-align:center;color:var(--ink-faint);font-size:13px;padding:${_pdFolder==='Fiche produit'?'8':'24'}px 0">Aucun fichier dans ce dossier</div>`
+      ?`<div style="text-align:center;color:var(--ink-faint);font-size:13px;padding:${_pdFolder==='Fiche de fabrication'?'8':'24'}px 0">Aucun fichier dans ce dossier</div>`
       :`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
         ${folderDocs.map(doc=>{
           const isImg=doc.type&&doc.type.startsWith('image/');
@@ -3738,82 +3736,6 @@ function saveDossier() {
    AUTRES VUES
    ================================================================ */
 
-function renderMetreur() {
-  const actifs = filteredDossiers(dossiers.filter(d => !isDossierCloture(d)));
-  const mc = document.getElementById('main-content');
-  mc.innerHTML = `
-  <div class="section-header">
-    <div class="section-title"><i class="ti ti-file-description" style="vertical-align:-2px;margin-right:6px"></i>Fiches techniques</div>
-  </div>
-  <div style="display:grid;gap:12px">
-    ${actifs.map(d => {
-      const hasFiche = !!(d.ficheTechniqueNom);
-      return `<div class="card" style="padding:0;overflow:hidden">
-      <!-- En-tête dossier -->
-      <div style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-bottom:1px solid var(--border)">
-        <div style="flex:1">
-          <div style="font-size:14px;font-weight:600">${d.client} <span style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--ink-faint);font-weight:400">${d.id}</span></div>
-          <div style="font-size:12px;color:var(--ink-soft)">${d.structure||'&#8212;'}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          ${hasFiche ? `<span style="display:inline-flex;align-items:center;gap:5px;background:#E1F5EE;color:#085041;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600"><i class="ti ti-circle-check"></i> Fiche envoyée</span>` : `<span style="display:inline-flex;align-items:center;gap:5px;background:#FEF3C7;color:#92400E;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600"><i class="ti ti-clock"></i> En attente</span>`}
-          ${statBadge(d.statut)}
-        </div>
-      </div>
-
-      <!-- Champs métrés -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:0">
-        ${[
-          {label:'Largeur',field:'largeur',unit:'m'},
-          {label:'Longueur',field:'longueur',unit:'m'},
-          {label:'Hauteur coffre',field:'hauteur',unit:'m'},
-          {label:'Surface',field:'surface',unit:'m²'},
-          {label:'Lames',field:'lames',unit:''},
-          {label:'Pieds',field:'pieds',unit:''},
-          {label:'Alimentation',field:'alim',unit:''},
-          {label:'Moteur',field:'moteur',unit:''},
-        ].map(f => `<div style="padding:10px 14px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)">
-          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-faint);margin-bottom:4px">${f.label}${f.unit?' ('+f.unit+')':''}</div>
-          <input value="${d[f.field]||''}" placeholder="—" onchange="setDosFieldDirect('${d.id}','${f.field}',this.value)" style="background:transparent;border:none;border-bottom:1px dashed var(--border-strong);font-size:14px;font-weight:500;color:var(--ink);padding:2px 0;width:100%">
-        </div>`).join('')}
-      </div>
-
-      <!-- Notes de métrage -->
-      <div style="padding:10px 14px;border-top:1px solid var(--border)">
-        <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-faint);margin-bottom:5px">Notes de métrage</div>
-        <textarea placeholder="Cotes, observations, croquis textuels..." style="min-height:50px;border:1px dashed var(--border-strong);border-radius:var(--radius);padding:8px;font-size:13px;background:transparent;color:var(--ink);width:100%" onchange="setDosFieldDirect('${d.id}','notesMetreur',this.value)">${d.notesMetreur||''}</textarea>
-      </div>
-
-      <!-- Section fiche technique PDF -->
-      <div style="padding:12px 16px;border-top:2px solid var(--border);background:var(--bg)">
-        <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-faint);margin-bottom:8px"><i class="ti ti-file-description" style="margin-right:4px"></i>Fiche technique PDF</div>
-        ${hasFiche ? `
-        <div style="display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px">
-          <i class="ti ti-file-type-pdf" style="font-size:22px;color:#E53E3E"></i>
-          <div style="flex:1">
-            <div style="font-size:13px;font-weight:600;color:var(--ink)">${d.ficheTechniqueNom}</div>
-            <div style="font-size:11px;color:var(--ink-faint)">Importée le ${d.ficheTechniqueDate||'—'}</div>
-          </div>
-          <button class="btn btn-ghost btn-sm" onclick="voirFicheTechnique('${d.id}')" title="Ouvrir le PDF"><i class="ti ti-eye"></i> Voir</button>
-          <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="supprimerFicheTechnique('${d.id}')" title="Supprimer"><i class="ti ti-trash"></i></button>
-        </div>
-        ` : `
-        <div style="border:2px dashed var(--border-strong);border-radius:var(--radius);padding:20px;text-align:center;color:var(--ink-faint)">
-          <i class="ti ti-upload" style="font-size:24px;margin-bottom:6px;display:block"></i>
-          <div style="font-size:13px;margin-bottom:10px">Importer une fiche technique PDF</div>
-          <label style="cursor:pointer">
-            <input type="file" accept=".pdf" style="display:none" onchange="importerFicheTechnique('${d.id}', this)">
-            <span class="btn btn-primary btn-sm"><i class="ti ti-file-plus"></i> Choisir un PDF</span>
-          </label>
-          <div style="font-size:11px;margin-top:8px;color:var(--ink-faint)">Max 800 KB — sera transmis à l'atelier</div>
-        </div>
-        `}
-      </div>
-    </div>`;
-    }).join('')}
-  </div>`;
-}
-
 function importerFicheTechnique(dosId, input) {
   const file = input.files[0];
   if (!file) return;
@@ -3830,8 +3752,7 @@ function importerFicheTechnique(dosId, input) {
     d.ficheTechniqueDate = new Date().toLocaleDateString('fr-FR');
     saveData();
     pushNotif('fiche_technique', dosId, d);
-    showToast('Fiche technique importée — l\'atelier a été notifié ✓');
-    renderMetreur();
+    showToast('Fiche de fabrication importée — l\'atelier a été notifié ✓');
     if(_pdDosId===dosId) renderPorteDoc();
   };
   reader.readAsDataURL(file);
@@ -3845,15 +3766,14 @@ function voirFicheTechnique(dosId) {
 }
 
 function supprimerFicheTechnique(dosId) {
-  if (!confirm('Supprimer la fiche technique de ce dossier ?')) return;
+  if (!confirm('Supprimer la fiche de fabrication de ce dossier ?')) return;
   const d = dossiers.find(x => x.id === dosId);
   if (!d) return;
   delete d.ficheTechniqueB64;
   delete d.ficheTechniqueNom;
   delete d.ficheTechniqueDate;
   saveData();
-  showToast('Fiche technique supprimée');
-  renderMetreur();
+  showToast('Fiche de fabrication supprimée');
   if(_pdDosId===dosId) renderPorteDoc();
 }
 function printFeuilLivraison(id) {
