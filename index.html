@@ -3192,7 +3192,37 @@ window.addEventListener('message', (ev) => {
     fermerFicheCalcul();
     if (currentDosId === d.id) renderFiche();
   }
+
+  if (msg.type === 'jmb:pdf') {
+    receptionnerPdfFicheCalcul(msg.payload);
+  }
 });
+
+// Reçoit le PDF généré par la fiche de calcul (base64) et le dépose dans le porte-document du dossier,
+// exactement comme un upload manuel (même chemin Storage, même structure d.documents).
+async function receptionnerPdfFicheCalcul({ dossierId, filename, base64 }) {
+  const d = dossiers.find(x => x.id === dossierId); if (!d) return;
+  if (!window._storage) { showToast('⚠ Storage non configuré — PDF non déposé dans le porte-document'); return; }
+  try {
+    const byteChars = atob(base64);
+    const bytes = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const safe = (filename||'fiche-calcul.pdf').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    const path = `dossiers/${dossierId}/${Date.now()}_${safe}`;
+    const snap = await window._storage.ref(path).put(blob);
+    const url = await snap.ref.getDownloadURL();
+    if (!d.documents) d.documents = [];
+    d.documents.push({ id: Date.now()+'_'+Math.random().toString(36).slice(2), name: safe, url, path, type: 'application/pdf', size: blob.size, folder: 'Général', uploadedBy: currentUser.id, uploadedAt: now() });
+    logHistory(dossierId, 'document', 'Fiche de calcul déposée dans le porte-document', safe);
+    await saveData();
+    showToast('PDF déposé dans le porte-document du dossier');
+    if (currentDosId === dossierId) renderFiche();
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Erreur lors du dépôt du PDF dans le porte-document');
+  }
+}
 async function avancerFiche() {
   const d=dossiers.find(x=>x.id===currentDosId); if(!d||isDossierCloture(d)) return;
   let next;

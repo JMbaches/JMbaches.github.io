@@ -1500,7 +1500,15 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans texte avant o
       doc.text(fullName,M+CW,287,{align:'right'});
 
       const clean=s=>(s||'').toString().replace(/[^\w\-]+/g,'-').replace(/^-+|-+$/g,'');
-      doc.save('Fiche_'+material+'_'+type+(f.ref?('_'+clean(f.ref)):'')+'.pdf');
+      const filename='Fiche_'+material+'_'+type+(f.ref?('_'+clean(f.ref)):'')+'.pdf';
+      if(isEmbedded && dossierId){
+        const base64=doc.output('datauristring').split(',')[1];
+        window.parent.postMessage({type:'jmb:pdf', payload:{dossierId, filename, base64}}, '*');
+        setSavedMsg('PDF envoyé au porte-document du dossier ✓');
+        setTimeout(()=>setSavedMsg(''),3000);
+      } else {
+        doc.save(filename);
+      }
     }catch(e){ console.error(e); window.print(); }
     setPdfBusy(false);
     saveFiche({auto:true});
