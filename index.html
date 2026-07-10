@@ -2924,6 +2924,16 @@ function openPorteDoc(dosId){
     (d.documents||[]).forEach(doc=>{ if(doc.folder==='Fiche produit') doc.folder='Fiche de fabrication'; });
     saveData();
   }
+  if(d.ficheTechniqueB64){
+    // Migration : l'ancien widget dédié "fiche technique" est retiré — on bascule son contenu
+    // (s'il en reste) vers un document normal dans le dossier "Fiche de fabrication".
+    if(!d.docFolders) d.docFolders=[...PD_DEFAULT_FOLDERS];
+    if(!d.docFolders.includes('Fiche de fabrication')) d.docFolders.push('Fiche de fabrication');
+    if(!d.documents) d.documents=[];
+    d.documents.push({ id:Date.now()+'_'+Math.random().toString(36).slice(2), name:d.ficheTechniqueNom||'fiche-de-fabrication.pdf', url:d.ficheTechniqueB64, path:null, type:'application/pdf', size:null, folder:'Fiche de fabrication', uploadedBy:currentUser.id, uploadedAt:now() });
+    d.ficheTechniqueB64=null; d.ficheTechniqueNom=null; d.ficheTechniqueDate=null;
+    saveData();
+  }
   const lbl=document.getElementById('pd-dos-label');
   if(lbl) lbl.textContent=(d.client||'')+(d.ref?' — '+d.ref:'');
   renderPorteDoc();
@@ -2973,26 +2983,8 @@ function renderPorteDoc(){
     <div id="pd-upload-progress" style="display:none;padding:8px 12px;background:var(--accent-light);border-radius:var(--radius);font-size:12px;color:var(--accent-deep);margin-bottom:12px;align-items:center;gap:8px">
       <i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Upload en cours…
     </div>`:''}
-    ${_pdFolder==='Fiche de fabrication'?`<div style="margin-bottom:14px">
-      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-faint);margin-bottom:8px"><i class="ti ti-file-description" style="margin-right:4px"></i>Fiche de fabrication</div>
-      ${d.ficheTechniqueB64?`
-      <div style="display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px">
-        <i class="ti ti-file-type-pdf" style="font-size:22px;color:#E53E3E"></i>
-        <div style="flex:1">
-          <div style="font-size:13px;font-weight:600">${d.ficheTechniqueNom||'fiche-de-fabrication.pdf'}</div>
-          <div style="font-size:11px;color:var(--ink-faint)">Importée le ${d.ficheTechniqueDate||'—'}</div>
-        </div>
-        <button class="btn btn-ghost btn-sm" onclick="voirFicheTechnique('${_pdDosId}')"><i class="ti ti-eye"></i> Voir</button>
-        ${editable?`<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="supprimerFicheTechnique('${_pdDosId}')"><i class="ti ti-trash"></i></button>`:''}
-      </div>`:`
-      <label style="display:flex;align-items:center;gap:10px;border:2px dashed var(--border-strong);border-radius:var(--radius);padding:14px;cursor:pointer;color:var(--ink-faint);font-size:13px">
-        <i class="ti ti-upload" style="font-size:20px"></i>
-        <span>Importer la fiche de fabrication PDF <span style="font-size:11px">(max 800 Ko)</span></span>
-        <input type="file" accept=".pdf" style="display:none" onchange="importerFicheTechnique('${_pdDosId}',this)">
-      </label>`}
-    </div>`:''}
     ${folderDocs.length===0
-      ?`<div style="text-align:center;color:var(--ink-faint);font-size:13px;padding:${_pdFolder==='Fiche de fabrication'?'8':'24'}px 0">Aucun fichier dans ce dossier</div>`
+      ?`<div style="text-align:center;color:var(--ink-faint);font-size:13px;padding:24px 0">Aucun fichier dans ce dossier</div>`
       :`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
         ${folderDocs.map(doc=>{
           const isImg=doc.type&&doc.type.startsWith('image/');
