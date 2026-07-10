@@ -2389,6 +2389,7 @@ function renderDos() {
           <td><span style="font-size:12px;color:var(--ink-faint)">${d.history.length} action${d.history.length>1?'s':''}</span></td>
           <td onclick="event.stopPropagation()">
             <div style="display:flex;gap:5px;flex-wrap:wrap">
+              ${currentTab==='admin_verif'?`<button class="btn btn-primary btn-sm" onclick="ouvrirFicheCalcul('${d.id}')" title="Ouvrir directement la fiche de calcul"><i class="ti ti-calculator"></i> Fiche de calcul</button>`:''}
               <button class="btn btn-ghost btn-sm" onclick="openFiche('${d.id}')"><i class="ti ti-file-description"></i> Fiche</button>
               ${can('advance')&&!isDossierCloture(d)?`<button class="btn btn-secondary btn-sm" onclick="avancerDos('${d.id}',event)">${getNextBtnLabel(d).split(' ')[0]}</button>`:''}
               ${can('create')?`<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="supprimerDossier('${d.id}',event)" title="Supprimer le dossier"><i class="ti ti-trash"></i></button>`:''}
