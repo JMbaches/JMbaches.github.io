@@ -1097,6 +1097,11 @@ a:focus-visible, button:focus-visible,
             </select>
           </div>
           <div class="form-group"><label class="form-label">Options</label><input id="f-options" placeholder="ex: Motorisation, Bluetooth..."></div>
+          <div class="form-group"><label class="form-label">Matière des lames</label><select id="f-typeLame">
+            <option value="">—</option>
+            <option value="PVC">PVC</option>
+            <option value="Polycarbonate">Polycarbonate</option>
+          </select></div>
           <div class="form-group"><label class="form-label">Lames</label><input id="f-lames" placeholder="ex: Gris"></div>
           <div class="form-group"><label class="form-label">Pieds</label><input id="f-pieds" placeholder="ex: 7016/Gris"></div>
           <div class="form-group"><label class="form-label">Alimentation</label><input id="f-alim" placeholder="ex: 24V"></div>
@@ -3359,6 +3364,7 @@ function fillFormFromMegao(data) {
   set('f-adresse',   data.adresse);
   set('f-cp',        data.cp);
   set('f-ville',     data.ville);
+  set('f-typeLame',  data.typeLame);
   set('f-lames',     data.lames);
   set('f-pieds',     data.pieds);
   set('f-alim',      data.alim);
@@ -3478,8 +3484,14 @@ async function parseMegaoPDFLocal(file) {
   ];
   const structure = STRUCT_MAP.find(m => m.k.some(k => vrText.includes(k)))?.v || (vrProd ? vrProd.desig : '');
   const lameDesig = lamProd ? lamProd.desig : '';
+  // Matière : cherchée dans la désignation ET le code (ex: "LAMES POLYCARBONATE BLEU (350)" ou code contenant "POLY")
+  const lameMatText = (lameDesig + ' ' + (lamProd ? lamProd.code : '')).toUpperCase();
+  const typeLame = /POLYCARBONATE|\bPOLY\b/.test(lameMatText) ? 'Polycarbonate'
+                 : /\bPVC\b/.test(lameMatText) ? 'PVC' : '';
   const lameParenIdx = lameDesig.lastIndexOf(')');
-  const lames     = lameParenIdx >= 0 ? lameDesig.slice(lameParenIdx + 1).trim() : lameDesig;
+  let lames = lameParenIdx >= 0 ? lameDesig.slice(lameParenIdx + 1).trim() : lameDesig;
+  // Nettoyage défensif : si la matière s'est retrouvée capturée dans le coloris, on la retire
+  lames = lames.replace(/^(POLYCARBONATE|POLY|PVC)\s+/i, '').trim();
 
   // Moteur : suffixe du code VR après le préfixe de structure (VRSIL80S → 80S)
   const moteurM = vrProd ? vrProd.code.match(/^VR(?:SUBT|SUB|MOUV|XTR|COF|SOL|SIL)([A-Z0-9]+)$/i) : null;
@@ -3545,7 +3557,7 @@ async function parseMegaoPDFLocal(file) {
   const ht     = ht1 || (htM2 ? parseFloat(htM2[1].replace(/\s/g,'').replace(',','.')) : 0);
 
   return { ref, client, contact, tel, email, adresse, cp, ville,
-           structure, lames, pieds: '', alim, moteur,
+           structure, typeLame, lames, pieds: '', alim, moteur,
            options: '', remarques: '', autres: '',
            largeur, longueur, revendeur,
            transport, ht, dateFrom, isVolet };
@@ -3595,7 +3607,8 @@ async function parseMegaoPDFClaude(file) {
   "cp": "Code postal",
   "ville": "Ville",
   "structure": "Type de structure (ex: Silver Roll)",
-  "lames": "Coloris lames",
+  "typeLame": "Matière des lames — PVC ou Polycarbonate (déduis-la du texte, ex: 'POLY' ou 'POLYCARBONATE' → Polycarbonate ; sinon PVC si mentionné ; chaîne vide si indéterminable)",
+  "lames": "Coloris lames (uniquement la couleur, sans la matière)",
   "pieds": "Coloris pieds",
   "alim": "Alimentation (ex: 24V)",
   "moteur": "Puissance moteur (ex: 120BD newton)",
@@ -3654,7 +3667,7 @@ async function handleMegaoPDF(input) {
 }
 
 function openNewDos() {
-  ['f-client','f-tel','f-email','f-contact','f-revendeur','f-adresse','f-cp','f-ville','f-contraintes','f-options','f-lames','f-pieds','f-alim','f-moteur','f-ref','f-remarques','f-autres','f-largeur','f-longueur','f-surface','f-hauteur','f-profondeur','f-notes-dims'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['f-client','f-tel','f-email','f-contact','f-revendeur','f-adresse','f-cp','f-ville','f-contraintes','f-options','f-typeLame','f-lames','f-pieds','f-alim','f-moteur','f-ref','f-remarques','f-autres','f-largeur','f-longueur','f-surface','f-hauteur','f-profondeur','f-notes-dims'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const np=document.getElementById('f-need-pose');if(np)np.checked=false;;
   document.getElementById('f-structure').value='';
   document.getElementById('f-tva').value='20';
@@ -3706,6 +3719,7 @@ function saveDossier() {
     contraintes:document.getElementById('f-contraintes').value,
     structure:document.getElementById('f-structure').value,options:document.getElementById('f-options').value,
     lames:document.getElementById('f-lames').value,pieds:document.getElementById('f-pieds').value,
+    typeLame:document.getElementById('f-typeLame')?.value||'',
     alim:document.getElementById('f-alim').value,moteur:document.getElementById('f-moteur').value,
     ht,tva,ref:document.getElementById('f-ref').value,devisStatut:document.getElementById('f-devis-statut').value,
     dateFrom:document.getElementById('f-date-from').value,dateTo:document.getElementById('f-date-to').value,
