@@ -943,7 +943,36 @@ function App(){
   const [savedAt,setSavedAt]=useState(null);     // horodatage dernière sauvegarde auto
   const [savedMsg,setSavedMsg]=useState('');     // message de confirmation sauvegarde manuelle
   const [importMsg,setImportMsg]=useState('');   // message retour import JSON
-  // --- Import PDF ---
+
+  // --- Intégration dans l'app principale (index.html) via iframe + postMessage ---
+  // Préremplissage depuis le dossier : le parent envoie {type:'jmb:init', payload:{material,type,fields,dossierId}}
+  // une fois qu'on lui a signalé qu'on est prêt. On applique material/type d'abord (déclenche un re-render),
+  // puis les champs individuels au rendu suivant (set() dépend de material/type déjà à jour).
+  const isEmbedded = (typeof window!=='undefined' && window.parent && window.parent!==window);
+  const [dossierId,setDossierId]=useState(null);
+  const pendingFieldsRef=useRef(null);
+  useEffect(()=>{
+    if(!isEmbedded) return;
+    function onMsg(ev){
+      const d=ev.data;
+      if(!d||d.type!=='jmb:init') return;
+      const p=d.payload||{};
+      setDossierId(p.dossierId||null);
+      if(p.fields) pendingFieldsRef.current=p.fields;
+      if(p.material) setMaterial(p.material);
+      if(p.type) setType(p.type);
+    }
+    window.addEventListener('message',onMsg);
+    window.parent.postMessage({type:'jmb:ready'},'*');
+    return ()=>window.removeEventListener('message',onMsg);
+  },[isEmbedded]);
+  useEffect(()=>{
+    if(!pendingFieldsRef.current) return;
+    const fields=pendingFieldsRef.current; pendingFieldsRef.current=null;
+    setAll(s=>({...s,[material]:{...s[material],[type]:{...s[material][type],...fields}}}));
+  },[material,type]);
+
+  // --- Lecture PDF via Claude Vision ---
   const [apiKey,setApiKey]=useState(()=>localStorage.getItem('jmb_apikey')||'');
   const [showApiKey,setShowApiKey]=useState(false);
   const [pdfReading,setPdfReading]=useState(false);   // lecture PDF en cours
@@ -1478,6 +1507,26 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans texte avant o
   };
   const printFiche=()=>{ saveFiche({auto:true}); window.print(); };
 
+  // Renvoie au dossier (index.html) les valeurs exploitables pour le décompte stock :
+  // nombre de lames, et le libellé de l'axe/moteur effectivement choisi (pas "toutes les options").
+  const sendToDossier=()=>{
+    const b=c.block;
+    const axeSel=(f.axeChoisi==null||f.axeChoisi==='all'||(b&&b.rows&&Number(f.axeChoisi)>=b.rows.length))?null:String(f.axeChoisi);
+    let axeLabel=null, moteurLabel=null;
+    if(b&&axeSel!=null&&b.rows&&b.rows[Number(axeSel)]){
+      const lbl=b.rows[Number(axeSel)].label;
+      if(b.kind==='moteurs') moteurLabel=lbl; else if(b.kind==='axes') axeLabel=lbl;
+    }
+    window.parent.postMessage({type:'jmb:export', payload:{
+      dossierId, material, type,
+      nbLames:c.nbLames??null, nbFagots:c.nbFagots??null,
+      axeLabel, moteurLabel, poseAxes:f.poseAxes||null,
+      largeurMax:f.largeurMax||null, longueur:f.longueur||null,
+    }}, '*');
+    setSavedMsg('Envoyé au dossier ✓');
+    setTimeout(()=>setSavedMsg(''),2500);
+  };
+
   return (
     <div>
       <Header/>
@@ -1868,6 +1917,7 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans texte avant o
                 <button className="btn-accent" style={{flex:1}} onClick={savePdf} disabled={pdfBusy}><Icon.download size={16}/>{pdfBusy?'Génération…':'Enregistrer en PDF'}</button>
                 <button className="btn-secondary" onClick={printFiche} title="Imprimer"><Icon.printer size={16}/></button>
               </div>
+              {isEmbedded && <button className="btn-primary" style={{width:'100%',marginTop:8,background:'var(--accent-deep)'}} onClick={sendToDossier} disabled={!ready}>✓ Envoyer au dossier</button>}
               <button className="btn-primary" style={{width:'100%',marginTop:8}} onClick={()=>saveFiche()} disabled={!ready}>Enregistrer la fiche dans l'historique</button>
               {savedMsg && <div style={{marginTop:6,textAlign:'center',fontSize:12,color:'var(--ok)',fontWeight:600,background:'var(--ok-bg)',borderRadius:4,padding:'6px 10px'}}>{savedMsg}</div>}
               <button className="btn-secondary" style={{width:'100%',marginTop:8,borderColor:'var(--border)',color:'var(--ink-faint)'}} onClick={resetType}>Effacer la saisie</button>

@@ -2720,7 +2720,9 @@ function renderPageCommande(d, p) { p = p || {};
       </div>
     </div>
     <div class="fiche-section">
-      <div class="fiche-section-title">Caractéristiques produit</div>
+      <div class="fiche-section-title">Caractéristiques produit
+        <button class="btn btn-secondary btn-sm" style="float:right" onclick="ouvrirFicheCalcul('${d.id}')"><i class="ti ti-calculator"></i> Fiche de calcul</button>
+      </div>
       <div class="fiche-section-body">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:10px">
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Largeur bassin (m)</div><input type="number" step="0.01" min="0" value="${d.largeur||''}" onchange="setDosField('largeur',this.value)" placeholder="ex: 3.50"></div>
@@ -2748,6 +2750,9 @@ function renderPageCommande(d, p) { p = p || {};
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Puissance moteur</div><input value="${d.moteur||''}" onchange="setDosField('moteur',this.value)" placeholder="ex: 120BD newton"></div>
           <div style="grid-column:span 2"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Options</div><input value="${d.options||''}" onchange="setDosField('options',this.value)"></div>
         </div>
+        ${d.nbLamesCalcule ? `<div style="margin-top:10px;background:var(--teal-light);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--teal)">
+          <i class="ti ti-calculator"></i> Fiche de calcul reçue : <strong>${d.nbLamesCalcule} lames</strong>${d.moteurLabelCalcule?` · Moteur : ${d.moteurLabelCalcule}`:''}${d.axeLabelCalcule?` · Axe : ${d.axeLabelCalcule}`:''}
+        </div>` : ''}
       </div>
     </div>
     <div class="fiche-section">
@@ -3114,7 +3119,81 @@ function renvoyerSaisie() {
   saveData(); renderFiche();
   showToast('Dossier renvoyé en saisie admin');
 }
-function avancerFiche() {
+
+/* ================================================================
+   Intégration de la fiche de calcul (subapp_calculs.html) en overlay iframe.
+   Pont postMessage : le parent envoie les cotes du dossier au chargement,
+   l'iframe renvoie nbLames + axe/moteur résolus quand on clique "Envoyer au dossier".
+   ================================================================ */
+let ficheCalculOverlayDosId = null;
+
+// Mapping approximatif structure du dossier → type de l'outil de calcul.
+// [Approximatif] à vérifier au cas par cas, les libellés commerciaux ne correspondent pas 1:1 aux types techniques.
+const STRUCTURE_TO_CALC_TYPE = [
+  { k: ['mouv&roll','mouv & roll','déplaçable'], v: 'mouv' },
+  { k: ['immergé total','subwater total'],        v: 'immerge_total' },
+  { k: ['immergé','subwater'],                    v: 'immerge' },
+  { k: ['banc'],                                  v: 'banc' },
+];
+function structureToCalcType(structure) {
+  const s = (structure||'').toLowerCase();
+  return STRUCTURE_TO_CALC_TYPE.find(m => m.k.some(k => s.includes(k)))?.v || 'hors_sol';
+}
+
+function ouvrirFicheCalcul(dosId) {
+  const d = dossiers.find(x => x.id === dosId); if (!d) return;
+  ficheCalculOverlayDosId = dosId;
+  const overlay = document.createElement('div');
+  overlay.id = 'fiche-calcul-overlay';
+  overlay.style = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;flex-direction:column';
+  overlay.innerHTML = `
+    <div style="background:#fff;padding:10px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:600;flex:1"><i class="ti ti-calculator"></i> Fiche de calcul — ${d.client} (${d.id})</div>
+      <button class="btn btn-ghost btn-sm" onclick="fermerFicheCalcul()"><i class="ti ti-x"></i> Fermer</button>
+    </div>
+    <iframe id="fiche-calcul-iframe" src="subapp_calculs.html" style="flex:1;border:none;width:100%"></iframe>`;
+  document.body.appendChild(overlay);
+}
+
+function fermerFicheCalcul() {
+  const overlay = document.getElementById('fiche-calcul-overlay');
+  if (overlay) overlay.remove();
+  ficheCalculOverlayDosId = null;
+}
+
+window.addEventListener('message', (ev) => {
+  const msg = ev.data;
+  if (!msg || !ficheCalculOverlayDosId) return;
+
+  if (msg.type === 'jmb:ready') {
+    const d = dossiers.find(x => x.id === ficheCalculOverlayDosId); if (!d) return;
+    const iframe = document.getElementById('fiche-calcul-iframe');
+    if (!iframe) return;
+    const material = d.typeLame === 'Polycarbonate' ? 'poly' : 'pvc';
+    const type = structureToCalcType(d.structure);
+    const fields = {
+      largeurMax: d.largeur ? String(Math.round(d.largeur*100)) : '',
+      longueur:   d.longueur ? String(Math.round(d.longueur*100)) : '',
+      ref: d.ref || '', numero: d.id,
+    };
+    iframe.contentWindow.postMessage({ type:'jmb:init', payload:{ dossierId:d.id, material, type, fields } }, '*');
+  }
+
+  if (msg.type === 'jmb:export') {
+    const d = dossiers.find(x => x.id === msg.payload.dossierId); if (!d) return;
+    const p = msg.payload;
+    d.nbLamesCalcule = p.nbLames || null;
+    d.axeLabelCalcule = p.axeLabel || null;
+    d.moteurLabelCalcule = p.moteurLabel || null;
+    d.poseAxesCalcule = p.poseAxes || null;
+    logHistory(d.id, 'calcul', `Fiche de calcul reçue : ${p.nbLames||'?'} lames${p.moteurLabel?' · Moteur : '+p.moteurLabel:''}${p.axeLabel?' · Axe : '+p.axeLabel:''}`);
+    saveData();
+    showToast('Fiche de calcul reçue — dossier mis à jour');
+    fermerFicheCalcul();
+    if (currentDosId === d.id) renderFiche();
+  }
+});
+async function avancerFiche() {
   const d=dossiers.find(x=>x.id===currentDosId); if(!d||isDossierCloture(d)) return;
   let next;
   if(d.statut==='stocké') {
@@ -3125,7 +3204,19 @@ function avancerFiche() {
   } else {
     next=getNextStatut(d);
   }
-  const prev=d.statut; d.statut=next; d.statutChangedAt=nowISO();
+  const prev=d.statut;
+  if (prev === 'verif' && next !== 'verif') {
+    const res = await stockDecompterDossier(d);
+    if (res.ok) {
+      d.stockDecompteFait = true;
+      logHistory(currentDosId,'stock',`Stock décompté automatiquement : ${res.nbLames} lame${res.nbLames>1?'s':''} (${res.ref.type} ${d.lames} taille ${d.tailleLame})${res.ref.quantite<0?' — ⚠ stock passé négatif':''}`);
+      showToast(res.ref.quantite<0 ? `⚠ ${res.nbLames} lames décomptées — stock négatif (${res.ref.quantite})` : `${res.nbLames} lames décomptées du stock`);
+    } else {
+      showToast(`⚠ Décompte stock impossible : ${res.reason}`);
+      logHistory(currentDosId,'stock',`Décompte stock automatique impossible : ${res.reason}`);
+    }
+  }
+  d.statut=next; d.statutChangedAt=nowISO();
   logHistory(currentDosId,'statut',`Statut changé : ${STATUT_LABEL[prev]} → ${STATUT_LABEL[next]}`);
   pushNotif('statut:'+next,d.id,d);
   saveData(); showToast(`Statut mis à jour : ${STATUT_LABEL[next]}`); renderFiche();

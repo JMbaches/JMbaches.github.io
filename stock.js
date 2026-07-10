@@ -19,6 +19,36 @@ function stockFindRef(code) {
   return stockRefs.find(r => r.id === code);
 }
 
+// Recherche une référence lame par type + coloris (finition) + taille — utilisé pour le décompte auto au moment de la vérif.
+function stockFindRefByAttrs(type, finition, taille) {
+  if (!type || !finition || !taille) return null;
+  const f = String(finition).trim().toLowerCase();
+  return stockRefs.find(r => r.type === type && (r.finition||'').trim().toLowerCase() === f && String(r.taille) === String(taille)) || null;
+}
+
+// Nombre de lames nécessaires pour un volet, à partir de la longueur du bassin (en mètres).
+// Reprend la formule de l'outil de calcul (subapp_calculs.html) : pas de lame = 7.4cm.
+const LAME_PITCH_CM_STOCK = 7.4;
+function calcNbLamesVolet(longueurBassinM) {
+  const cm = Number(longueurBassinM) * 100;
+  if (!cm || cm <= 0) return null;
+  return Math.ceil(cm / LAME_PITCH_CM_STOCK);
+}
+
+// Décompte automatique du stock de lames pour un dossier, appelé quand il quitte le statut "verif".
+// Retourne {ok:true, nbLames, ref} en cas de succès, ou {ok:false, reason} sinon (jamais d'exception).
+async function stockDecompterDossier(d) {
+  if (d.stockDecompteFait) return { ok:false, reason:'déjà décompté' };
+  if (!d.typeLame || !d.lames || !d.tailleLame) return { ok:false, reason:'type/coloris/taille de lame non renseignés sur le dossier' };
+  const nbLames = calcNbLamesVolet(d.longueur);
+  if (!nbLames) return { ok:false, reason:'longueur du bassin non renseignée' };
+  const ref = stockFindRefByAttrs(d.typeLame, d.lames, d.tailleLame);
+  if (!ref) return { ok:false, reason:`aucune référence stock pour ${d.typeLame} / ${d.lames} / taille ${d.tailleLame}` };
+  await window.submitStockMouvement(ref.id, 'sortie', nbLames);
+  ref.quantite = (ref.quantite||0) - nbLames;
+  return { ok:true, nbLames, ref };
+}
+
 function stockFmtDate(ts) {
   if (!ts) return '—';
   const d = ts.toDate ? ts.toDate() : new Date(ts);
