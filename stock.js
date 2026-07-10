@@ -98,15 +98,41 @@ async function stockSaveNewRef(code) {
   stockHandleScan(code);
 }
 
+// Statut d'une référence : 'ok' | 'low' (sous le seuil, encore positif) | 'negative' (déficit réel, stock < 0)
+function stockStatus(ref) {
+  const q = ref.quantite || 0;
+  if (q < 0) return 'negative';
+  if ((ref.minimum || 0) > 0 && q < ref.minimum) return 'low';
+  return 'ok';
+}
+// Conservé pour compat (compte "sous le seuil" tous statuts non-ok confondus)
 function stockIsLow(ref) {
-  return (ref.minimum||0) > 0 && (ref.quantite||0) < ref.minimum;
+  return stockStatus(ref) !== 'ok';
+}
+function stockStatusColor(status) {
+  return status === 'negative' ? 'var(--red)' : status === 'low' ? 'var(--amber)' : null;
+}
+function stockStatusBg(status) {
+  return status === 'negative' ? 'var(--red-light)' : status === 'low' ? 'var(--amber-light)' : null;
+}
+function stockStatusBadge(ref) {
+  const status = stockStatus(ref);
+  if (status === 'negative') return `<div style="background:var(--red-light);border:1px solid #D9A0A0;border-radius:var(--radius);padding:6px 10px;margin-bottom:12px;font-size:12px;color:var(--red);font-weight:600"><i class="ti ti-alert-triangle"></i> Déficit de ${Math.abs(ref.quantite)} unité${Math.abs(ref.quantite)>1?'s':''} — à commander en urgence</div>`;
+  if (status === 'low') return `<div style="background:var(--amber-light);border:1px solid #E0C08A;border-radius:var(--radius);padding:6px 10px;margin-bottom:12px;font-size:12px;color:var(--amber);font-weight:600"><i class="ti ti-alert-triangle"></i> Sous le seuil minimum (${ref.minimum})</div>`;
+  return '';
+}
+function stockCommandeeBadge(ref) {
+  const c = ref.quantiteCommandee || 0;
+  if (c <= 0) return '';
+  return `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--teal-light);color:var(--teal);border-radius:var(--radius-sm);padding:2px 7px;font-size:11px;font-weight:600"><i class="ti ti-truck-delivery"></i> ${c} en commande</span>`;
 }
 
 function stockFicheHtml(ref) {
-  const low = stockIsLow(ref);
+  const status = stockStatus(ref);
+  const color = stockStatusColor(status);
   return `
-  <div class="daily-card" style="max-width:480px;padding:16px${low?';border-color:var(--red)':''}">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+  <div class="daily-card" style="max-width:480px;padding:16px${color?`;border-color:${color}`:''}">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
       <div>
         <div style="font-size:19px;font-weight:700;letter-spacing:-.2px">${ref.type} — ${ref.finition||'—'}</div>
         <div style="font-size:13px;color:var(--ink-soft)">Taille ${ref.taille}</div>
@@ -114,13 +140,15 @@ function stockFicheHtml(ref) {
       </div>
       <div style="text-align:right">
         <div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;font-weight:600">Stock</div>
-        <div style="font-size:28px;font-weight:700${low?';color:var(--red)':''}">${ref.quantite||0}</div>
+        <div style="font-size:28px;font-weight:700${color?`;color:${color}`:''}">${ref.quantite||0}</div>
       </div>
     </div>
-    ${low ? `<div style="background:var(--red-light);border:1px solid #F09595;border-radius:var(--radius);padding:6px 10px;margin-bottom:12px;font-size:12px;color:var(--red);font-weight:600"><i class="ti ti-alert-triangle"></i> Sous le seuil minimum (${ref.minimum})</div>` : ''}
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+    <div style="margin-bottom:10px">${stockCommandeeBadge(ref)}</div>
+    ${stockStatusBadge(ref)}
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
       <button class="btn btn-secondary" style="justify-content:center" onclick="stockOpenAction('${ref.id}','entree')"><i class="ti ti-plus"></i> Entrée</button>
       <button class="btn btn-secondary" style="justify-content:center" onclick="stockOpenAction('${ref.id}','sortie')"><i class="ti ti-minus"></i> Sortie</button>
+      <button class="btn btn-secondary" style="justify-content:center" onclick="stockOpenAction('${ref.id}','commande')"><i class="ti ti-truck-delivery"></i> Commande</button>
       <button class="btn btn-secondary" style="justify-content:center" onclick="stockOpenAction('${ref.id}','inventaire')"><i class="ti ti-clipboard-list"></i> Inventaire</button>
     </div>
     <div id="stock-action-zone" style="margin-top:12px"></div>
@@ -131,7 +159,7 @@ function stockOpenAction(code, action) {
   const ref = stockFindRef(code);
   if (!ref) return;
   const zone = document.getElementById('stock-action-zone');
-  const labels = {entree:'Quantité reçue', sortie:'Quantité sortie', inventaire:'Quantité comptée (stock réel)'};
+  const labels = {entree:'Quantité reçue', sortie:'Quantité sortie', inventaire:'Quantité comptée (stock réel)', commande:'Quantité commandée au fournisseur'};
   const nom = ref.label || `${ref.type} — ${ref.finition||'—'} (taille ${ref.taille})`;
   zone.innerHTML = `
     <div class="daily-card" style="max-width:480px;padding:12px 14px">
@@ -142,6 +170,7 @@ function stockOpenAction(code, action) {
         <span style="font-size:12px;color:var(--ink-soft);flex:1">${labels[action]}</span>
         <button class="btn btn-primary btn-sm" onclick="stockConfirmAction('${code}','${action}')"><i class="ti ti-check"></i> Valider</button>
       </div>
+      ${action==='commande' ? `<div style="font-size:11px;color:var(--ink-faint);margin-top:6px">S'ajoute à ce qui est déjà en commande (${ref.quantiteCommandee||0} actuellement). Une entrée de stock déduira automatiquement cette quantité.</div>` : ''}
     </div>`;
   const qteInput = document.getElementById('stock-action-qte');
   qteInput.focus();
@@ -153,10 +182,20 @@ async function stockConfirmAction(code, action) {
   const qte = parseInt(qteInput.value, 10);
   if (isNaN(qte) || qte < 0) { showToast('⚠ Quantité invalide'); return; }
   const ref = stockFindRef(code);
+  if (action === 'commande') {
+    await window.submitStockCommande(code, qte);
+    if (ref) ref.quantiteCommandee = (ref.quantiteCommandee||0) + qte;
+    showToast('Commande enregistrée');
+    stockRefreshCurrentView(code);
+    return;
+  }
   const avant = ref ? (ref.quantite||0) : 0;
   const delta = action==='entree' ? qte : action==='sortie' ? -qte : (qte - avant);
   await window.submitStockMouvement(code, action, qte);
-  if (ref) ref.quantite = avant + delta;
+  if (ref) {
+    ref.quantite = avant + delta;
+    if (action === 'entree') ref.quantiteCommandee = Math.max(0, (ref.quantiteCommandee||0) - qte);
+  }
   showToast('Mouvement enregistré');
   stockRefreshCurrentView(code);
 }
@@ -213,14 +252,15 @@ function renderStockListe() {
   ${refs.length===0 ? `<div class="empty-state"><i class="ti ti-box-multiple"></i>${q ? `Aucune référence ne correspond à « ${stockListeQuery} »` : `Aucune référence enregistrée — scannez une lame dans l'onglet Scanner, ou ajoutez-en une manuellement`}</div>` : `
   <div class="table-wrap" style="margin-bottom:24px">
     <table>
-      <thead><tr><th>Code</th><th>Type</th><th>Finition</th><th>Taille</th><th>Quantité</th><th>Seuil</th><th></th></tr></thead>
-      <tbody>${refs.map(r=>{const low=stockIsLow(r);return `<tr${low?' style="background:var(--red-light)"':''}>
+      <thead><tr><th>Code</th><th>Type</th><th>Finition</th><th>Taille</th><th>Quantité</th><th>Seuil</th><th>En commande</th><th></th></tr></thead>
+      <tbody>${refs.map(r=>{const status=stockStatus(r);const color=stockStatusColor(status);return `<tr${status!=='ok'?` style="background:${stockStatusBg(status)}"`:''}>
         <td style="font-size:11px;color:var(--ink-faint);font-family:'JetBrains Mono',monospace">${r.id}</td>
         <td>${r.type}</td>
         <td>${r.finition||'—'}</td>
         <td>${r.taille}</td>
-        <td><strong${low?' style="color:var(--red)"':''}>${r.quantite||0}</strong>${low?' <i class="ti ti-alert-triangle" style="color:var(--red);font-size:12px" title="Sous le seuil minimum"></i>':''}</td>
+        <td><strong${color?` style="color:${color}"`:''}>${r.quantite||0}</strong>${status!=='ok'?` <i class="ti ti-alert-triangle" style="color:${color};font-size:12px" title="${status==='negative'?'Déficit':'Sous le seuil minimum'}"></i>`:''}</td>
         <td style="color:var(--ink-faint)">${r.minimum||0}</td>
+        <td>${stockCommandeeBadge(r)}</td>
         <td><div style="display:flex;gap:4px">
           <button class="btn btn-ghost btn-sm" onclick="goTab('stock_scan');setTimeout(()=>stockHandleScan('${r.id}'),50)" title="Gérer le stock"><i class="ti ti-scan"></i></button>
           <button class="btn btn-ghost btn-sm" onclick="stockOpenManualForm('${r.id}')" title="Modifier"><i class="ti ti-edit"></i></button>
@@ -239,9 +279,9 @@ function renderStockListe() {
       <tbody>${stockMouvements.slice(0,50).map(m=>`<tr>
         <td style="font-size:12px;color:var(--ink-faint)">${stockFmtDate(m.at)}</td>
         <td style="font-size:11px;color:var(--ink-faint);font-family:'JetBrains Mono',monospace">${m.codeBarre}</td>
-        <td>${{entree:'Entrée',sortie:'Sortie',inventaire:'Inventaire'}[m.action]||m.action}</td>
+        <td>${{entree:'Entrée',sortie:'Sortie',inventaire:'Inventaire',commande:'Commande'}[m.action]||m.action}</td>
         <td>${m.delta>0?'+':''}${m.delta}</td>
-        <td>${m.quantiteApres}</td>
+        <td>${m.action==='commande' ? `${m.quantiteCommandeeApres} en commande` : m.quantiteApres}</td>
       </tr>`).join('')}</tbody>
     </table>
   </div>`}
@@ -402,14 +442,16 @@ function renderStockCategorie(catId) {
   ${refs.length===0 ? `<div class="empty-state"><i class="${cat.icon}"></i>${q ? `Aucun produit ne correspond à « ${stockCatQuery[catId]} »` : `Aucun produit enregistré dans cette catégorie`}</div>` : `
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Produit</th><th>Stock</th><th>Seuil</th><th></th></tr></thead>
-      <tbody>${refs.map(r=>{const low=stockIsLow(r);return `<tr${low?' style="background:var(--red-light)"':''}>
+      <thead><tr><th>Produit</th><th>Stock</th><th>Seuil</th><th>En commande</th><th></th></tr></thead>
+      <tbody>${refs.map(r=>{const status=stockStatus(r);const color=stockStatusColor(status);return `<tr${status!=='ok'?` style="background:${stockStatusBg(status)}"`:''}>
         <td>${r.label}</td>
-        <td><strong${low?' style="color:var(--red)"':''}>${r.quantite||0}</strong>${low?' <i class="ti ti-alert-triangle" style="color:var(--red);font-size:12px" title="Sous le seuil minimum"></i>':''}</td>
+        <td><strong${color?` style="color:${color}"`:''}>${r.quantite||0}</strong>${status!=='ok'?` <i class="ti ti-alert-triangle" style="color:${color};font-size:12px" title="${status==='negative'?'Déficit':'Sous le seuil minimum'}"></i>`:''}</td>
         <td style="color:var(--ink-faint)">${r.minimum||0}</td>
+        <td>${stockCommandeeBadge(r)}</td>
         <td><div style="display:flex;gap:4px">
           <button class="btn btn-ghost btn-sm" onclick="stockOpenAction('${r.id}','entree')" title="Entrée"><i class="ti ti-plus"></i></button>
           <button class="btn btn-ghost btn-sm" onclick="stockOpenAction('${r.id}','sortie')" title="Sortie"><i class="ti ti-minus"></i></button>
+          <button class="btn btn-ghost btn-sm" onclick="stockOpenAction('${r.id}','commande')" title="Commande"><i class="ti ti-truck-delivery"></i></button>
           <button class="btn btn-ghost btn-sm" onclick="stockOpenAction('${r.id}','inventaire')" title="Inventaire"><i class="ti ti-clipboard-list"></i></button>
           <button class="btn btn-ghost btn-sm" onclick="stockCatOpenForm('${catId}','${r.id}')" title="Modifier"><i class="ti ti-edit"></i></button>
           <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="stockCatDeleteRef('${catId}','${r.id}')" title="Supprimer"><i class="ti ti-trash"></i></button>

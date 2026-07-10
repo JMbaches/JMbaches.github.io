@@ -310,10 +310,16 @@ window.submitStockMouvement = async function submitStockMouvement(codeBarre, act
     const ref = _db.collection('stock_refs').doc(codeBarre);
     await _db.runTransaction(async tx => {
       const snap = await tx.get(ref);
-      const avant = snap.exists ? (snap.data().quantite || 0) : 0;
+      const data = snap.exists ? snap.data() : {};
+      const avant = data.quantite || 0;
       const delta = action === 'entree' ? qte : action === 'sortie' ? -qte : (qte - avant);
       const quantiteApres = avant + delta;
-      tx.set(ref, { quantite: quantiteApres }, { merge: true });
+      // Une entrée physique de stock vient (au moins partiellement) réduire ce qui était en commande.
+      const commandeeAvant = data.quantiteCommandee || 0;
+      const commandeeApres = action === 'entree' ? Math.max(0, commandeeAvant - qte) : commandeeAvant;
+      const patch = { quantite: quantiteApres };
+      if (commandeeApres !== commandeeAvant) patch.quantiteCommandee = commandeeApres;
+      tx.set(ref, patch, { merge: true });
       tx.set(_db.collection('stock_mouvements').doc(), {
         codeBarre, action, qte, delta, quantiteApres,
         at: firebase.firestore.FieldValue.serverTimestamp(),
@@ -321,6 +327,25 @@ window.submitStockMouvement = async function submitStockMouvement(codeBarre, act
     });
   } catch (e) {
     handleFirestoreError(e, 'submitStockMouvement');
+  }
+};
+
+// Enregistre une commande fournisseur en cours (quantité en transit, distincte du stock physique).
+window.submitStockCommande = async function submitStockCommande(codeBarre, qte) {
+  try {
+    const ref = _db.collection('stock_refs').doc(codeBarre);
+    await _db.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      const avant = snap.exists ? (snap.data().quantiteCommandee || 0) : 0;
+      const quantiteCommandeeApres = avant + qte;
+      tx.set(ref, { quantiteCommandee: quantiteCommandeeApres }, { merge: true });
+      tx.set(_db.collection('stock_mouvements').doc(), {
+        codeBarre, action: 'commande', qte, delta: qte, quantiteCommandeeApres,
+        at: firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    });
+  } catch (e) {
+    handleFirestoreError(e, 'submitStockCommande');
   }
 };
 
