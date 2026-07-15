@@ -16,7 +16,7 @@ admin.initializeApp({
 const db     = admin.firestore();
 const bucket = admin.storage().bucket();
 
-const PD_DEFAULT_FOLDERS = ['Général', 'Bon de commande', 'Facture', 'Fiche de côte', 'Fiche produit'];
+const PD_DEFAULT_FOLDERS = ['Bon de commande', 'Facture', 'Fiche de côte', 'Fiche produit'];
 
 // ─── Parser PDF Mégao ────────────────────────────────────────────────────────
 // Format réel : tableau de codes produits (VRSIL80S, LAM350, TRSPVR5…)
