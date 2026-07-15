@@ -59,14 +59,43 @@ function stockFindPieceRef(categorie, label) {
 // Décompte automatique du moteur (1 par dossier), appelé en même temps que les lames.
 // d.moteur (ex: "80S") matche directement le libellé de la ref stock catégorie 'moteur'
 // — même code que celui extrait par megao-sync.js depuis le code produit VR (VRSIL80S → 80S).
+// "Tablier seul" n'a pas de moteur (confirmé : onglets/tablier.py du logiciel stock legacy
+// n'appelle jamais deduire_moteur, contrairement à tous les autres types de volet).
 async function stockDecompterMoteur(d) {
   if (d.stockMoteurDecompteFait) return { ok:false, reason:'déjà décompté' };
+  if (d.structure === 'Tablier seul') return { ok:false, reason:'pas de moteur pour un tablier seul' };
   if (!d.moteur) return { ok:false, reason:'moteur non renseigné sur le dossier' };
   const ref = stockFindPieceRef('moteur', d.moteur);
   if (!ref) return { ok:false, reason:`aucune référence stock moteur pour "${d.moteur}"` };
   await window.submitStockMouvement(ref.id, 'sortie', 1);
   ref.quantite = (ref.quantite||0) - 1;
   return { ok:true, ref };
+}
+
+// Correspondance largeur bassin (cm) -> référence axe. Reprise telle quelle du logiciel Stock.exe
+// legacy (fonctions.py::deduire_axe) — une table figée par le fabricant, pas une formule continue :
+// des largeurs différentes (ex 350 et 400) peuvent partager la même réf d'axe. Le logiciel legacy
+// n'arrondit pas non plus : si la largeur ne tombe pas exactement sur l'une de ces valeurs, aucune
+// correspondance n'est trouvée et rien n'est décompté (même comportement repris ici).
+const AXE_PAR_LARGEUR_CM = {
+  '300':'Axe 320', '350':'Axe 420', '400':'Axe 420', '450':'Axe 470', '500':'Axe 520',
+  '550':'Axe 570', '600':'Axe 620', '650':'Axe 200 700', '700':'Axe 200 700',
+  '750':'Axe 200 820', '800':'Axe 200 820',
+};
+
+// Décompte automatique de l'axe (1 par dossier). "Tablier seul" exclu, même raison que le moteur.
+async function stockDecompterAxe(d) {
+  if (d.stockAxeDecompteFait) return { ok:false, reason:'déjà décompté' };
+  if (d.structure === 'Tablier seul') return { ok:false, reason:'pas d\'axe pour un tablier seul' };
+  if (!d.largeur) return { ok:false, reason:'largeur du bassin non renseignée' };
+  const largeurCm = String(Math.round(Number(d.largeur)*100));
+  const axeRef = AXE_PAR_LARGEUR_CM[largeurCm];
+  if (!axeRef) return { ok:false, reason:`aucune référence axe connue pour une largeur de ${largeurCm} cm` };
+  const ref = stockFindPieceRef('aluminium', axeRef);
+  if (!ref) return { ok:false, reason:`référence stock "${axeRef}" introuvable` };
+  await window.submitStockMouvement(ref.id, 'sortie', 1);
+  ref.quantite = (ref.quantite||0) - 1;
+  return { ok:true, ref, axeRef };
 }
 
 // Point d'entrée unique du décompte auto de stock à l'entrée en production (sortie du statut
@@ -88,9 +117,19 @@ async function stockDecompterEntreeProduction(d) {
     d.stockMoteurDecompteFait = true;
     logHistory(d.id,'stock',`Moteur décompté automatiquement : ${d.moteur}${moteurRes.ref.quantite<0?' — ⚠ stock passé négatif':''}`);
     showToast(moteurRes.ref.quantite<0 ? `⚠ moteur ${d.moteur} décompté — stock négatif (${moteurRes.ref.quantite})` : `Moteur ${d.moteur} décompté du stock`);
-  } else if (moteurRes.reason !== 'déjà décompté') {
+  } else if (!['déjà décompté', "pas de moteur pour un tablier seul"].includes(moteurRes.reason)) {
     showToast(`⚠ Décompte stock moteur impossible : ${moteurRes.reason}`);
     logHistory(d.id,'stock',`Décompte stock moteur automatique impossible : ${moteurRes.reason}`);
+  }
+
+  const axeRes = await stockDecompterAxe(d);
+  if (axeRes.ok) {
+    d.stockAxeDecompteFait = true;
+    logHistory(d.id,'stock',`Axe décompté automatiquement : ${axeRes.axeRef}${axeRes.ref.quantite<0?' — ⚠ stock passé négatif':''}`);
+    showToast(axeRes.ref.quantite<0 ? `⚠ axe ${axeRes.axeRef} décompté — stock négatif (${axeRes.ref.quantite})` : `Axe ${axeRes.axeRef} décompté du stock`);
+  } else if (!['déjà décompté', "pas d'axe pour un tablier seul"].includes(axeRes.reason)) {
+    showToast(`⚠ Décompte stock axe impossible : ${axeRes.reason}`);
+    logHistory(d.id,'stock',`Décompte stock axe automatique impossible : ${axeRes.reason}`);
   }
 }
 
