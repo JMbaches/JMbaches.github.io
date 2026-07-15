@@ -61,6 +61,10 @@ function stockFindPieceRef(categorie, label) {
 // — même code que celui extrait par megao-sync.js depuis le code produit VR (VRSIL80S → 80S).
 // "Tablier seul" n'a pas de moteur (confirmé : onglets/tablier.py du logiciel stock legacy
 // n'appelle jamais deduire_moteur, contrairement à tous les autres types de volet).
+// Moteurs qui entraînent en plus le décompte d'1 débrayage + 1 U de fixation (deduire_moteur du
+// logiciel legacy déclenche ces 2 pièces automatiquement pour ces 2 références moteur précises).
+const MOTEURS_AVEC_DEBRAYAGE = ['80S', 'C120'];
+
 async function stockDecompterMoteur(d) {
   if (d.stockMoteurDecompteFait) return { ok:false, reason:'déjà décompté' };
   if (d.structure === 'Tablier seul') return { ok:false, reason:'pas de moteur pour un tablier seul' };
@@ -69,7 +73,12 @@ async function stockDecompterMoteur(d) {
   if (!ref) return { ok:false, reason:`aucune référence stock moteur pour "${d.moteur}"` };
   await window.submitStockMouvement(ref.id, 'sortie', 1);
   ref.quantite = (ref.quantite||0) - 1;
-  return { ok:true, ref };
+  let debrayage = null, uDeFixation = null;
+  if (MOTEURS_AVEC_DEBRAYAGE.includes(d.moteur)) {
+    debrayage = await stockDecompteFixe('autre', 'Debrayage', 1);
+    uDeFixation = await stockDecompteFixe('aluminium', 'U de fixation', 1);
+  }
+  return { ok:true, ref, debrayage, uDeFixation };
 }
 
 // Correspondance largeur bassin (cm) -> référence axe. Reprise telle quelle du logiciel Stock.exe
@@ -96,6 +105,105 @@ async function stockDecompterAxe(d) {
   await window.submitStockMouvement(ref.id, 'sortie', 1);
   ref.quantite = (ref.quantite||0) - 1;
   return { ok:true, ref, axeRef };
+}
+
+/* ================================================================
+   STOCK (pièces "quick win" reprises du logiciel Stock.exe legacy)
+   Décompilé faute de source disponible (pyinstxtractor-ng + pydisasm/xdis) — voir mémoire
+   projet pour la méthode. Ne couvre QUE ce qui est calculable avec les champs dossier actuels :
+   télécommande, gestion sel, passes-sangles, flasque murale, alimentation, mur/caillebotis
+   immergé, équerres/fixation/cornière 60x60/poutre/sabots (immergé) restent volontairement de
+   côté — champ dossier manquant dans la nouvelle app, décision produit à prendre avant de coder.
+   ================================================================ */
+
+// Décompte générique d'une quantité fixe d'une référence catégorisée — reprend le pattern des
+// ~25 fonctions deduire_xxx() du logiciel legacy qui décomptent toujours la même quantité pour
+// la même réf, sans dépendre d'aucune donnée du dossier.
+async function stockDecompteFixe(categorie, label, qte) {
+  const ref = stockFindPieceRef(categorie, label);
+  if (!ref) return { ok:false, reason:`référence stock "${label}" introuvable` };
+  await window.submitStockMouvement(ref.id, 'sortie', qte);
+  ref.quantite = (ref.quantite||0) - qte;
+  return { ok:true, ref, label, qte };
+}
+
+// Type de volet legacy, déduit de d.structure (texte libre) — mêmes mots-clés que STRUCT_MAP
+// (megao-sync.js) et structureToCalcType (index.html), étendus pour distinguer Xtrem/Banc/Volet
+// manuel qui ont chacun leur propre jeu de pièces détachées dans le logiciel legacy. "silver" =
+// tout hors-sol standard non distingué (Silver Roll, Golden Roll, Coffre...), comme dans
+// structureToCalcType — c'est aussi le comportement par défaut du logiciel legacy.
+function legacyVoletType(structure) {
+  const s = (structure||'').toLowerCase();
+  if (/tablier\s+seul/.test(s)) return 'tablier';
+  if (/x-?trem/.test(s)) return 'xtrem';
+  if (/mouv/.test(s)) return 'mouv';
+  if (/immerg[ée]\s+total|subwater\s+total/.test(s)) return 'immerge_total';
+  if (/immerg[ée]|subwater/.test(s)) return 'immerge';
+  if (/\bbanc\b/.test(s)) return 'banc';
+  if (/manuel/.test(s)) return 'volet_manuel';
+  return 'silver';
+}
+
+// Pièces à quantité FIXE par dossier selon le type de volet — [categorie, label, quantite].
+// Reprend l'appel exact (vérifié dans le bytecode) de chaque onglet du logiciel legacy pour les
+// fonctions deduire_xxx() sans argument. Banc regroupe aussi le bundle deduire_structure_banc
+// (pied+capot, lame, plaque diffusante, cornière, poutre).
+const LEGACY_PIECES_FIXES = {
+  silver: [ ['autre','Ski',2], ['autre','Palier Hors Sol',1] ],
+  xtrem:  [ ['autre','Ski',2], ['autre','Palier Xtrem',1], ['aluminium','Bite',1], ['aluminium','Bague',1] ],
+  mouv:   [ ['autre','Ski',2], ['autre','Palier Hors Sol',1], ['aluminium','Chappe de Roue Mouv',4],
+            ['autre','Rails Mouv 3m',2], ['autre','Roue Mouv',4], ['autre','Roulement Roue Mouv',8] ],
+  immerge: [ ['autre','Ski',2], ['autre','Palier Immerge',1], ['aluminium','Bite',1], ['aluminium','Bague',1],
+             ['aluminium','Flasque Immerge Classique',2], ['aluminium','Corniere 40x40',1] ],
+  immerge_total: [ ['autre','Ski',2], ['autre','Palier Immerge',1], ['aluminium','Bite',1], ['aluminium','Bague',1],
+                    ['aluminium','Flasque Immerge Total',2], ['autre','Sangle Contre Poids',4],
+                    // Pas de gestion du "mur" (champ dossier manquant) -> toujours considéré vide,
+                    // donc toujours le repli sabots (comportement de deduire_mur_total si vide).
+                    ['inox','Sabot Immerge Total',2] ],
+  banc: [ ['autre','Ski',2], ['autre','Palier Hors Sol',1], ['alimentation','Coffret Hors sol',1],
+          ['pied','Pied + Capot Banc',2], ['autre','Lame Banc',5], ['aluminium','Poutre Banc',2],
+          ['aluminium','Corniere Banc',10], ['autre','Plaque Diffusante Banc',2] ],
+  tablier: [ ['autre','Ski',2] ],
+  volet_manuel: [ ['autre','Palier Hors Sol',2], ['autre','Palier manuel',1], ["autre","Tige d'entrainement",1],
+                  ['autre','Volant',1], ['autre','Frein manuel',1], ['inox','Piece volet manuel',1],
+                  ['autre','Ski',2] ],
+};
+
+// Décompte toutes les pièces fixes du type de volet du dossier. Retourne la liste des résultats
+// (un par pièce) — jamais bloquant (une réf introuvable n'empêche pas les autres).
+async function stockDecompterPiecesFixes(d) {
+  if (d.stockPiecesFixesDecompteFait) return { ok:false, reason:'déjà décompté', resultats:[] };
+  const type = legacyVoletType(d.structure);
+  const liste = LEGACY_PIECES_FIXES[type] || [];
+  const resultats = [];
+  for (const [categorie, label, qte] of liste) {
+    resultats.push({ label, qte, ...(await stockDecompteFixe(categorie, label, qte)) });
+  }
+  return { ok:true, type, resultats };
+}
+
+// Table couleur (coloris lames, d.lames) -> réf sangle/clips + quantités. Reprise de
+// deduire_sangles_et_clips. Couleur non reconnue = pas de décompte (comme le logiciel legacy).
+const SANGLE_PAR_COULEUR = { 'Blanc':'Sangle Blanche', 'Sable':'Sangle Sable', 'Gris':'Sangle Grise', 'Bleu':'Sangle Grise', 'Nacré':'Sangle Grise', 'Noir':'Sangle Grise' };
+const CLIPS_PAR_COULEUR  = { 'Blanc':'Clips Blanc',   'Sable':'Clips Sable',   'Gris':'Clips Gris',   'Bleu':'Clips Gris',   'Nacré':'Clips Gris',   'Noir':'Clips Gris' };
+// Type de sangle (Standard courte / Longue) par type de volet — vérifié dans le bytecode de
+// chaque onglet. "tablier" absent exprès : dans le logiciel legacy il a son propre sélecteur
+// "taille sangle" au lieu du type_volet, pas de champ équivalent dans le dossier actuel.
+const SANGLE_TYPE_PAR_VOLET = { silver:'Standard', banc:'Standard', volet_manuel:'Standard', xtrem:'Longue', mouv:'Longue', immerge:'Longue', immerge_total:'Longue' };
+
+async function stockDecompterSanglesEtClips(d) {
+  if (d.stockSanglesDecompteFait) return { ok:false, reason:'déjà décompté' };
+  const type = legacyVoletType(d.structure);
+  const sangleType = SANGLE_TYPE_PAR_VOLET[type];
+  if (!sangleType) return { ok:false, reason:'pas de sangles/clips pour ce type de volet (tablier — champ taille sangle manquant)' };
+  const couleur = (d.lames||'').trim();
+  const sangleBase = SANGLE_PAR_COULEUR[couleur], clipsRef = CLIPS_PAR_COULEUR[couleur];
+  if (!sangleBase || !clipsRef) return { ok:false, reason:`couleur "${couleur}" inconnue pour sangles/clips` };
+  const sangleRef = sangleType === 'Longue' ? `Sangle Longue ${sangleBase.split(' ')[1]}` : sangleBase;
+  const rSangle = await stockDecompteFixe('attaches', sangleRef, 3);
+  const rClips = await stockDecompteFixe('attaches', clipsRef, 5);
+  if (!rSangle.ok && !rClips.ok) return { ok:false, reason:`sangle: ${rSangle.reason} / clips: ${rClips.reason}` };
+  return { ok:true, sangle:rSangle, clips:rClips };
 }
 
 // Point d'entrée unique du décompte auto de stock à l'entrée en production (sortie du statut
@@ -130,6 +238,35 @@ async function stockDecompterEntreeProduction(d) {
   } else if (!['déjà décompté', "pas d'axe pour un tablier seul"].includes(axeRes.reason)) {
     showToast(`⚠ Décompte stock axe impossible : ${axeRes.reason}`);
     logHistory(d.id,'stock',`Décompte stock axe automatique impossible : ${axeRes.reason}`);
+  }
+
+  const sanglesRes = await stockDecompterSanglesEtClips(d);
+  if (sanglesRes.ok) {
+    d.stockSanglesDecompteFait = true;
+    const okLabels = [sanglesRes.sangle, sanglesRes.clips].filter(r => r.ok).map(r => r.label);
+    logHistory(d.id,'stock',`Sangles/clips décomptés automatiquement : ${okLabels.join(', ')}`);
+    showToast(`Sangles/clips décomptés du stock (${okLabels.join(', ')})`);
+  } else if (sanglesRes.reason !== 'déjà décompté') {
+    showToast(`⚠ Décompte sangles/clips impossible : ${sanglesRes.reason}`);
+    logHistory(d.id,'stock',`Décompte sangles/clips automatique impossible : ${sanglesRes.reason}`);
+  }
+
+  const piecesRes = await stockDecompterPiecesFixes(d);
+  if (piecesRes.ok) {
+    d.stockPiecesFixesDecompteFait = true;
+    const ok = piecesRes.resultats.filter(r => r.ok);
+    const echecs = piecesRes.resultats.filter(r => !r.ok);
+    if (ok.length) {
+      logHistory(d.id,'stock',`Pièces décomptées automatiquement (${piecesRes.type}) : ${ok.map(r=>r.label).join(', ')}`);
+      showToast(`${ok.length} pièce${ok.length>1?'s':''} décomptée${ok.length>1?'s':''} du stock`);
+    }
+    if (echecs.length) {
+      logHistory(d.id,'stock',`Pièces non décomptées (référence introuvable) : ${echecs.map(r=>r.label).join(', ')}`);
+      showToast(`⚠ ${echecs.length} pièce${echecs.length>1?'s':''} non décomptée${echecs.length>1?'s':''} (réf introuvable) : ${echecs.map(r=>r.label).join(', ')}`);
+    }
+  } else if (piecesRes.reason !== 'déjà décompté') {
+    showToast(`⚠ Décompte pièces impossible : ${piecesRes.reason}`);
+    logHistory(d.id,'stock',`Décompte pièces automatique impossible : ${piecesRes.reason}`);
   }
 }
 
