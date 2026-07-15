@@ -98,20 +98,28 @@ function stockFindPieceRef(categorie, label) {
 // logiciel legacy déclenche ces 2 pièces automatiquement pour ces 2 références moteur précises).
 const MOTEURS_AVEC_DEBRAYAGE = ['80S', 'C120'];
 
+// Xtrem et Banc décomptent un moteur FIGÉ dans le logiciel legacy (onglets/xtrem.py et banc.py
+// appellent deduire_moteur("200 Xtrem")/deduire_moteur("200S") en dur, quel que soit le moteur
+// réellement sélectionné à l'écran) — reproduit ici à l'identique (décision actée avec
+// l'utilisateur : comportement legacy voulu, pas un bug à corriger).
+const MOTEUR_FIGE_PAR_TYPE = { xtrem: '200 Xtrem', banc: '200S' };
+
 async function stockDecompterMoteur(d) {
   if (d.stockMoteurDecompteFait) return { ok:false, reason:'déjà décompté' };
   if (d.structure === 'Tablier seul') return { ok:false, reason:'pas de moteur pour un tablier seul' };
-  if (!d.moteur) return { ok:false, reason:'moteur non renseigné sur le dossier' };
-  const ref = stockFindPieceRef('moteur', d.moteur);
-  if (!ref) return { ok:false, reason:`aucune référence stock moteur pour "${d.moteur}"` };
+  const moteurFige = MOTEUR_FIGE_PAR_TYPE[legacyVoletType(d.structure)];
+  const moteurCode = moteurFige || d.moteur;
+  if (!moteurCode) return { ok:false, reason:'moteur non renseigné sur le dossier' };
+  const ref = stockFindPieceRef('moteur', moteurCode);
+  if (!ref) return { ok:false, reason:`aucune référence stock moteur pour "${moteurCode}"` };
   await window.submitStockMouvement(ref.id, 'sortie', 1);
   ref.quantite = (ref.quantite||0) - 1;
   let debrayage = null, uDeFixation = null;
-  if (MOTEURS_AVEC_DEBRAYAGE.includes(d.moteur)) {
+  if (MOTEURS_AVEC_DEBRAYAGE.includes(moteurCode)) {
     debrayage = await stockDecompteFixe('autre', 'Debrayage', 1);
     uDeFixation = await stockDecompteFixe('aluminium', 'U de fixation', 1);
   }
-  return { ok:true, ref, debrayage, uDeFixation };
+  return { ok:true, ref, debrayage, uDeFixation, moteurCode };
 }
 
 // Correspondance largeur bassin (cm) -> référence axe. Reprise telle quelle du logiciel Stock.exe
@@ -319,8 +327,8 @@ async function stockDecompterEntreeProduction(d) {
   const moteurRes = await stockDecompterMoteur(d);
   if (moteurRes.ok) {
     d.stockMoteurDecompteFait = true;
-    logHistory(d.id,'stock',`Moteur décompté automatiquement : ${d.moteur}${moteurRes.ref.quantite<0?' — ⚠ stock passé négatif':''}`);
-    showToast(moteurRes.ref.quantite<0 ? `⚠ moteur ${d.moteur} décompté — stock négatif (${moteurRes.ref.quantite})` : `Moteur ${d.moteur} décompté du stock`);
+    logHistory(d.id,'stock',`Moteur décompté automatiquement : ${moteurRes.moteurCode}${moteurRes.moteurCode!==d.moteur?` (figé pour ce type de volet, moteur saisi : ${d.moteur||'—'})`:''}${moteurRes.ref.quantite<0?' — ⚠ stock passé négatif':''}`);
+    showToast(moteurRes.ref.quantite<0 ? `⚠ moteur ${moteurRes.moteurCode} décompté — stock négatif (${moteurRes.ref.quantite})` : `Moteur ${moteurRes.moteurCode} décompté du stock`);
   } else if (!['déjà décompté', "pas de moteur pour un tablier seul"].includes(moteurRes.reason)) {
     showToast(`⚠ Décompte stock moteur impossible : ${moteurRes.reason}`);
     logHistory(d.id,'stock',`Décompte stock moteur automatique impossible : ${moteurRes.reason}`);
