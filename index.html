@@ -1624,10 +1624,16 @@ function updateBadge() {
   if(badge){badge.textContent=cnt>9?'9+':cnt;badge.classList.toggle('hidden',cnt===0);}
   buildNav();
 }
+let _logHistorySaveTimer=null;
 function logHistory(dosId,type,action,detail='') {
   const d=dossiers.find(x=>x.id===dosId); if(!d) return;
   d.history.unshift({id:Date.now(),type,action,detail,user:currentUser.id,at:now()});
-  saveData();
+  // saveData REGROUPÉ : une rafale de logs (le décompte auto en émet ~7 d'affilée) ne
+  // déclenche plus une sauvegarde complète + un écho onSnapshot par entrée — c'est cette
+  // tempête d'échos qui reconstruisait le tableau `dossiers` en plein vol (course 39866d4).
+  // Les flux qui ont besoin d'une persistance immédiate appellent déjà saveData() eux-mêmes.
+  clearTimeout(_logHistorySaveTimer);
+  _logHistorySaveTimer=setTimeout(()=>saveData(),500);
 }
 
 /* ================================================================
@@ -3058,14 +3064,19 @@ async function uploadPorteDocFiles(files){
   const prog=document.getElementById('pd-upload-progress');
   if(prog) prog.style.display='flex';
   const d=dossiers.find(x=>x.id===_pdDosId); if(!d) return;
-  if(!d.documents) d.documents=[];
   for(const file of files){
     const safe=file.name.replace(/[^a-zA-Z0-9.\-_]/g,'_');
     const path=`dossiers/${_pdDosId}/${Date.now()}_${safe}`;
     try{
       const snap=await window._storage.ref(path).put(file);
       const url=await snap.ref.getDownloadURL();
-      d.documents.push({id:Date.now()+'_'+Math.random().toString(36).slice(2),name:file.name,url,path,type:file.type,size:file.size,folder:_pdFolder,uploadedBy:currentUser.id,uploadedAt:now()});
+      // ⚠ Course onSnapshot (cf. 39866d4) : chaque upload dure des secondes et le logHistory
+      // du fichier précédent a déclenché un saveData dont l'écho reconstruit le tableau
+      // `dossiers` — sans re-résolution, tous les fichiers après le premier écho seraient
+      // poussés sur un objet détaché (présents dans Storage, invisibles au porte-document).
+      const live=dossiers.find(x=>x.id===_pdDosId)||d;
+      if(!live.documents) live.documents=[];
+      live.documents.push({id:Date.now()+'_'+Math.random().toString(36).slice(2),name:file.name,url,path,type:file.type,size:file.size,folder:_pdFolder,uploadedBy:currentUser.id,uploadedAt:now()});
       logHistory(_pdDosId,'document','Document ajouté',file.name);
     }catch(e){console.error(e);showToast('Erreur upload : '+file.name);}
   }
@@ -3079,7 +3090,11 @@ async function deleteDossierDoc(dosId,docId){
   const d=dossiers.find(x=>x.id===dosId); if(!d||!d.documents) return;
   const doc=d.documents.find(x=>x.id===docId);
   if(doc?.path&&window._storage){try{await window._storage.ref(doc.path).delete();}catch(e){console.warn(e);}}
-  d.documents=d.documents.filter(x=>x.id!==docId);
+  // ⚠ Course onSnapshot (cf. 39866d4) : re-résolution après l'await de suppression Storage,
+  // sinon le filter s'appliquerait à un objet détaché et le document resterait listé
+  // (avec un lien mort, le fichier Storage étant déjà supprimé).
+  const live=dossiers.find(x=>x.id===dosId)||d;
+  live.documents=(live.documents||[]).filter(x=>x.id!==docId);
   logHistory(dosId,'document','Document supprimé',doc?.name||'');
   await (window.saveDataNow ? saveDataNow() : saveData());
   if(_pdDosId===dosId) renderPorteDoc(); else renderFiche();
@@ -3235,8 +3250,14 @@ async function receptionnerPdfFicheCalcul({ dossierId, filename, base64 }) {
     const path = `dossiers/${dossierId}/${Date.now()}_${safe}`;
     const snap = await window._storage.ref(path).put(blob);
     const url = await snap.ref.getDownloadURL();
-    if (!d.documents) d.documents = [];
-    d.documents.push({ id: Date.now()+'_'+Math.random().toString(36).slice(2), name: safe, url, path, type: 'application/pdf', size: blob.size, folder: 'Fiche de fabrication', uploadedBy: currentUser.id, uploadedAt: now() });
+    // ⚠ Même course que dans changerStatutDossier (cf. 39866d4) : pendant l'upload (plusieurs
+    // secondes), le saveData du jmb:export — envoyé par la fiche EN MÊME TEMPS que le PDF —
+    // produit un écho onSnapshot qui reconstruit le tableau `dossiers`. Notre `d` serait alors
+    // détaché et le push ci-dessous perdu : PDF présent dans Storage mais jamais référencé au
+    // porte-document. On re-résout l'objet vivant juste avant de muter.
+    const live = dossiers.find(x => x.id === dossierId) || d;
+    if (!live.documents) live.documents = [];
+    live.documents.push({ id: Date.now()+'_'+Math.random().toString(36).slice(2), name: safe, url, path, type: 'application/pdf', size: blob.size, folder: 'Fiche de fabrication', uploadedBy: currentUser.id, uploadedAt: now() });
     logHistory(dossierId, 'document', 'Fiche de calcul déposée dans le porte-document', safe);
     await saveData();
     showToast('PDF déposé dans le porte-document du dossier');
