@@ -1514,6 +1514,11 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans texte avant o
       if(isEmbedded && dossierId){
         const base64=doc.output('datauristring').split(',')[1];
         window.parent.postMessage({type:'jmb:pdf', payload:{dossierId, filename, base64}}, '*');
+        // Générer le PDF = la fiche est faite : on envoie AUSSI les valeurs au dossier
+        // (nbFagots, axe/moteur choisis…). Sans ça, un utilisateur qui ne clique que sur
+        // "Enregistrer en PDF" laisse d.nbFagotsCalcule vide et le dossier reste bloqué
+        // en vérif ("fiche de calcul non faite") alors que le PDF est bien au porte-document.
+        if(ready) sendToDossier();
         setSavedMsg('PDF envoyé au porte-document du dossier ✓');
         setTimeout(()=>setSavedMsg(''),3000);
       } else {
