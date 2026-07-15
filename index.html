@@ -1105,6 +1105,15 @@ a:focus-visible, button:focus-visible,
           <div class="form-group"><label class="form-label">Lames</label><input id="f-lames" placeholder="ex: Gris"></div>
           <div class="form-group"><label class="form-label">Pieds</label><input id="f-pieds" placeholder="ex: 7016/Gris"></div>
           <div class="form-group"><label class="form-label">Alimentation</label><input id="f-alim" placeholder="ex: 24V"></div>
+          <div class="form-group"><label class="form-label">Type d'alimentation</label><select id="f-typeAlimentation">
+            <option value="">—</option>
+            <option>Electrique</option>
+            <option>Solaire</option>
+            <option>Solaire + Chargeur</option>
+            <option>EasyPlug</option>
+            <option>Batterie</option>
+            <option>Batterie 6ah</option>
+          </select></div>
           <div class="form-group"><label class="form-label">Puissance moteur</label><input id="f-moteur" placeholder="ex: 120BD newton"></div>
         </div>
       </div>
@@ -2644,6 +2653,7 @@ ${d.contraintes?`<div class="box danger"><div class="box-label">⚠ Contraintes 
   <div class="field"><label>Taille lame</label><div class="val">${d.tailleLame||'—'}</div></div>
   <div class="field"><label>Coloris pieds</label><div class="val">${d.pieds||'—'}</div></div>
   <div class="field"><label>Alimentation</label><div class="val">${d.alim||'—'}</div></div>
+  <div class="field"><label>Type d'alimentation</label><div class="val">${d.typeAlimentation||'—'}</div></div>
   <div class="field"><label>Moteur</label><div class="val">${d.moteur||'—'}</div></div>
 </div>
 ${d.options?`<div style="margin-top:10px"><div class="box-label" style="font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#999;margin-bottom:5px">Options</div><div class="options-list">${d.options.split(',').map(o=>`<span class="option-tag">${o.trim()}</span>`).join('')}</div></div>`:''}
@@ -2751,6 +2761,10 @@ function renderPageCommande(d, p) { p = p || {};
           })()}</div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Coloris pieds</div><input value="${d.pieds||''}" onchange="setDosField('pieds',this.value)" placeholder="ex: 7016/Gris"></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Alimentation</div><input value="${d.alim||''}" onchange="setDosField('alim',this.value)" placeholder="ex: 24V"></div>
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Type d'alimentation</div><select onchange="setDosField('typeAlimentation',this.value)">
+            <option value=""${!d.typeAlimentation?' selected':''}>—</option>
+            ${['Electrique','Solaire','Solaire + Chargeur','EasyPlug','Batterie','Batterie 6ah'].map(t=>`<option${d.typeAlimentation===t?' selected':''}>${t}</option>`).join('')}
+          </select></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Puissance moteur</div><input value="${d.moteur||''}" onchange="setDosField('moteur',this.value)" placeholder="ex: 120BD newton"></div>
           <div style="grid-column:span 2"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Options</div><input value="${d.options||''}" onchange="setDosField('options',this.value)"></div>
         </div>
@@ -3674,7 +3688,7 @@ async function handleMegaoPDF(input) {
 }
 
 function openNewDos() {
-  ['f-client','f-tel','f-email','f-contact','f-revendeur','f-adresse','f-cp','f-ville','f-contraintes','f-options','f-typeLame','f-lames','f-pieds','f-alim','f-moteur','f-ref','f-remarques','f-autres','f-largeur','f-longueur','f-surface','f-hauteur','f-profondeur','f-notes-dims'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['f-client','f-tel','f-email','f-contact','f-revendeur','f-adresse','f-cp','f-ville','f-contraintes','f-options','f-typeLame','f-lames','f-pieds','f-alim','f-typeAlimentation','f-moteur','f-ref','f-remarques','f-autres','f-largeur','f-longueur','f-surface','f-hauteur','f-profondeur','f-notes-dims'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const np=document.getElementById('f-need-pose');if(np)np.checked=false;;
   document.getElementById('f-structure').value='';
   document.getElementById('f-tva').value='20';
@@ -3727,7 +3741,7 @@ function saveDossier() {
     structure:document.getElementById('f-structure').value,options:document.getElementById('f-options').value,
     lames:document.getElementById('f-lames').value,pieds:document.getElementById('f-pieds').value,
     typeLame:document.getElementById('f-typeLame')?.value||'',
-    alim:document.getElementById('f-alim').value,moteur:document.getElementById('f-moteur').value,
+    alim:document.getElementById('f-alim').value,typeAlimentation:document.getElementById('f-typeAlimentation')?.value||'',moteur:document.getElementById('f-moteur').value,
     ht,tva,ref:document.getElementById('f-ref').value,devisStatut:document.getElementById('f-devis-statut').value,
     dateFrom:document.getElementById('f-date-from').value,dateTo:document.getElementById('f-date-to').value,
     dateLivraison:document.getElementById('f-date-livraison').value,

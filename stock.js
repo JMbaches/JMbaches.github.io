@@ -206,6 +206,61 @@ async function stockDecompterSanglesEtClips(d) {
   return { ok:true, sangle:rSangle, clips:rClips };
 }
 
+// Table type d'alimentation -> capot + pièces électriques. Reprise de deduire_alimentation, avec
+// UNE CORRECTION délibérée : le logiciel legacy décompte toujours "Capot 0 Trous" EN PLUS du bon
+// capot (Capot Batterie ou Capot 1 Trous) à cause d'une variable calculée puis jamais utilisée
+// (capot_ref) — un bug confirmé en lisant le bytecode. Ici on ne décompte qu'un seul capot, celui
+// qui correspond réellement au type d'alimentation (décision actée avec l'utilisateur).
+const ALIMENTATION_TABLE = {
+  'Electrique':          { capot:'Capot 0 Trous', elec:['Coffret Hors sol'] },
+  'Solaire':             { capot:'Capot 0 Trous', elec:['Regulateur Solaire','2 Batterie 12V','Cadran de Voltage'] },
+  'Solaire + Chargeur':  { capot:'Capot 0 Trous', elec:['Regulateur Solaire','Panneau Solaire','Maintient de charge 24V','2 Batterie 12V','Cadran de Voltage','Support Solaire'] },
+  'EasyPlug':            { capot:'Capot 0 Trous', elec:['Coffret Hors sol'] },
+  'Batterie':            { capot:'Capot Batterie', elec:['2 Batterie 24V','Chargeur Double Slots 24V','Indicateur de charge'] },
+  'Batterie 6ah':        { capot:'Capot Batterie', elec:['2 Batterie 24V 6ah','Chargeur Double Slots 24V','Indicateur de charge'] },
+};
+
+// Décompte automatique alimentation (pied + capot + pièces électriques). Seuls silver/xtrem/mouv
+// appellent deduire_alimentation dans le logiciel legacy (vérifié dans le bytecode des onglets) —
+// immerge/total/banc/tablier/volet_manuel n'en ont pas. "Couleur de structure" = d.pieds, qui
+// utilise déjà le même format bicolore "capot/pied" (ex "7016/Gris") que le logiciel legacy.
+async function stockDecompterAlimentation(d) {
+  if (d.stockAlimentationDecompteFait) return { ok:false, reason:'déjà décompté' };
+  const type = legacyVoletType(d.structure);
+  if (!['silver','xtrem','mouv'].includes(type)) return { ok:false, reason:'alimentation non applicable à ce type de volet' };
+  if (!d.typeAlimentation || !d.pieds) return { ok:false, reason:"type d'alimentation ou couleur de structure (pieds) non renseignés" };
+  const table = ALIMENTATION_TABLE[d.typeAlimentation];
+  if (!table) return { ok:false, reason:`type d'alimentation "${d.typeAlimentation}" inconnu` };
+
+  const bicolore = d.pieds.includes('/');
+  const [capotCouleur, piedCouleur] = bicolore ? d.pieds.split('/') : [d.pieds, d.pieds];
+  const piedRef = `Pied ${piedCouleur}`;
+  const capotRef = `${table.capot} ${capotCouleur}`;
+
+  let elecRefs = [...table.elec];
+  if (d.typeAlimentation === 'Solaire') {
+    const typeVoletAlim = type === 'xtrem' ? 'silver' : type; // xtrem suit le comportement de silver ici (vérifié)
+    if (typeVoletAlim === 'silver') {
+      elecRefs.push('Panneau Solaire', 'Support Solaire');
+      const supportCouleur = bicolore ? '7016' : piedCouleur;
+      elecRefs = elecRefs.map(r => r === 'Support Solaire' ? `Support Solaire ${supportCouleur}` : r);
+    } else if (typeVoletAlim === 'mouv') {
+      elecRefs.push('Bandeau Solaire');
+    }
+  }
+
+  const resultats = [];
+  resultats.push({ label:piedRef, ...(await stockDecompteFixe('pied', piedRef, 2)) });
+  resultats.push({ label:capotRef, ...(await stockDecompteFixe('pied', capotRef, 1)) });
+  for (const ref of elecRefs) {
+    const m = ref.match(/^(\d+) (.+)$/);
+    const qte = m ? parseInt(m[1], 10) : 1;
+    const label = m ? m[2] : ref;
+    resultats.push({ label, ...(await stockDecompteFixe('alimentation', label, qte)) });
+  }
+  return { ok:true, resultats };
+}
+
 // Point d'entrée unique du décompte auto de stock à l'entrée en production (sortie du statut
 // "verif"). Appelé depuis changerStatutDossier() dans index.html, quel que soit le bouton/menu
 // utilisé pour faire avancer le dossier — pour ne pas dépendre d'un chemin en particulier.
@@ -267,6 +322,24 @@ async function stockDecompterEntreeProduction(d) {
   } else if (piecesRes.reason !== 'déjà décompté') {
     showToast(`⚠ Décompte pièces impossible : ${piecesRes.reason}`);
     logHistory(d.id,'stock',`Décompte pièces automatique impossible : ${piecesRes.reason}`);
+  }
+
+  const alimRes = await stockDecompterAlimentation(d);
+  if (alimRes.ok) {
+    d.stockAlimentationDecompteFait = true;
+    const ok = alimRes.resultats.filter(r => r.ok);
+    const echecs = alimRes.resultats.filter(r => !r.ok);
+    if (ok.length) {
+      logHistory(d.id,'stock',`Alimentation décomptée automatiquement : ${ok.map(r=>r.label).join(', ')}`);
+      showToast(`Alimentation décomptée du stock (${ok.length} référence${ok.length>1?'s':''})`);
+    }
+    if (echecs.length) {
+      logHistory(d.id,'stock',`Alimentation — références non décomptées (introuvables) : ${echecs.map(r=>r.label).join(', ')}`);
+      showToast(`⚠ Alimentation : ${echecs.length} référence${echecs.length>1?'s':''} introuvable${echecs.length>1?'s':''} (${echecs.map(r=>r.label).join(', ')})`);
+    }
+  } else if (!['déjà décompté','alimentation non applicable à ce type de volet'].includes(alimRes.reason)) {
+    showToast(`⚠ Décompte alimentation impossible : ${alimRes.reason}`);
+    logHistory(d.id,'stock',`Décompte alimentation automatique impossible : ${alimRes.reason}`);
   }
 }
 
