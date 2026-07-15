@@ -16,7 +16,10 @@ admin.initializeApp({
 const db     = admin.firestore();
 const bucket = admin.storage().bucket();
 
-const PD_DEFAULT_FOLDERS = ['Bon de commande', 'Facture', 'Fiche de côte', 'Fiche produit'];
+// ⚠ Doit rester aligné avec PD_DEFAULT_FOLDERS dans index.html (sans 'Général', que
+// l'affichage préfixe déjà — cf. fix doublon b8e7995 — et avec le nom actuel
+// 'Fiche de fabrication', renommé depuis 'Fiche produit' en 418b702).
+const PD_DEFAULT_FOLDERS = ['Bon de commande', 'Facture', 'Fiche de côte', 'Fiche de fabrication'];
 
 // ─── Parser PDF Mégao ────────────────────────────────────────────────────────
 // Format réel : tableau de codes produits (VRSIL80S, LAM350, TRSPVR5…)

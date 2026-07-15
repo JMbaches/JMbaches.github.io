@@ -321,13 +321,13 @@ function confirmerManquantGrand(id) {
   renderEmballageGrand();
 }
 
-function avancerDosEmballageGrand(id) {
+async function avancerDosEmballageGrand(id) {
   const d = dossiers.find(x => x.id === id);
   if (!d) return;
-  const prev = d.statut;
-  d.statut = STATUT_NEXT[prev];
-  logHistory(id, 'statut', `Statut changé : ${STATUT_LABEL[prev]} → ${STATUT_LABEL[d.statut]}`);
-  pushNotif('statut:'+d.statut, id, d);
+  // Passe par le point d'entrée unique de changement de statut (index.html) — sans effet
+  // fonctionnel ici (emballage → stocké ne touche jamais 'verif') mais garantit qu'aucun
+  // chemin ne reste hors de la fonction centrale (cf. mémoire projet).
+  if (!(await changerStatutDossier(d, STATUT_NEXT[d.statut]))) return;
   saveData();
   showToast(`${d.client} — Stocké ✓`);
   renderEmballageGrand();

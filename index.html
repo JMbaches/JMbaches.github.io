@@ -2938,8 +2938,11 @@ function openPorteDoc(dosId){
     d.docFolders=[...PD_DEFAULT_FOLDERS];
     saveData();
   } else if(d.docFolders.includes('Fiche produit')){
-    // Migration : renommage de l'ancien dossier "Fiche produit" en "Fiche de fabrication"
-    d.docFolders=d.docFolders.map(f=>f==='Fiche produit'?'Fiche de fabrication':f);
+    // Migration : renommage de l'ancien dossier "Fiche produit" en "Fiche de fabrication".
+    // Dédoublonné (Set) : une sync Mégao antérieure au fix a pu ré-ajouter 'Fiche produit'
+    // par arrayUnion sur un dossier déjà migré — le map produirait alors le doublon
+    // 'Fiche de fabrication' (même famille de bug que le doublon 'Général', cf. b8e7995).
+    d.docFolders=[...new Set(d.docFolders.map(f=>f==='Fiche produit'?'Fiche de fabrication':f))];
     (d.documents||[]).forEach(doc=>{ if(doc.folder==='Fiche produit') doc.folder='Fiche de fabrication'; });
     saveData();
   }
@@ -3250,7 +3253,12 @@ async function receptionnerPdfFicheCalcul({ dossierId, filename, base64 }) {
 async function changerStatutDossier(d, newStatut, logSuffix) {
   const prev = d.statut;
   if (prev === newStatut) return true;
-  if (prev === 'verif' && newStatut !== 'verif') {
+  // Le blocage fiche de calcul + le décompte auto de stock ne concernent que l'ENTRÉE EN
+  // PRODUCTION, c'est-à-dire une sortie de "verif" vers l'avant du pipeline. Un retour en
+  // arrière (renvoi en saisie admin / nouveau, via le menu statut ou le drag&drop du Kanban)
+  // ne doit ni bloquer ni décompter — même comportement que renvoyerSaisie().
+  const STATUTS_AMONT_VERIF = ['nouveau', 'admin'];
+  if (prev === 'verif' && newStatut !== 'verif' && !STATUTS_AMONT_VERIF.includes(newStatut)) {
     // Un dossier volet (typeLame renseigné) ne peut pas partir en fabrication sans être passé
     // par la fiche de calcul — c'est le calcul le plus précis qu'on fait, notamment pour le
     // nombre de fagots de lames. Les dossiers bâches (jamais de typeLame) ne sont pas concernés.
