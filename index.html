@@ -1164,6 +1164,7 @@ a:focus-visible, button:focus-visible,
           <div class="form-group"><label class="form-label">Date souhaitée (pas avant)</label><input id="f-date-from" type="date"></div>
           <div class="form-group"><label class="form-label">Date limite (pas après)</label><input id="f-date-to" type="date"></div>
           <div class="form-group"><label class="form-label">Date limite de livraison</label><input id="f-date-livraison" type="date"></div>
+          <div class="form-group"><label class="form-label">Date de fabrication souhaitée</label><input id="f-date-fab" type="date"></div>
         </div>
         <div class="form-group" style="margin-top:12px">
           <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;padding:10px 12px;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border)">
@@ -2717,6 +2718,7 @@ function renderPageCommande(d, p) { p = p || {};
     </div>
     <div class="fiche-grid c3">
       <div class="fiche-cell"><div class="fiche-cell-label">Date commande</div><input value="${d.dateLivraison||''}" type="date" onchange="setDosField('dateLivraison',this.value)"></div>
+      <div class="fiche-cell"><div class="fiche-cell-label">Date de fabrication souhaitée</div><input value="${d.dateFab||''}" type="date" onchange="setDosField('dateFab',this.value)" title="Priorise ce dossier dans la file de l'atelier — plus tôt = traité plus tôt"></div>
       <div class="fiche-cell"><div class="fiche-cell-label">Transport</div>
         <div class="transport-btns">
           <button class="tb${tr==='enlvt'?' on':''}" onclick="setDosField('transport','enlvt');renderFiche()">Enlvt</button>
@@ -3825,6 +3827,7 @@ function saveDossier() {
     ht,tva,ref:document.getElementById('f-ref').value,devisStatut:document.getElementById('f-devis-statut').value,
     dateFrom:document.getElementById('f-date-from').value,dateTo:document.getElementById('f-date-to').value,
     dateLivraison:document.getElementById('f-date-livraison').value,
+    dateFab:document.getElementById('f-date-fab')?.value||'',
     largeur:document.getElementById('f-largeur').value,
     longueur:document.getElementById('f-longueur').value,
     surface:document.getElementById('f-surface').value,

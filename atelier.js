@@ -36,7 +36,7 @@ function renderAtelier() {
             <span style="font-size:12px;color:#92400E">Fiche technique en attente</span>
           </div>`}
           <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)">
-            <span style="font-size:12px;color:var(--ink-faint)"><i class="ti ti-calendar" style="font-size:12px;vertical-align:-1px"></i> ${fmt(d.dateLivraison)}</span>
+            <span style="font-size:12px;color:var(--ink-faint)"><i class="ti ti-calendar" style="font-size:12px;vertical-align:-1px"></i> ${fmt(d.dateLivraison)}${d.dateFab?` <span style="color:var(--teal);font-weight:600" title="Date de fabrication souhaitée">· Fab ${fmt(d.dateFab)}</span>`:''}</span>
             <div style="display:flex;gap:6px">
               <button class="btn btn-ghost btn-sm" onclick="openVueFab('${d.id}')"><i class="ti ti-eye"></i> Voir</button>
               ${can('adv_prod')?`<button class="btn btn-secondary btn-sm" onclick="avancerDos('${d.id}',event)"><i class="ti ti-check"></i> Fabriqué</button>`:''}
@@ -52,13 +52,14 @@ function getSortedProd() {
   // Appliquer l'ordre manuel si existant, sinon tri auto : URGENT > date livraison
   const manualIds = atelierOrder.filter(id => prod.find(d => d.id === id));
   const unordered = prod.filter(d => !manualIds.includes(d.id));
-  // Tri auto : urgent d'abord, puis date livraison croissante
+  // Tri auto : urgent d'abord, puis date de fabrication souhaitée (fixée en Saisie pour
+  // prioriser un dossier) si renseignée, sinon repli sur la date de livraison comme avant.
   unordered.sort((a, b) => {
     const aUrg = isUrgent(a) ? 0 : 1;
     const bUrg = isUrgent(b) ? 0 : 1;
     if (aUrg !== bUrg) return aUrg - bUrg;
-    const aDate = a.dateLivraison || '9999';
-    const bDate = b.dateLivraison || '9999';
+    const aDate = a.dateFab || a.dateLivraison || '9999';
+    const bDate = b.dateFab || b.dateLivraison || '9999';
     return aDate < bDate ? -1 : aDate > bDate ? 1 : 0;
   });
   // Reconstruire : manuels en tête dans leur ordre, puis auto-triés
@@ -199,6 +200,7 @@ function renderAtelierGrand() {
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:4px">
             <span style="font-size:13px;font-weight:500;color:${retard?'var(--red)':'var(--ink-faint)'}">
               <i class="ti ti-calendar" style="font-size:12px;vertical-align:-1px"></i> ${fmt(d.dateLivraison)}
+              ${d.dateFab?` <span style="color:var(--teal);font-weight:600" title="Date de fabrication souhaitée">· Fab ${fmt(d.dateFab)}</span>`:''}
               ${retard?'<span style="font-size:10px;font-weight:700;color:var(--red);margin-left:4px">EN RETARD</span>':''}
             </span>
             <div style="display:flex;gap:7px">
@@ -239,6 +241,7 @@ function openVueFab(dosId) {
           <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ink-faint)">${d.id}</div>
           <div style="font-size:14px;font-weight:600;margin-top:4px;color:${retard?'var(--red)':'var(--ink-soft)'}">
             <i class="ti ti-calendar" style="font-size:13px;vertical-align:-1px"></i> ${fmt(d.dateLivraison)||'—'}
+            ${d.dateFab?`<div style="font-size:12px;color:var(--teal);font-weight:600;margin-top:2px">Fab souhaitée : ${fmt(d.dateFab)}</div>`:''}
             ${retard?'<span style="font-size:11px;font-weight:700;color:var(--red);margin-left:4px">EN RETARD</span>':''}
           </div>
         </div>
