@@ -2453,7 +2453,7 @@ function renderFiche() {
         </button>
         <div id="statut-menu-${d.id}" style="display:none;position:absolute;top:100%;left:0;z-index:500;background:var(--paper);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(22,24,29,.12);min-width:170px;padding:4px">
           ${Object.entries(STATUT_LABEL).map(([k,v])=>`
-            <button onclick="changerStatutDirect('${d.id}','${k}',event);renderFiche()" style="display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;background:${d.statut===k?'var(--accent-light)':'none'};border:none;border-radius:4px;font-size:12px;cursor:pointer;text-align:left;color:var(--ink);font-weight:${d.statut===k?'600':'400'}">
+            <button onclick="changerStatutDirect('${d.id}','${k}',event).then(()=>renderFiche())" style="display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;background:${d.statut===k?'var(--accent-light)':'none'};border:none;border-radius:4px;font-size:12px;cursor:pointer;text-align:left;color:var(--ink);font-weight:${d.statut===k?'600':'400'}">
               ${d.statut===k?'<i class="ti ti-check" style="font-size:11px;color:var(--accent)"></i>':'<span style="width:11px"></span>'}${v}
             </button>`).join('')}
         </div>
@@ -3224,6 +3224,22 @@ async function receptionnerPdfFicheCalcul({ dossierId, filename, base64 }) {
     showToast('⚠ Erreur lors du dépôt du PDF dans le porte-document');
   }
 }
+// Point d'entrée UNIQUE pour changer le statut d'un dossier — appelé depuis avancerFiche(),
+// avancerDos(), changerStatutDirect() et le drag&drop du Kanban Suivi (onDrop), pour garantir
+// le décompte auto de stock (lames+moteur) quel que soit le chemin utilisé pour faire sortir
+// un dossier du statut "verif" (voir mémoire projet : ce décompte ne se déclenchait auparavant
+// que depuis avancerFiche(), pas depuis les autres boutons/menus de changement de statut).
+// Ne fait PAS saveData()/render — à la charge de l'appelant, qui varie selon le contexte.
+async function changerStatutDossier(d, newStatut, logSuffix) {
+  const prev = d.statut;
+  if (prev === newStatut) return;
+  if (prev === 'verif' && newStatut !== 'verif') {
+    await stockDecompterEntreeProduction(d);
+  }
+  d.statut = newStatut; d.statutChangedAt = nowISO();
+  logHistory(d.id,'statut',`Statut changé${logSuffix?' '+logSuffix:''} : ${STATUT_LABEL[prev]} → ${STATUT_LABEL[newStatut]}`);
+  pushNotif('statut:'+newStatut,d.id,d);
+}
 async function avancerFiche() {
   const d=dossiers.find(x=>x.id===currentDosId); if(!d||isDossierCloture(d)) return;
   let next;
@@ -3235,21 +3251,7 @@ async function avancerFiche() {
   } else {
     next=getNextStatut(d);
   }
-  const prev=d.statut;
-  if (prev === 'verif' && next !== 'verif') {
-    const res = await stockDecompterDossier(d);
-    if (res.ok) {
-      d.stockDecompteFait = true;
-      logHistory(currentDosId,'stock',`Stock décompté automatiquement : ${res.nbLames} lame${res.nbLames>1?'s':''} (${res.ref.type} ${d.lames} taille ${d.tailleLame})${res.ref.quantite<0?' — ⚠ stock passé négatif':''}`);
-      showToast(res.ref.quantite<0 ? `⚠ ${res.nbLames} lames décomptées — stock négatif (${res.ref.quantite})` : `${res.nbLames} lames décomptées du stock`);
-    } else {
-      showToast(`⚠ Décompte stock impossible : ${res.reason}`);
-      logHistory(currentDosId,'stock',`Décompte stock automatique impossible : ${res.reason}`);
-    }
-  }
-  d.statut=next; d.statutChangedAt=nowISO();
-  logHistory(currentDosId,'statut',`Statut changé : ${STATUT_LABEL[prev]} → ${STATUT_LABEL[next]}`);
-  pushNotif('statut:'+next,d.id,d);
+  await changerStatutDossier(d, next);
   saveData(); showToast(`Statut mis à jour : ${STATUT_LABEL[next]}`); renderFiche();
 }
 // Fermer tous les menus statut ouverts
@@ -3279,15 +3281,12 @@ function togglePaiementMenu(dosId, e) {
 }
 
 // Changer le statut directement depuis la liste
-function changerStatutDirect(dosId, newStatut, e) {
+async function changerStatutDirect(dosId, newStatut, e) {
   e.stopPropagation();
   closeAllStatutMenus();
   const d = dossiers.find(x => x.id === dosId);
   if (!d || d.statut === newStatut) return;
-  const prev = d.statut;
-  d.statut = newStatut; d.statutChangedAt = nowISO();
-  logHistory(dosId, 'statut', `Statut changé : ${STATUT_LABEL[prev]} → ${STATUT_LABEL[newStatut]}`);
-  pushNotif('statut:' + newStatut, dosId, d);
+  await changerStatutDossier(d, newStatut);
   saveData();
   showToast(`Statut mis à jour : ${STATUT_LABEL[newStatut]}`);
   renderDos();
@@ -3299,7 +3298,7 @@ document.addEventListener('click', () => {
   document.querySelectorAll('[id^="paiement-menu-"]').forEach(m => m.style.display = 'none');
 });
 
-function avancerDos(id,e) {
+async function avancerDos(id,e) {
   if(e) e.stopPropagation();
   const d=dossiers.find(x=>x.id===id); if(!d||isDossierCloture(d)) return;
   let next;
@@ -3311,9 +3310,7 @@ function avancerDos(id,e) {
   } else {
     next=getNextStatut(d);
   }
-  const prev=d.statut; d.statut=next; d.statutChangedAt=nowISO();
-  logHistory(id,'statut',`Statut changé : ${STATUT_LABEL[prev]} → ${STATUT_LABEL[next]}`);
-  pushNotif('statut:'+next,id,d);
+  await changerStatutDossier(d, next);
   saveData();
   const mc=document.getElementById('main-content');
   const toast=document.createElement('div');
@@ -4057,7 +4054,7 @@ function onDragLeave(e, statut) {
   if(col) { col.style.background=''; col.style.outline=''; }
 }
 
-function onDrop(e, newStatut) {
+async function onDrop(e, newStatut) {
   e.preventDefault();
   const col = document.getElementById('col-'+newStatut);
   if(col) { col.style.background=''; col.style.outline=''; }
@@ -4083,21 +4080,8 @@ function onDrop(e, newStatut) {
     showToastSuivi('Ce dossier est déjà clôturé');
     return;
   }
-  if((newStatut==='expédié'||newStatut==='livré'||newStatut==='posé'||newStatut==='retiré') && !isCloture(d.statut)) {
-    const prev = d.statut;
-    d.statut = newStatut;
-    logHistory(d.id,'statut',`Statut changé via pipeline : ${STATUT_LABEL[prev]} → ${STATUT_LABEL[newStatut]}`);
-    pushNotif('statut:'+newStatut, d.id, d);
-    saveData();
-    showToastSuivi(`✓ ${d.client} → ${STATUT_LABEL[newStatut]}`);
-    renderSuivi();
-    return;
-  }
 
-  const prev = d.statut;
-  d.statut = newStatut;
-  logHistory(d.id,'statut',`Statut changé via pipeline : ${STATUT_LABEL[prev]} → ${STATUT_LABEL[newStatut]}`);
-  pushNotif('statut:'+newStatut, d.id, d);
+  await changerStatutDossier(d, newStatut, 'via pipeline');
   saveData();
   showToastSuivi(`✓ ${d.client} → ${STATUT_LABEL[newStatut]}`);
   renderSuivi();

@@ -49,6 +49,55 @@ async function stockDecompterDossier(d) {
   return { ok:true, nbLames, ref };
 }
 
+/* ================================================================
+   STOCK (pièces détachées — moteur, pied, axe...)
+   ================================================================ */
+
+// Recherche une référence pièce par catégorie + libellé exact (comparaison trim+lowercase).
+function stockFindPieceRef(categorie, label) {
+  if (!categorie || !label) return null;
+  const l = String(label).trim().toLowerCase();
+  return stockRefs.find(r => r.categorie === categorie && (r.label||'').trim().toLowerCase() === l) || null;
+}
+
+// Décompte automatique du moteur (1 par dossier), appelé en même temps que les lames.
+// d.moteur (ex: "80S") matche directement le libellé de la ref stock catégorie 'moteur'
+// — même code que celui extrait par megao-sync.js depuis le code produit VR (VRSIL80S → 80S).
+async function stockDecompterMoteur(d) {
+  if (d.stockMoteurDecompteFait) return { ok:false, reason:'déjà décompté' };
+  if (!d.moteur) return { ok:false, reason:'moteur non renseigné sur le dossier' };
+  const ref = stockFindPieceRef('moteur', d.moteur);
+  if (!ref) return { ok:false, reason:`aucune référence stock moteur pour "${d.moteur}"` };
+  await window.submitStockMouvement(ref.id, 'sortie', 1);
+  ref.quantite = (ref.quantite||0) - 1;
+  return { ok:true, ref };
+}
+
+// Point d'entrée unique du décompte auto de stock à l'entrée en production (sortie du statut
+// "verif"). Appelé depuis changerStatutDossier() dans index.html, quel que soit le bouton/menu
+// utilisé pour faire avancer le dossier — pour ne pas dépendre d'un chemin en particulier.
+async function stockDecompterEntreeProduction(d) {
+  const lamesRes = await stockDecompterDossier(d);
+  if (lamesRes.ok) {
+    d.stockDecompteFait = true;
+    logHistory(d.id,'stock',`Stock décompté automatiquement : ${lamesRes.nbLames} lame${lamesRes.nbLames>1?'s':''} (${lamesRes.ref.type} ${d.lames} taille ${d.tailleLame})${lamesRes.ref.quantite<0?' — ⚠ stock passé négatif':''}`);
+    showToast(lamesRes.ref.quantite<0 ? `⚠ ${lamesRes.nbLames} lames décomptées — stock négatif (${lamesRes.ref.quantite})` : `${lamesRes.nbLames} lames décomptées du stock`);
+  } else if (lamesRes.reason !== 'déjà décompté') {
+    showToast(`⚠ Décompte stock lames impossible : ${lamesRes.reason}`);
+    logHistory(d.id,'stock',`Décompte stock lames automatique impossible : ${lamesRes.reason}`);
+  }
+
+  const moteurRes = await stockDecompterMoteur(d);
+  if (moteurRes.ok) {
+    d.stockMoteurDecompteFait = true;
+    logHistory(d.id,'stock',`Moteur décompté automatiquement : ${d.moteur}${moteurRes.ref.quantite<0?' — ⚠ stock passé négatif':''}`);
+    showToast(moteurRes.ref.quantite<0 ? `⚠ moteur ${d.moteur} décompté — stock négatif (${moteurRes.ref.quantite})` : `Moteur ${d.moteur} décompté du stock`);
+  } else if (moteurRes.reason !== 'déjà décompté') {
+    showToast(`⚠ Décompte stock moteur impossible : ${moteurRes.reason}`);
+    logHistory(d.id,'stock',`Décompte stock moteur automatique impossible : ${moteurRes.reason}`);
+  }
+}
+
 function stockFmtDate(ts) {
   if (!ts) return '—';
   const d = ts.toDate ? ts.toDate() : new Date(ts);
