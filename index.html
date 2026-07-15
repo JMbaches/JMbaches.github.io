@@ -3484,10 +3484,9 @@ async function parseMegaoPDFLocal(file) {
   ];
   const structure = STRUCT_MAP.find(m => m.k.some(k => vrText.includes(k)))?.v || (vrProd ? vrProd.desig : '');
   const lameDesig = lamProd ? lamProd.desig : '';
-  // Matière : cherchée dans la désignation ET le code (ex: "LAMES POLYCARBONATE BLEU (350)" ou code contenant "POLY")
-  const lameMatText = (lameDesig + ' ' + (lamProd ? lamProd.code : '')).toUpperCase();
-  const typeLame = /POLYCARBONATE|\bPOLY\b/.test(lameMatText) ? 'Polycarbonate'
-                 : /\bPVC\b/.test(lameMatText) ? 'PVC' : '';
+  // Matière : le code produit distingue directement PVC (LAM...) de Polycarbonate (LAMPOL...)
+  const typeLame = lamProd && /^LAMPOL/.test(lamProd.code) ? 'Polycarbonate'
+                  : lamProd && /^LAM/.test(lamProd.code) ? 'PVC' : '';
   const lameParenIdx = lameDesig.lastIndexOf(')');
   let lames = lameParenIdx >= 0 ? lameDesig.slice(lameParenIdx + 1).trim() : lameDesig;
   // Nettoyage défensif : si la matière s'est retrouvée capturée dans le coloris, on la retire
@@ -3503,8 +3502,8 @@ async function parseMegaoPDFLocal(file) {
   const alimM     = vrBlock.match(/\b(\d{2,3})\s*V\b/i);
   const alim      = alimM ? alimM[1] + 'V' : '';
 
-  // Largeur depuis le code LAM (LAM350→3.50m, LAM45→4.5m, LAM4→4m)
-  const lamCodeM = lamProd ? lamProd.code.match(/^LAM([0-9]+)/) : null;
+  // Largeur depuis le code LAM/LAMPOL (LAM350→3.50m, LAM45→4.5m, LAM4→4m, LAMPOL4→4m)
+  const lamCodeM = lamProd ? lamProd.code.match(/^LAM(?:POL)?([0-9]+)/) : null;
   let largeur = '';
   if (lamCodeM) {
     const n = parseInt(lamCodeM[1]);
