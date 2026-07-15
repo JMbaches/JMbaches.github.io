@@ -3267,6 +3267,20 @@ async function changerStatutDossier(d, newStatut, logSuffix) {
       return false;
     }
     await stockDecompterEntreeProduction(d);
+    // ⚠ Pendant les awaits ci-dessus (jusqu'à ~17 transactions Firestore), chaque logHistory()
+    // du décompte déclenche un saveData() dont l'écho onSnapshot RECONSTRUIT le tableau
+    // `dossiers` avec de nouveaux objets : notre `d` est alors détaché du tableau, et le
+    // statut + les flags anti-double-décompte posés dessus seraient perdus au saveData suivant
+    // (symptôme : stock décompté mais dossier toujours en vérif, et re-décompte possible au
+    // clic suivant). On rapatrie donc les mutations sur l'objet actuellement dans le tableau —
+    // tout ce qui suit étant synchrone, plus aucun écho ne peut s'intercaler avant le return.
+    const live = dossiers.find(x => x.id === d.id);
+    if (live && live !== d) {
+      ['stockDecompteFait','stockMoteurDecompteFait','stockAxeDecompteFait',
+       'stockSanglesDecompteFait','stockPiecesFixesDecompteFait','stockAlimentationDecompteFait']
+        .forEach(k => { if (d[k]) live[k] = d[k]; });
+      d = live;
+    }
   }
   d.statut = newStatut; d.statutChangedAt = nowISO();
   logHistory(d.id,'statut',`Statut changé${logSuffix?' '+logSuffix:''} : ${STATUT_LABEL[prev]} → ${STATUT_LABEL[newStatut]}`);
