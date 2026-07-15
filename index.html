@@ -3293,6 +3293,7 @@ async function receptionnerPdfFicheCalcul({ dossierId, filename, base64 }) {
     const live = dossiers.find(x => x.id === dossierId) || d;
     if (!live.documents) live.documents = [];
     live.documents.push({ id: Date.now()+'_'+Math.random().toString(36).slice(2), name: safe, url, path, type: 'application/pdf', size: blob.size, folder: 'Fiche de fabrication', uploadedBy: currentUser.id, uploadedAt: now() });
+    pushNotif('fiche_technique', dossierId, live); // notifie l'atelier, comme l'import manuel
     logHistory(dossierId, 'document', 'Fiche de calcul déposée dans le porte-document', safe);
     await saveData();
     showToast('PDF déposé dans le porte-document du dossier');
@@ -3317,7 +3318,7 @@ async function changerStatutDossier(d, newStatut, logSuffix) {
   // PRODUCTION, c'est-à-dire une sortie de "verif" vers l'avant du pipeline. Un retour en
   // arrière (renvoi en saisie admin / nouveau, via le menu statut ou le drag&drop du Kanban)
   // ne doit ni bloquer ni décompter — même comportement que renvoyerSaisie().
-  const STATUTS_AMONT_VERIF = ['nouveau', 'admin'];
+  const STATUTS_AMONT_VERIF = ['nouveau', 'admin', 'attente_planif'];
   if (prev === 'verif' && newStatut !== 'verif' && !STATUTS_AMONT_VERIF.includes(newStatut)) {
     // Un dossier volet (typeLame renseigné) ne peut pas partir en fabrication sans être passé
     // par la fiche de calcul — c'est le calcul le plus précis qu'on fait, notamment pour le
@@ -3873,11 +3874,34 @@ function importerFicheTechnique(dosId, input) {
   reader.readAsDataURL(file);
 }
 
+// Retrouve la fiche de fabrication d'un dossier : le document le plus récent du dossier
+// "Fiche de fabrication" du porte-document (déposé automatiquement par la fiche de calcul,
+// ou à la main), avec repli sur l'ancien champ ficheTechniqueB64 des dossiers pas encore
+// migrés. ⚠ C'est LA source de vérité pour l'atelier : l'ancien champ est vidé par la
+// migration d'openPorteDoc, et le nouveau flux (jmb:pdf) ne le remplit jamais — tester
+// ficheTechniqueB64 directement fait disparaître les fiches à l'atelier.
+function getFicheFabrication(d){
+  if(!d) return null;
+  const docs=(d.documents||[]).filter(x=>x&&x.folder==='Fiche de fabrication'&&x.url);
+  if(docs.length){
+    const ts=x=>{const n=parseInt(x.id,10);return isNaN(n)?0:n;}; // les id commencent par Date.now()
+    return docs.reduce((a,b)=>ts(a)>=ts(b)?a:b);
+  }
+  if(d.ficheTechniqueB64) return {name:d.ficheTechniqueNom||'fiche-technique.pdf',url:d.ficheTechniqueB64};
+  return null;
+}
+
 function voirFicheTechnique(dosId) {
   const d = dossiers.find(x => x.id === dosId);
-  if (!d || !d.ficheTechniqueB64) return;
-  const win = window.open('', '_blank');
-  win.document.write(`<iframe src="${d.ficheTechniqueB64}" style="width:100%;height:100vh;border:none"></iframe>`);
+  const fiche = getFicheFabrication(d);
+  if (!fiche) return;
+  if (String(fiche.url).startsWith('data:')) {
+    // Ancien format : PDF embarqué en base64 — un data: URI ne s'ouvre pas directement en onglet.
+    const win = window.open('', '_blank');
+    win.document.write(`<iframe src="${fiche.url}" style="width:100%;height:100vh;border:none"></iframe>`);
+  } else {
+    window.open(fiche.url, '_blank');
+  }
 }
 
 function supprimerFicheTechnique(dosId) {

@@ -27,13 +27,13 @@ function renderAtelier() {
           ${d.options?`<div style="font-size:12px;color:var(--ink-faint);margin-bottom:8px">${d.options}</div>`:''}
           ${d.remarques?`<div style="font-size:12px;background:var(--bg);padding:7px 10px;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:8px">${d.remarques}</div>`:''}
           ${d.autres?`<div style="font-size:12px;color:var(--red);background:var(--red-light);padding:7px 10px;border-radius:var(--radius);border:1px solid #F09595;margin-bottom:8px">${d.autres}</div>`:''}
-          ${d.ficheTechniqueB64?`<div style="display:flex;align-items:center;gap:8px;background:#E1F5EE;border:1px solid #A7F3D0;border-radius:var(--radius);padding:7px 10px;margin-bottom:8px;cursor:pointer" onclick="voirFicheTechnique('${d.id}')">
+          ${getFicheFabrication(d)?`<div style="display:flex;align-items:center;gap:8px;background:#E1F5EE;border:1px solid #A7F3D0;border-radius:var(--radius);padding:7px 10px;margin-bottom:8px;cursor:pointer" onclick="voirFicheTechnique('${d.id}')">
             <i class="ti ti-file-type-pdf" style="color:#E53E3E;font-size:16px"></i>
-            <span style="font-size:12px;font-weight:600;color:#085041;flex:1">Fiche technique disponible</span>
+            <span style="font-size:12px;font-weight:600;color:#085041;flex:1">Fiche de fabrication disponible</span>
             <i class="ti ti-eye" style="font-size:13px;color:#085041"></i>
           </div>`:`<div style="display:flex;align-items:center;gap:8px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:var(--radius);padding:7px 10px;margin-bottom:8px">
             <i class="ti ti-clock" style="color:#92400E;font-size:14px"></i>
-            <span style="font-size:12px;color:#92400E">Fiche technique en attente</span>
+            <span style="font-size:12px;color:#92400E">Fiche de fabrication en attente</span>
           </div>`}
           <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)">
             <span style="font-size:12px;color:var(--ink-faint)"><i class="ti ti-calendar" style="font-size:12px;vertical-align:-1px"></i> ${fmt(d.dateLivraison)}${d.dateFab?` <span style="color:var(--teal);font-weight:600" title="Date de fabrication souhaitée">· Fab ${fmt(d.dateFab)}</span>`:''}</span>
@@ -168,15 +168,15 @@ function renderAtelierGrand() {
           ${d.options?`<div style="margin-bottom:11px"><div class="spec-k" style="margin-bottom:5px">Options</div><div style="display:flex;flex-wrap:wrap;gap:4px">${d.options.split(',').map(o=>`<span class="opt-tag">${o.trim()}</span>`).join('')}</div></div>`:''}
           ${d.remarques?`<div style="background:#FFFBEB;border:1px solid #FAC775;border-radius:var(--radius);padding:9px 12px;margin-bottom:9px;font-size:13px;color:#633806"><i class="ti ti-alert-triangle" style="font-size:13px;vertical-align:-2px;margin-right:5px"></i>${d.remarques}</div>`:''}
           ${d.autres?`<div style="background:var(--red-light);border:1px solid #F09595;border-radius:var(--radius);padding:9px 12px;margin-bottom:9px;font-size:13px;color:var(--red);font-weight:500"><i class="ti ti-alert-circle" style="font-size:13px;vertical-align:-2px;margin-right:5px"></i>${d.autres}</div>`:''}
-          ${d.ficheTechniqueB64
+          ${getFicheFabrication(d)
             ? `<div style="display:flex;align-items:center;gap:8px;background:#E1F5EE;border:1px solid #A7F3D0;border-radius:var(--radius);padding:9px 12px;margin-bottom:9px;cursor:pointer" onclick="voirFicheTechnique('${d.id}')">
                 <i class="ti ti-file-type-pdf" style="color:#E53E3E;font-size:18px"></i>
-                <span style="font-size:13px;font-weight:600;color:#085041;flex:1">Fiche technique disponible</span>
+                <span style="font-size:13px;font-weight:600;color:#085041;flex:1">Fiche de fabrication disponible</span>
                 <i class="ti ti-eye" style="font-size:14px;color:#085041"></i>
                </div>`
             : `<div style="display:flex;align-items:center;gap:8px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:var(--radius);padding:9px 12px;margin-bottom:9px">
                 <i class="ti ti-clock" style="color:#92400E;font-size:16px"></i>
-                <span style="font-size:13px;color:#92400E">Fiche technique en attente</span>
+                <span style="font-size:13px;color:#92400E">Fiche de fabrication en attente</span>
                </div>`}
           <div style="margin-bottom:13px">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -280,14 +280,14 @@ function openVueFab(dosId) {
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:6px"><i class="ti ti-ruler"></i> Notes métreur</div>
         <div style="font-size:16px;color:var(--ink);line-height:1.6;white-space:pre-wrap">${d.notesMetreur}</div>
       </div>` : ''}
-      ${d.ficheTechniqueB64 ? `
+      ${(()=>{const fiche=getFicheFabrication(d);return fiche ? `
       <div style="margin-top:6px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:10px"><i class="ti ti-file-type-pdf" style="color:var(--red)"></i> Fiche technique</div>
-        <iframe src="${d.ficheTechniqueB64}" style="width:100%;height:520px;border:1px solid var(--border);border-radius:var(--radius)"></iframe>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:10px"><i class="ti ti-file-type-pdf" style="color:var(--red)"></i> Fiche de fabrication</div>
+        <iframe src="${fiche.url}" style="width:100%;height:520px;border:1px solid var(--border);border-radius:var(--radius)"></iframe>
       </div>` : `
       <div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:var(--radius);padding:14px 18px">
-        <div style="font-size:14px;color:#92400E"><i class="ti ti-clock" style="vertical-align:-1px;margin-right:6px"></i>Fiche technique en attente</div>
-      </div>`}
+        <div style="font-size:14px;color:#92400E"><i class="ti ti-clock" style="vertical-align:-1px;margin-right:6px"></i>Fiche de fabrication en attente</div>
+      </div>`})()}
     </div>`;
 
   document.getElementById('vf-footer-btns').innerHTML = can('adv_prod')
