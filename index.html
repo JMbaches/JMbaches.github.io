@@ -2800,6 +2800,7 @@ function renderPageCommande(d, p) { p = p || {};
     <div class="avance-bar no-print">
       <div style="font-size:12px;color:var(--ink-faint)">Prochaine étape :</div>
       ${can('advance')&&!isDossierCloture(d)?`
+        ${!d.needPose?`<button class="btn btn-ghost btn-sm" onclick="envoyerAuPlanning()" title="Envoie ce dossier dans l'onglet Planning pour planifier la pose, sans attendre la fabrication"><i class="ti ti-calendar-plus"></i> Envoyer au planning</button>`:`<span class="badge" style="color:var(--teal);border-color:var(--teal)" title="Ce dossier apparaît dans l'onglet Planning"><i class="ti ti-calendar-check"></i> Dans le planning</span>`}
         ${d.statut==='verif'?`<button class="btn btn-ghost btn-sm" onclick="renvoyerSaisie()" style="color:var(--amber);border-color:rgba(217,119,6,.3)" title="Renvoyer en saisie admin"><i class="ti ti-arrow-back-up"></i> Renvoyer en saisie</button>`:''}
         <button class="btn btn-primary" onclick="avancerFiche()"><i class="ti ti-arrow-right"></i> ${getNextBtnLabel(d)}</button>
       `:`<span class="badge b-expedie">Dossier clôturé</span>`}
@@ -3156,6 +3157,19 @@ function renvoyerSaisie() {
   pushNotif('statut:admin',currentDosId,d);
   saveData(); renderFiche();
   showToast('Dossier renvoyé en saisie admin');
+}
+
+// Envoie le dossier au planning (pose) sans attendre le passage en fabrication — d.needPose est
+// le seul champ qui détermine l'apparition dans l'onglet Planning (indépendant du statut, voir
+// renderPlanningAvance : dossiers.filter(d => d.transport==='liv_pose' || d.needPose)), mais il
+// n'était réglable qu'à la création du dossier (case à cocher de la modale). Ce bouton permet de
+// l'activer à tout moment depuis la fiche, notamment dès la Saisie admin.
+function envoyerAuPlanning() {
+  const d = dossiers.find(x => x.id === currentDosId); if (!d || d.needPose) return;
+  d.needPose = true;
+  logHistory(currentDosId, 'planning', 'Dossier envoyé au planning (pose à planifier)');
+  saveData(); renderFiche();
+  showToast('Dossier envoyé au planning');
 }
 
 /* ================================================================
