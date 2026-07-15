@@ -10,6 +10,16 @@
    scope lexical global du document (voir mémoire projet : piège
    let/window).
    ================================================================ */
+// Un dossier envoyé au planning depuis la Saisie passe en statut "attente_planif" (voir
+// envoyerAuPlanning() dans index.html) : il en ressort tout seul, de retour en Saisie (statut
+// admin), dès qu'une date de pose lui est fixée — peu importe par quel mécanisme (EDT interne,
+// Planning IA en iframe, import JSON). Appelé après CHAQUE affectation réelle de d.poseDate.
+async function _retourSaisieSiPlanifie(d) {
+  if (d.statut !== 'attente_planif' || !d.poseDate) return;
+  await changerStatutDossier(d, 'admin', 'automatique après planification de la pose');
+  showToast(`${d.client} revient en Saisie — pose planifiée le ${fmt(d.poseDate)}`);
+}
+
 /* ================================================================
    PLANNING EDT
    ================================================================ */
@@ -63,7 +73,7 @@ function edtCardHTML(d, opts={}) {
    ================================================================ */
 
 // Écoute en permanence les mises à jour de planning.html → Firebase
-window.addEventListener('message', (e) => {
+window.addEventListener('message', async (e) => {
   if (!e.data) return;
   if (e.data.type === 'JMBACH_READY') {
     // L'iframe vient de charger et signale qu'elle est prête : on envoie les dossiers
@@ -73,14 +83,14 @@ window.addEventListener('message', (e) => {
   if (e.data.type === 'JMBACH_UPDATE') {
     const updates = e.data.updates || [];
     let changed = false;
-    updates.forEach(upd => {
+    for (const upd of updates) {
       const d = dossiers.find(x => x.id === upd.externalId);
-      if (!d) return;
+      if (!d) continue;
       const newDate     = upd.scheduledDate  || '';
       const newPoseurId = upd.scheduledBinome || '';
-      if (d.poseDate  !== newDate)     { d.poseDate  = newDate;     changed = true; }
+      if (d.poseDate  !== newDate)     { d.poseDate  = newDate;     changed = true; await _retourSaisieSiPlanifie(d); }
       if (d.poseurId  !== newPoseurId) { d.poseurId  = newPoseurId; changed = true; }
-    });
+    }
     if (changed) { saveData(); showToast('✓ Planning synchronisé avec Firebase'); }
   }
 });
@@ -345,7 +355,7 @@ function edtDragStart(e, dosId) {
 }
 function edtDragEnd(e) { e.currentTarget.style.opacity = '1'; }
 
-function edtDrop(e, isoDate) {
+async function edtDrop(e, isoDate) {
   e.preventDefault();
   document.querySelectorAll('.edt-col').forEach(el=>el.classList.remove('dragover'));
   if(!edtDragDosId) return;
@@ -353,6 +363,7 @@ function edtDrop(e, isoDate) {
   if(!d) return;
   d.poseDate = isoDate;
   logHistory(d.id,'modification','Date de pose planifiée','Pose le '+fmt(isoDate));
+  await _retourSaisieSiPlanifie(d);
   saveData();
   edtDragDosId = null;
   renderPlanning();
@@ -368,11 +379,12 @@ function clearPoseDateEdt(dosId) {
   renderPlanning();
 }
 
-function setPoseAndRefresh(dosId, val) {
+async function setPoseAndRefresh(dosId, val) {
   const d = dossiers.find(x=>x.id===dosId);
   if(!d) return;
   d.poseDate = val;
   logHistory(dosId,'modification','Date de pose définie','Pose le '+fmt(val));
+  await _retourSaisieSiPlanifie(d);
   saveData();
   renderPlanning();
 }
@@ -436,7 +448,7 @@ function importerPlanning() {
     const file = e.target.files[0];
     if(!file) return;
     const reader = new FileReader();
-    reader.onload = ev => {
+    reader.onload = async ev => {
       try {
         const raw = JSON.parse(ev.target.result);
         // Accepte les deux formats : ancien (JMB_IMPORT_V1 string) et nouveau (objet JSON)
@@ -445,14 +457,15 @@ function importerPlanning() {
         else if(raw.chantiers) items = raw.chantiers;
         else { alert('Format de fichier invalide.'); return; }
         let updated = 0;
-        items.forEach(item => {
+        for (const item of items) {
           const d = dossiers.find(x=>x.id===item.id);
           if(d && item.poseDate) {
             d.poseDate = item.poseDate;
             logHistory(d.id, 'modification', 'Date de pose importée', 'Pose le ' + fmt(item.poseDate));
+            await _retourSaisieSiPlanifie(d);
             updated++;
           }
-        });
+        }
         saveData();
         showToast('✓ ' + updated + ' date(s) de pose importée(s)');
         renderPlanning();

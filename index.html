@@ -263,6 +263,7 @@ button { cursor: pointer; border: none; background: transparent; }
 .b-livre  { background: #A7F3D0; color: #064E3B; }
 .b-pose { background: var(--coral-light); color: var(--coral); }
 .b-retire { background: #F3F4F6; color: #374151; }
+.b-attente { background: var(--teal-light); color: var(--teal); }
 
 /* ---- AVATAR ---- */
 .avatar { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
@@ -1404,9 +1405,12 @@ const ROLE_DEFAULT_PERMS = {
   metreur:   ['view_all','metreur','edit'],
   emballage: ['emballage','emballage_grand'],
 };
+// "attente_planif" volontairement absent de STATUT_NEXT/STATUT_NEXT_BTN : ce statut n'a pas de
+// bouton "avancer" générique, il se résout automatiquement (voir _retourSaisieSiPlanifie dans
+// planning.js) dès qu'une date de pose est fixée — pas d'action manuelle attendue ici.
 const STATUT_NEXT = {nouveau:'admin',admin:'verif',verif:'production',production:'emballage',emballage:'stocké',stocké:'expédié',expédié:'expédié',terminé:'emballage',posé:'posé',retiré:'retiré'};
-const STATUT_LABEL = {nouveau:'Nouveau',admin:'Saisie admin',verif:'Vérification',production:'En production',emballage:'Emballage',stocké:'Stocké',expédié:'Expédié',livré:'Livré',posé:'Posé',retiré:'Enlevé'};
-const STATUT_COLORS = {nouveau:'#7C3AED',admin:'#D97706',verif:'#0891B2',production:'#2563EB',emballage:'#D97706',stocké:'#4338CA',expédié:'#059669',livré:'#047857',posé:'#065F46',retiré:'#374151'};
+const STATUT_LABEL = {nouveau:'Nouveau',admin:'Saisie admin',verif:'Vérification',production:'En production',emballage:'Emballage',stocké:'Stocké',expédié:'Expédié',livré:'Livré',posé:'Posé',retiré:'Enlevé',attente_planif:'Attente planification'};
+const STATUT_COLORS = {nouveau:'#7C3AED',admin:'#D97706',verif:'#0891B2',production:'#2563EB',emballage:'#D97706',stocké:'#4338CA',expédié:'#059669',livré:'#047857',posé:'#065F46',retiré:'#374151',attente_planif:'#0B5C4C'};
 const STATUT_NEXT_BTN = {nouveau:'→ Envoyer en admin',admin:'→ Envoyer en vérification',verif:'→ Envoyer en production',production:'→ Envoyer en emballage',emballage:'→ Marquer stocké',stocké:'→ Marquer expédié',expédié:'→ Marquer livré',livré:'Dossier clôturé',posé:'Dossier clôturé',retiré:'Dossier clôturé',terminé:'→ Envoyer en emballage'};
 const EVT = {
   création:     {icon:'ti-file-plus',bg:'#EAF0F9',c:'#14479B'},
@@ -1563,7 +1567,7 @@ function can(p) { return currentUser && currentUser.perms.includes(p); }
 function canSeeCA() { return currentUser && (currentUser.role === 'direction' || currentUser.role === 'compta'); }
 function userName(uid) { const u=users.find(x=>x.id===uid); return u?u.name:uid; }
 function statBadge(s) {
-  const map={nouveau:'b-nouveau',admin:'b-admin',verif:'b-verif',production:'b-production',emballage:'b-emballage',stocké:'b-stocke',expédié:'b-expedie',livré:'b-livre',posé:'b-pose',retiré:'b-retire'};
+  const map={nouveau:'b-nouveau',admin:'b-admin',verif:'b-verif',production:'b-production',emballage:'b-emballage',stocké:'b-stocke',expédié:'b-expedie',livré:'b-livre',posé:'b-pose',retiré:'b-retire',attente_planif:'b-attente'};
   return `<span class="badge ${map[s]||''}">${STATUT_LABEL[s]||s}</span>`;
 }
 function initials(n) { return (n||'').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); }
@@ -2799,11 +2803,14 @@ function renderPageCommande(d, p) { p = p || {};
     </div>
     <div class="avance-bar no-print">
       <div style="font-size:12px;color:var(--ink-faint)">Prochaine étape :</div>
-      ${can('advance')&&!isDossierCloture(d)?`
+      ${can('advance')&&!isDossierCloture(d)?(
+        d.statut==='attente_planif'
+        ? `<span style="font-size:12px;color:var(--teal)"><i class="ti ti-calendar-time"></i> En attente d'une date de pose — reviendra automatiquement en Saisie une fois planifié</span>`
+        : `
         ${!d.needPose?`<button class="btn btn-ghost btn-sm" onclick="envoyerAuPlanning()" title="Envoie ce dossier dans l'onglet Planning pour planifier la pose, sans attendre la fabrication"><i class="ti ti-calendar-plus"></i> Envoyer au planning</button>`:`<span class="badge" style="color:var(--teal);border-color:var(--teal)" title="Ce dossier apparaît dans l'onglet Planning"><i class="ti ti-calendar-check"></i> Dans le planning</span>`}
         ${d.statut==='verif'?`<button class="btn btn-ghost btn-sm" onclick="renvoyerSaisie()" style="color:var(--amber);border-color:rgba(217,119,6,.3)" title="Renvoyer en saisie admin"><i class="ti ti-arrow-back-up"></i> Renvoyer en saisie</button>`:''}
         <button class="btn btn-primary" onclick="avancerFiche()"><i class="ti ti-arrow-right"></i> ${getNextBtnLabel(d)}</button>
-      `:`<span class="badge b-expedie">Dossier clôturé</span>`}
+      `):`<span class="badge b-expedie">Dossier clôturé</span>`}
     </div>
     <div style="display:flex;gap:12px;padding:12px 16px;border-top:1px solid var(--border)">
       <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Responsable</div><input value="${p.sigResponsable||''}" placeholder="Nom / initiales" onchange="setPageField(${currentPageIdx},'sigResponsable',this.value)"></div>
@@ -3164,10 +3171,18 @@ function renvoyerSaisie() {
 // renderPlanningAvance : dossiers.filter(d => d.transport==='liv_pose' || d.needPose)), mais il
 // n'était réglable qu'à la création du dossier (case à cocher de la modale). Ce bouton permet de
 // l'activer à tout moment depuis la fiche, notamment dès la Saisie admin.
-function envoyerAuPlanning() {
+// Depuis la Saisie (nouveau/admin) : passe aussi le dossier en "Attente planification" — il sort
+// de la liste Saisie active tant qu'aucune date de pose n'est fixée, puis y revient tout seul
+// (statut admin) une fois planifié, voir _retourSaisieSiPlanifie() dans planning.js. Envoyé
+// depuis un statut plus avancé (verif...) : needPose seul suffit, pas de changement de statut.
+async function envoyerAuPlanning() {
   const d = dossiers.find(x => x.id === currentDosId); if (!d || d.needPose) return;
   d.needPose = true;
-  logHistory(currentDosId, 'planning', 'Dossier envoyé au planning (pose à planifier)');
+  if (d.statut === 'nouveau' || d.statut === 'admin') {
+    await changerStatutDossier(d, 'attente_planif', 'envoyé au planning');
+  } else {
+    logHistory(currentDosId, 'planning', 'Dossier envoyé au planning (pose à planifier)');
+  }
   saveData(); renderFiche();
   showToast('Dossier envoyé au planning');
 }
@@ -4043,6 +4058,7 @@ ${d.autres ? `
 function renderSuivi() {
   const cols=[
     {k:'admin',     l:'Saisie admin', c:'var(--accent)', bg:'var(--accent-light)'},
+    {k:'attente_planif', l:'Attente planification', c:'var(--teal)', bg:'var(--teal-light)'},
     {k:'verif',     l:'Vérification', c:'#0E7490',       bg:'#CFFAFE'},
     {k:'production',l:'Production',   c:'var(--amber)',  bg:'var(--amber-light)'},
     {k:'emballage', l:'Emballage',    c:'#92400E',       bg:'#FEF3C7'},
@@ -4058,7 +4074,7 @@ function renderSuivi() {
     <div class="section-title">Pipeline global</div>
     <span style="font-size:12px;color:var(--ink-faint)"><i class="ti ti-drag-drop" style="vertical-align:-1px;margin-right:4px"></i>Glisser-déposer pour changer de statut</span>
   </div>
-  <div style="display:grid;grid-template-columns:repeat(9,minmax(130px,1fr));gap:10px;overflow-x:auto;padding-bottom:8px" id="suivi-pipeline">
+  <div style="display:grid;grid-template-columns:repeat(10,minmax(130px,1fr));gap:10px;overflow-x:auto;padding-bottom:8px" id="suivi-pipeline">
     ${cols.map(col=>{
       const items=dossiers.filter(d=>d.statut===col.k);
       return `<div class="pipe-col" id="col-${col.k}"
