@@ -1543,6 +1543,9 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans texte avant o
     window.parent.postMessage({type:'jmb:export', payload:{
       dossierId, material, type,
       nbLames:c.nbLames??null, nbFagots:c.nbFagots??null,
+      // Longueur de lame coupée en CM (le calcul poly est en mm, cf. lamesMm) — sert au
+      // décompte stock côté dossier : taille en stock la plus proche AU-DESSUS (découpe).
+      lameCoupeeCm:(c.coupees!=null ? (c.lamesMm ? c.coupees/10 : c.coupees) : null),
       axeLabel, moteurLabel, poseAxes:f.poseAxes||null,
       largeurMax:f.largeurMax||null, longueur:f.longueur||null,
     }}, '*');

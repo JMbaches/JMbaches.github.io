@@ -2748,16 +2748,17 @@ function renderPageCommande(d, p) { p = p || {};
           </select></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Coloris lames</div><input value="${d.lames||''}" onchange="setDosField('lames',this.value);setDosField('tailleLame','');renderFiche();" placeholder="ex: Gris"></div>
           <div>${(() => {
-            const label = '<div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Taille lame</div>';
-            if (!d.typeLame || !d.lames) return label + '<select disabled><option>— Choisir le type et le coloris d\'abord —</option></select>';
-            const tailles = [...new Set((stockRefs||[])
-              .filter(r => r.type === d.typeLame && (r.finition||'').trim().toLowerCase() === d.lames.trim().toLowerCase())
-              .map(r => r.taille))];
-            if (!tailles.length) return label + '<select disabled><option>Aucune référence stock pour ce type/coloris</option></select>';
-            return label + `<select onchange="setDosField('tailleLame',this.value)">
-              <option value=""${!d.tailleLame?' selected':''}>—</option>
-              ${tailles.map(t=>`<option value="${t}"${d.tailleLame===t?' selected':''}>${t}</option>`).join('')}
-            </select>`;
+            const label = '<div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Taille lame (auto)</div>';
+            // La taille n'est plus saisie : elle découle de la fiche de calcul (longueur de lame
+            // coupée) — le décompte prend la taille en stock la plus proche AU-DESSUS (découpe).
+            if (d.lameCoupeeCalculeCm != null) {
+              const ref = (typeof stockFindRefLameAuDessus === 'function') ? stockFindRefLameAuDessus(d.typeLame, d.lames, d.lameCoupeeCalculeCm) : null;
+              return label + (ref
+                ? `<div class="val">Lame coupée ${d.lameCoupeeCalculeCm} cm → stock taille <strong>${ref.taille}</strong></div>`
+                : `<div class="val" style="color:var(--red)">Lame coupée ${d.lameCoupeeCalculeCm} cm — aucune taille ≥ en stock (${d.typeLame||'?'} ${d.lames||'?'})</div>`);
+            }
+            if (d.tailleLame) return label + `<div class="val">${d.tailleLame} <span style="color:var(--ink-faint)">(ancienne saisie — remplacée au prochain envoi de la fiche de calcul)</span></div>`;
+            return label + '<div class="val" style="color:var(--ink-faint)">— déterminée par la fiche de calcul —</div>';
           })()}</div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Coloris pieds</div><input value="${d.pieds||''}" onchange="setDosField('pieds',this.value)" placeholder="ex: 7016/Gris"></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Alimentation</div><input value="${d.alim||''}" onchange="setDosField('alim',this.value)" placeholder="ex: 24V"></div>
@@ -2769,7 +2770,7 @@ function renderPageCommande(d, p) { p = p || {};
           <div style="grid-column:span 2"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Options</div><input value="${d.options||''}" onchange="setDosField('options',this.value)"></div>
         </div>
         ${d.nbLamesCalcule ? `<div style="margin-top:10px;background:var(--teal-light);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--teal)">
-          <i class="ti ti-calculator"></i> Fiche de calcul reçue : <strong>${d.nbLamesCalcule} lames${d.nbFagotsCalcule?` (${d.nbFagotsCalcule} fagots)`:''}</strong>${d.moteurLabelCalcule?` · Moteur : ${d.moteurLabelCalcule}`:''}${d.axeLabelCalcule?` · Axe : ${d.axeLabelCalcule}`:''}
+          <i class="ti ti-calculator"></i> Fiche de calcul reçue : <strong>${d.nbLamesCalcule} lames${d.nbFagotsCalcule?` (${d.nbFagotsCalcule} fagots)`:''}</strong>${d.lameCoupeeCalculeCm?` · Lame coupée : ${d.lameCoupeeCalculeCm} cm`:''}${d.moteurLabelCalcule?` · Moteur : ${d.moteurLabelCalcule}`:''}${d.axeLabelCalcule?` · Axe : ${d.axeLabelCalcule}`:''}
         </div>` : ''}
       </div>
     </div>
@@ -3202,6 +3203,9 @@ window.addEventListener('message', (ev) => {
     const p = msg.payload;
     d.nbLamesCalcule = p.nbLames || null;
     d.nbFagotsCalcule = p.nbFagots || null;
+    // Longueur de lame coupée (cm) — la taille de lame n'est plus saisie sur le dossier :
+    // le décompte stock prend la taille en stock la plus proche AU-DESSUS de cette valeur.
+    d.lameCoupeeCalculeCm = (p.lameCoupeeCm != null && !isNaN(Number(p.lameCoupeeCm))) ? Number(p.lameCoupeeCm) : null;
     d.axeLabelCalcule = p.axeLabel || null;
     d.moteurLabelCalcule = p.moteurLabel || null;
     d.poseAxesCalcule = p.poseAxes || null;
