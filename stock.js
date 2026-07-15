@@ -242,12 +242,18 @@ async function stockDecompterAlimentation(d) {
     const typeVoletAlim = type === 'xtrem' ? 'silver' : type; // xtrem suit le comportement de silver ici (vérifié)
     if (typeVoletAlim === 'silver') {
       elecRefs.push('Panneau Solaire', 'Support Solaire');
-      const supportCouleur = bicolore ? '7016' : piedCouleur;
-      elecRefs = elecRefs.map(r => r === 'Support Solaire' ? `Support Solaire ${supportCouleur}` : r);
     } else if (typeVoletAlim === 'mouv') {
       elecRefs.push('Bandeau Solaire');
     }
   }
+  // Suffixe couleur pour le support solaire — appliqué à TOUTE occurrence, quel que soit le
+  // type d'alimentation ('Solaire' l'ajoute ci-dessus, 'Solaire + Chargeur' l'a dans sa table).
+  // Vérifié contre le catalogue Firestore (2026-07-15) : il n'existe QUE des réfs suffixées
+  // (Support Solaire Brute/Gris/Sable/Blanc/7016), jamais de "Support Solaire" nu — sans ce
+  // suffixe, le décompte "Solaire + Chargeur" échouait systématiquement (réf introuvable).
+  // Même règle de couleur que le chemin 'Solaire' : 7016 si structure bicolore, sinon couleur pied.
+  const supportCouleur = bicolore ? '7016' : piedCouleur;
+  elecRefs = elecRefs.map(r => r === 'Support Solaire' ? `Support Solaire ${supportCouleur}` : r);
 
   const resultats = [];
   resultats.push({ label:piedRef, ...(await stockDecompteFixe('pied', piedRef, 2)) });
