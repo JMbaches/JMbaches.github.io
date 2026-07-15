@@ -2754,17 +2754,20 @@ function renderPageCommande(d, p) { p = p || {};
           </select></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Coloris lames</div><input value="${d.lames||''}" onchange="setDosField('lames',this.value);setDosField('tailleLame','');renderFiche();" placeholder="ex: Gris"></div>
           <div>${(() => {
-            const label = '<div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Taille lame (auto)</div>';
-            // La taille n'est plus saisie : elle découle de la fiche de calcul (longueur de lame
-            // coupée) — le décompte prend la taille en stock la plus proche AU-DESSUS (découpe).
-            if (d.lameCoupeeCalculeCm != null) {
-              const ref = (typeof stockFindRefLameAuDessus === 'function') ? stockFindRefLameAuDessus(d.typeLame, d.lames, d.lameCoupeeCalculeCm) : null;
-              return label + (ref
-                ? `<div class="val">Lame coupée ${d.lameCoupeeCalculeCm} cm → stock taille <strong>${ref.taille}</strong></div>`
-                : `<div class="val" style="color:var(--red)">Lame coupée ${d.lameCoupeeCalculeCm} cm — aucune taille ≥ en stock (${d.typeLame||'?'} ${d.lames||'?'})</div>`);
+            const label = '<div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Taille lame (= largeur bassin)</div>';
+            // Le stock de lames est organisé par largeur de bassin (300-800cm, paliers de 50 —
+            // comme le logiciel legacy), pas par longueur de lame coupée. Aperçu de la référence
+            // qui sera cherchée au décompte, sans jamais rien décompter ici (juste informatif).
+            if (!d.largeur) return label + '<div class="val" style="color:var(--ink-faint)">— largeur du bassin non renseignée —</div>';
+            const largeurCm = Math.round(Number(d.largeur)*100);
+            if (typeof LAME_LARGEURS_VALIDES !== 'undefined' && !LAME_LARGEURS_VALIDES.includes(largeurCm)) {
+              return label + `<div class="val" style="color:var(--red)">${largeurCm}cm — largeur non standard (valeurs connues : ${LAME_LARGEURS_VALIDES.join('/')})</div>`;
             }
-            if (d.tailleLame) return label + `<div class="val">${d.tailleLame} <span style="color:var(--ink-faint)">(ancienne saisie — remplacée au prochain envoi de la fiche de calcul)</span></div>`;
-            return label + '<div class="val" style="color:var(--ink-faint)">— déterminée par la fiche de calcul —</div>';
+            const finition = (typeof coloreurLameVersFinition === 'function') ? coloreurLameVersFinition(d.typeLame, d.lames) : null;
+            const ref = finition ? stockFindRefByAttrs(d.typeLame, finition, largeurCm) : null;
+            return label + (ref
+              ? `<div class="val">${largeurCm}cm → réf trouvée (stock : ${ref.quantite})</div>`
+              : `<div class="val" style="color:var(--red)">${largeurCm}cm — aucune réf ${d.typeLame||'?'} ${finition||d.lames||'?'} en stock</div>`);
           })()}</div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Coloris pieds</div><input value="${d.pieds||''}" onchange="setDosField('pieds',this.value)" placeholder="ex: 7016/Gris"></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Alimentation</div><input value="${d.alim||''}" onchange="setDosField('alim',this.value)" placeholder="ex: 24V"></div>
@@ -2776,7 +2779,8 @@ function renderPageCommande(d, p) { p = p || {};
           <div style="grid-column:span 2"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Options</div><input value="${d.options||''}" onchange="setDosField('options',this.value)"></div>
         </div>
         ${d.nbLamesCalcule ? `<div style="margin-top:10px;background:var(--teal-light);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--teal)">
-          <i class="ti ti-calculator"></i> Fiche de calcul reçue : <strong>${d.nbLamesCalcule} lames${d.nbFagotsCalcule?` (${d.nbFagotsCalcule} fagots)`:''}</strong>${d.lameCoupeeCalculeCm?` · Lame coupée : ${d.lameCoupeeCalculeCm} cm`:''}${d.moteurLabelCalcule?` · Moteur : ${d.moteurLabelCalcule}`:''}${d.axeLabelCalcule?` · Axe : ${d.axeLabelCalcule}`:''}
+          <i class="ti ti-calculator"></i> Fiche de calcul reçue : <strong>${d.nbLamesCalcule} lames${d.nbFagotsCalcule?` (${d.nbFagotsCalcule} fagots)`:''}</strong>${d.moteurLabelCalcule?` · Moteur : ${d.moteurLabelCalcule}`:''}${d.axeLabelCalcule?` · Axe : ${d.axeLabelCalcule}`:''}
+          ${d.longueur && typeof calcNbFagotsLegacy === 'function' ? `<div style="margin-top:2px;opacity:.85">Décompte stock (formule legacy) : ${calcNbFagotsLegacy(Math.round(Number(d.longueur)*100))} fagots</div>` : ''}
         </div>` : ''}
       </div>
     </div>
