@@ -958,9 +958,19 @@ function App(){
       if(!d||d.type!=='jmb:init') return;
       const p=d.payload||{};
       setDossierId(p.dossierId||null);
-      if(p.fields) pendingFieldsRef.current=p.fields;
       if(p.material) setMaterial(p.material);
       if(p.type) setType(p.type);
+      if(p.fields&&p.material&&p.type){
+        // Application IMMÉDIATE avec le material/type du payload. L'ancien mécanisme différé
+        // (pendingFieldsRef + useEffect [material,type]) ne se déclenchait JAMAIS quand le
+        // dossier était PVC + hors_sol : setMaterial/setType sur des valeurs identiques aux
+        // défauts ne provoquent aucun re-render (bail-out React), donc l'effet ne se rejouait
+        // pas et les dimensions restaient bloquées dans le ref — le cas le plus courant.
+        setAll(s=>({...s,[p.material]:{...s[p.material],[p.type]:{...s[p.material][p.type],...p.fields}}}));
+      } else if(p.fields){
+        // Repli (payload partiel sans material/type) : ancien mécanisme différé.
+        pendingFieldsRef.current=p.fields;
+      }
     }
     window.addEventListener('message',onMsg);
     window.parent.postMessage({type:'jmb:ready'},'*');
