@@ -26,27 +26,23 @@ function stockFindRefByAttrs(type, finition, taille) {
   return stockRefs.find(r => r.type === type && (r.finition||'').trim().toLowerCase() === f && String(r.taille) === String(taille)) || null;
 }
 
-// Nombre de lames nécessaires pour un volet, à partir de la longueur du bassin (en mètres).
-// Reprend la formule de l'outil de calcul (subapp_calculs.html) : pas de lame = 7.4cm.
-const LAME_PITCH_CM_STOCK = 7.4;
-function calcNbLamesVolet(longueurBassinM) {
-  const cm = Number(longueurBassinM) * 100;
-  if (!cm || cm <= 0) return null;
-  return Math.ceil(cm / LAME_PITCH_CM_STOCK);
-}
-
 // Décompte automatique du stock de lames pour un dossier, appelé quand il quitte le statut "verif".
-// Retourne {ok:true, nbLames, ref} en cas de succès, ou {ok:false, reason} sinon (jamais d'exception).
+// Le stock de lames est compté en FAGOTS (1 fagot = 3 lames, cf. calcNbFagots dans
+// subapp_calculs.html), pas en lames individuelles — la quantité vient donc obligatoirement de
+// d.nbFagotsCalcule, renseigné par la fiche de calcul (jmb:export) qui fait ce calcul précisément
+// (prend en compte découpe/chutes réelles). Pas d'estimation de secours si la fiche de calcul n'a
+// pas été faite pour ce dossier : mieux vaut ne rien décompter qu'un chiffre approximatif.
+// Retourne {ok:true, nbFagots, ref} en cas de succès, ou {ok:false, reason} sinon (jamais d'exception).
 async function stockDecompterDossier(d) {
   if (d.stockDecompteFait) return { ok:false, reason:'déjà décompté' };
   if (!d.typeLame || !d.lames || !d.tailleLame) return { ok:false, reason:'type/coloris/taille de lame non renseignés sur le dossier' };
-  const nbLames = calcNbLamesVolet(d.longueur);
-  if (!nbLames) return { ok:false, reason:'longueur du bassin non renseignée' };
+  const nbFagots = d.nbFagotsCalcule;
+  if (!nbFagots) return { ok:false, reason:'fiche de calcul non faite pour ce dossier (nombre de fagots inconnu)' };
   const ref = stockFindRefByAttrs(d.typeLame, d.lames, d.tailleLame);
   if (!ref) return { ok:false, reason:`aucune référence stock pour ${d.typeLame} / ${d.lames} / taille ${d.tailleLame}` };
-  await window.submitStockMouvement(ref.id, 'sortie', nbLames);
-  ref.quantite = (ref.quantite||0) - nbLames;
-  return { ok:true, nbLames, ref };
+  await window.submitStockMouvement(ref.id, 'sortie', nbFagots);
+  ref.quantite = (ref.quantite||0) - nbFagots;
+  return { ok:true, nbFagots, ref };
 }
 
 /* ================================================================
@@ -80,8 +76,8 @@ async function stockDecompterEntreeProduction(d) {
   const lamesRes = await stockDecompterDossier(d);
   if (lamesRes.ok) {
     d.stockDecompteFait = true;
-    logHistory(d.id,'stock',`Stock décompté automatiquement : ${lamesRes.nbLames} lame${lamesRes.nbLames>1?'s':''} (${lamesRes.ref.type} ${d.lames} taille ${d.tailleLame})${lamesRes.ref.quantite<0?' — ⚠ stock passé négatif':''}`);
-    showToast(lamesRes.ref.quantite<0 ? `⚠ ${lamesRes.nbLames} lames décomptées — stock négatif (${lamesRes.ref.quantite})` : `${lamesRes.nbLames} lames décomptées du stock`);
+    logHistory(d.id,'stock',`Stock décompté automatiquement : ${lamesRes.nbFagots} fagot${lamesRes.nbFagots>1?'s':''} (${lamesRes.ref.type} ${d.lames} taille ${d.tailleLame})${lamesRes.ref.quantite<0?' — ⚠ stock passé négatif':''}`);
+    showToast(lamesRes.ref.quantite<0 ? `⚠ ${lamesRes.nbFagots} fagots décomptés — stock négatif (${lamesRes.ref.quantite})` : `${lamesRes.nbFagots} fagots décomptés du stock`);
   } else if (lamesRes.reason !== 'déjà décompté') {
     showToast(`⚠ Décompte stock lames impossible : ${lamesRes.reason}`);
     logHistory(d.id,'stock',`Décompte stock lames automatique impossible : ${lamesRes.reason}`);

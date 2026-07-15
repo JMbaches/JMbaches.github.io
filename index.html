@@ -2755,7 +2755,7 @@ function renderPageCommande(d, p) { p = p || {};
           <div style="grid-column:span 2"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Options</div><input value="${d.options||''}" onchange="setDosField('options',this.value)"></div>
         </div>
         ${d.nbLamesCalcule ? `<div style="margin-top:10px;background:var(--teal-light);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--teal)">
-          <i class="ti ti-calculator"></i> Fiche de calcul reçue : <strong>${d.nbLamesCalcule} lames</strong>${d.moteurLabelCalcule?` · Moteur : ${d.moteurLabelCalcule}`:''}${d.axeLabelCalcule?` · Axe : ${d.axeLabelCalcule}`:''}
+          <i class="ti ti-calculator"></i> Fiche de calcul reçue : <strong>${d.nbLamesCalcule} lames${d.nbFagotsCalcule?` (${d.nbFagotsCalcule} fagots)`:''}</strong>${d.moteurLabelCalcule?` · Moteur : ${d.moteurLabelCalcule}`:''}${d.axeLabelCalcule?` · Axe : ${d.axeLabelCalcule}`:''}
         </div>` : ''}
       </div>
     </div>
@@ -3184,10 +3184,11 @@ window.addEventListener('message', (ev) => {
     const d = dossiers.find(x => x.id === msg.payload.dossierId); if (!d) return;
     const p = msg.payload;
     d.nbLamesCalcule = p.nbLames || null;
+    d.nbFagotsCalcule = p.nbFagots || null;
     d.axeLabelCalcule = p.axeLabel || null;
     d.moteurLabelCalcule = p.moteurLabel || null;
     d.poseAxesCalcule = p.poseAxes || null;
-    logHistory(d.id, 'calcul', `Fiche de calcul reçue : ${p.nbLames||'?'} lames${p.moteurLabel?' · Moteur : '+p.moteurLabel:''}${p.axeLabel?' · Axe : '+p.axeLabel:''}`);
+    logHistory(d.id, 'calcul', `Fiche de calcul reçue : ${p.nbLames||'?'} lames (${p.nbFagots||'?'} fagots)${p.moteurLabel?' · Moteur : '+p.moteurLabel:''}${p.axeLabel?' · Axe : '+p.axeLabel:''}`);
     saveData();
     showToast('Fiche de calcul reçue — dossier mis à jour');
     fermerFicheCalcul();
