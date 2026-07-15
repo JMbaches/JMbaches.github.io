@@ -3231,15 +3231,25 @@ async function receptionnerPdfFicheCalcul({ dossierId, filename, base64 }) {
 // un dossier du statut "verif" (voir mémoire projet : ce décompte ne se déclenchait auparavant
 // que depuis avancerFiche(), pas depuis les autres boutons/menus de changement de statut).
 // Ne fait PAS saveData()/render — à la charge de l'appelant, qui varie selon le contexte.
+// Retourne true si le changement a eu lieu, false s'il a été bloqué (appelant ne doit alors
+// ni saveData() ni afficher de message de succès).
 async function changerStatutDossier(d, newStatut, logSuffix) {
   const prev = d.statut;
-  if (prev === newStatut) return;
+  if (prev === newStatut) return true;
   if (prev === 'verif' && newStatut !== 'verif') {
+    // Un dossier volet (typeLame renseigné) ne peut pas partir en fabrication sans être passé
+    // par la fiche de calcul — c'est le calcul le plus précis qu'on fait, notamment pour le
+    // nombre de fagots de lames. Les dossiers bâches (jamais de typeLame) ne sont pas concernés.
+    if (d.typeLame && !d.nbFagotsCalcule) {
+      showToast(`⚠ Impossible d'avancer : la fiche de calcul n'a pas été faite pour ce dossier`);
+      return false;
+    }
     await stockDecompterEntreeProduction(d);
   }
   d.statut = newStatut; d.statutChangedAt = nowISO();
   logHistory(d.id,'statut',`Statut changé${logSuffix?' '+logSuffix:''} : ${STATUT_LABEL[prev]} → ${STATUT_LABEL[newStatut]}`);
   pushNotif('statut:'+newStatut,d.id,d);
+  return true;
 }
 async function avancerFiche() {
   const d=dossiers.find(x=>x.id===currentDosId); if(!d||isDossierCloture(d)) return;
@@ -3252,7 +3262,7 @@ async function avancerFiche() {
   } else {
     next=getNextStatut(d);
   }
-  await changerStatutDossier(d, next);
+  if (!(await changerStatutDossier(d, next))) return;
   saveData(); showToast(`Statut mis à jour : ${STATUT_LABEL[next]}`); renderFiche();
 }
 // Fermer tous les menus statut ouverts
@@ -3287,7 +3297,7 @@ async function changerStatutDirect(dosId, newStatut, e) {
   closeAllStatutMenus();
   const d = dossiers.find(x => x.id === dosId);
   if (!d || d.statut === newStatut) return;
-  await changerStatutDossier(d, newStatut);
+  if (!(await changerStatutDossier(d, newStatut))) return;
   saveData();
   showToast(`Statut mis à jour : ${STATUT_LABEL[newStatut]}`);
   renderDos();
@@ -3311,7 +3321,7 @@ async function avancerDos(id,e) {
   } else {
     next=getNextStatut(d);
   }
-  await changerStatutDossier(d, next);
+  if (!(await changerStatutDossier(d, next))) return;
   saveData();
   const mc=document.getElementById('main-content');
   const toast=document.createElement('div');
@@ -4082,7 +4092,7 @@ async function onDrop(e, newStatut) {
     return;
   }
 
-  await changerStatutDossier(d, newStatut, 'via pipeline');
+  if (!(await changerStatutDossier(d, newStatut, 'via pipeline'))) { _dragId = null; _dragOrigin = null; return; }
   saveData();
   showToastSuivi(`✓ ${d.client} → ${STATUT_LABEL[newStatut]}`);
   renderSuivi();
