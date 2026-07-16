@@ -36,7 +36,7 @@ function renderAtelier() {
             <span style="font-size:12px;color:#92400E">Fiche de fabrication en attente</span>
           </div>`}
           <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)">
-            <span style="font-size:12px;color:var(--ink-faint)"><i class="ti ti-calendar" style="font-size:12px;vertical-align:-1px"></i> ${fmt(d.dateLivraison)}${d.dateFab?` <span style="color:var(--teal);font-weight:600" title="Semaine de fabrication souhaitée">· Sem. du ${fmt(d.dateFab)}</span>`:''}</span>
+            <span style="font-size:12px;color:var(--ink-faint)"><i class="ti ti-calendar" style="font-size:12px;vertical-align:-1px"></i> ${fmt(d.dateLivraison)}${d.dateFab?` <span style="color:var(--teal);font-weight:600" title="Semaine de fabrication souhaitée">· Sem. ${numeroSemaineISO(new Date(d.dateFab+'T00:00:00'))}</span>`:''}</span>
             <div style="display:flex;gap:6px">
               <button class="btn btn-ghost btn-sm" onclick="openVueFab('${d.id}')"><i class="ti ti-eye"></i> Voir</button>
               ${can('adv_prod')?`<button class="btn btn-secondary btn-sm" onclick="avancerDos('${d.id}',event)"><i class="ti ti-check"></i> Fabriqué</button>`:''}
@@ -200,7 +200,7 @@ function renderAtelierGrand() {
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:4px">
             <span style="font-size:13px;font-weight:500;color:${retard?'var(--red)':'var(--ink-faint)'}">
               <i class="ti ti-calendar" style="font-size:12px;vertical-align:-1px"></i> ${fmt(d.dateLivraison)}
-              ${d.dateFab?` <span style="color:var(--teal);font-weight:600" title="Semaine de fabrication souhaitée">· Sem. du ${fmt(d.dateFab)}</span>`:''}
+              ${d.dateFab?` <span style="color:var(--teal);font-weight:600" title="Semaine de fabrication souhaitée">· Sem. ${numeroSemaineISO(new Date(d.dateFab+'T00:00:00'))}</span>`:''}
               ${retard?'<span style="font-size:10px;font-weight:700;color:var(--red);margin-left:4px">EN RETARD</span>':''}
             </span>
             <div style="display:flex;gap:7px">
@@ -241,7 +241,7 @@ function openVueFab(dosId) {
           <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ink-faint)">${d.id}</div>
           <div style="font-size:14px;font-weight:600;margin-top:4px;color:${retard?'var(--red)':'var(--ink-soft)'}">
             <i class="ti ti-calendar" style="font-size:13px;vertical-align:-1px"></i> ${fmt(d.dateLivraison)||'—'}
-            ${d.dateFab?`<div style="font-size:12px;color:var(--teal);font-weight:600;margin-top:2px">Semaine de fab. souhaitée : ${fmt(d.dateFab)}</div>`:''}
+            ${d.dateFab?`<div style="font-size:12px;color:var(--teal);font-weight:600;margin-top:2px">Semaine de fab. souhaitée : ${numeroSemaineISO(new Date(d.dateFab+'T00:00:00'))}</div>`:''}
             ${retard?'<span style="font-size:11px;font-weight:700;color:var(--red);margin-left:4px">EN RETARD</span>':''}
           </div>
         </div>

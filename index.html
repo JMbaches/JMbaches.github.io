@@ -3776,19 +3776,28 @@ async function handleMegaoPDF(input) {
 // semaine à l'autre). Réutilise getWeekDates()/toISODate() de planning.js (même calcul que l'EDT
 // pose, cohérent dans toute l'app). Inclut la semaine actuellement choisie même si hors de la
 // plage générée (dossier ancien), pour ne pas perdre l'info à l'affichage.
+// Numéro de semaine ISO 8601 (1-52/53) d'une date — la semaine 1 est celle qui contient le
+// premier jeudi de l'année (règle ISO standard, cohérente avec les calendriers usuels en France).
+function numeroSemaineISO(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const jour = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - jour);
+  const debutAnnee = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - debutAnnee) / 86400000) + 1) / 7);
+}
 function optionsSemainesFab(selected, nbSemaines = 26) {
   const vues = new Set();
   let html = '<option value="">—</option>';
   for (let i = 0; i < nbSemaines; i++) {
     const jours = getWeekDates(i);
     const lundi = toISODate(jours[0]);
-    const label = `Semaine du ${jours[0].toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})} au ${jours[6].toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})}`;
+    const label = `Semaine ${numeroSemaineISO(jours[0])} (${jours[0].toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})} - ${jours[6].toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})})`;
     vues.add(lundi);
     html += `<option value="${lundi}"${selected===lundi?' selected':''}>${label}</option>`;
   }
   if (selected && !vues.has(selected)) {
     const d = new Date(selected+'T00:00:00');
-    html += `<option value="${selected}" selected>Semaine du ${d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})} (passée)</option>`;
+    html += `<option value="${selected}" selected>Semaine ${numeroSemaineISO(d)} (${d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})}, passée)</option>`;
   }
   return html;
 }
