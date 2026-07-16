@@ -1,4 +1,4 @@
-const CACHE_NAME = 'jmbaches-v2';
+const CACHE_NAME = 'jmbaches-v3';
 const ASSETS = [
   '/',
   '/index.html',
@@ -40,9 +40,13 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Network First pour les fichiers de l'app
+  // Network First pour les fichiers de l'app — {cache:'no-store'} est ESSENTIEL ici : sans lui,
+  // ce fetch() peut être satisfait par le cache HTTP du navigateur lui-même (Cache-Control:
+  // max-age envoyé par GitHub Pages) au lieu d'aller réellement sur le réseau, ce qui rend
+  // "Network First" silencieusement identique à "Cache First" tant que le cache HTTP est frais
+  // — cause probable du bug "fiche technique invisible" (119982) jamais élucidé jusqu'ici.
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-store' })
       .then(response => {
         // Mettre en cache la nouvelle version
         if (response.ok) {
