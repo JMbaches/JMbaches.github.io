@@ -2437,6 +2437,7 @@ function renderDos() {
           <td onclick="event.stopPropagation()">
             <div style="display:flex;gap:5px;flex-wrap:wrap">
               ${d.statut==='verif'?`<button class="btn btn-primary btn-sm" onclick="ouvrirFicheCalcul('${d.id}')" title="Ouvrir directement la fiche de calcul"><i class="ti ti-calculator"></i> Fiche de calcul</button>`:''}
+              ${d.statut==='pret_atelier'?`<select onchange="event.stopPropagation();setDosFieldDirect('${d.id}','dateFab',this.value)" onclick="event.stopPropagation()" title="Semaine de fabrication souhaitée — priorise ce dossier dans la file de l'atelier" style="font-size:12px;padding:5px 6px;max-width:190px">${optionsSemainesFab(d.dateFab||'')}</select>`:''}
               <button class="btn btn-ghost btn-sm" onclick="openFiche('${d.id}')"><i class="ti ti-file-description"></i> Fiche</button>
               ${can('advance')&&!isDossierCloture(d)?`<button class="btn btn-secondary btn-sm" onclick="avancerDos('${d.id}',event)">${getNextBtnLabel(d).split(' ')[0]}</button>`:''}
               ${can('create')?`<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="supprimerDossier('${d.id}',event)" title="Supprimer le dossier"><i class="ti ti-trash"></i></button>`:''}
@@ -4306,7 +4307,13 @@ function showToastSuivi(msg) {
   t._t = setTimeout(()=>{ t.style.opacity='0'; }, 2500);
 }
 
-function setDosFieldDirect(id,k,v) { const d=dossiers.find(x=>x.id===id); if(d){d[k]=v;saveData();} }
+function setDosFieldDirect(id,k,v) {
+  const d=dossiers.find(x=>x.id===id); if(!d) return;
+  const old=d[k];
+  d[k]=v;
+  if(old!==v) logHistory(id,'modification',`Champ "${k}" modifié`,old?`Avant : ${old}`:'');
+  saveData();
+}
 
 
 /* ================================================================
