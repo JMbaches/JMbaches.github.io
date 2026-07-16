@@ -58,6 +58,25 @@ const STATIQUES = [
   ['alimentation','Maintient de charge 24V'], ['alimentation','Batterie 24V'],
   ['alimentation','Chargeur Double Slots 24V'], ['alimentation','Indicateur de charge'],
   ['alimentation','Batterie 24V 6ah'], ['alimentation','Bandeau Solaire'],
+  // 2026-07-16 — 9 groupes de pièces legacy redécompilés (télécommande, gestion sel,
+  // passes-sangles, flasque murale, mur+barre de renfort, caillebotis, contre-axe, bouchons,
+  // équerres/fixation/cornière/poutre/sabots)
+  ['autre','Telecommande Recepteur'], ['autre','Telecommande Emmeteur'], ['autre','Telecommande Bluetooth'],
+  ['autre','Electrolyseur'], ['autre','Oxeo'],
+  ['attaches','Passes Sangles'],
+  ['autre','Lame Mur Blanche'], ['autre','Lame Mur Grise'], ['autre','Lame Mur Sable'],
+  ['inox','Jambe de mur 1.5m'], ['inox','Jambe de mur 2m'], ['inox','Jambe immerge total'],
+  ['inox','Barre renfort de mur'],
+  ['autre','Lame Caillebotis Blanche 6m'], ['autre','Lame Caillebotis Grise 6m'], ['autre','Lame Caillebotis Sable 6m'],
+  ['autre','Lame Caillebotis IPE 1m'], ['autre','Lame Caillebotis IPE 1.5m'],
+  ['autre','Lame Caillebotis Robinier 1m'], ['autre','Lame Caillebotis Robinier 1.5m'],
+  ['aluminium','Contre Axe Blanc'], ['aluminium','Contre Axe Gris'], ['aluminium','Contre Axe Sable'], ['aluminium','Contre Axe 7016'],
+  ['bouchons','Bouchon 80x80 Blanc'], ['bouchons','Bouchon 80x80 Gris'], ['bouchons','Bouchon 80x80 Noir'],
+  ['bouchons','Bouchon 100x100 Blanc'], ['bouchons','Bouchon 100x100 Gris'], ['bouchons','Bouchon 100x100 Noir'],
+  ['aluminium','Equerre de flasque/poutre bassin beton'], ['aluminium','Equerre de flasque/poutre bassin coque'],
+  ['aluminium','Equerre de renfort telescopique'], ['aluminium','Corniere 60x60'],
+  ['aluminium','Poutre 6m Blanc'], ['aluminium','Poutre 6m Gris'], ['aluminium','Poutre 6m Sable'], ['aluminium','Poutre 6m 7016'],
+  ['aluminium','Poutre 6m Brute'], ['aluminium','Sabot Immerge Brute'],
 ];
 
 // ── Familles PARAMÉTRÉES PAR COULEUR : préfixe + couleur (d.pieds) ─────────

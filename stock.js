@@ -215,10 +215,10 @@ const LEGACY_PIECES_FIXES = {
              ['alimentation','Coffret Immerge',1] ],
   immerge_total: [ ['autre','Ski',2], ['autre','Palier Immerge',1], ['aluminium','Bite',1], ['aluminium','Bague',1],
                     ['aluminium','Flasque Immerge Total',2], ['autre','Sangle Contre Poids',4],
-                    ['alimentation','Coffret Immerge',1],
-                    // Pas de gestion du "mur" (champ dossier manquant) -> toujours considéré vide,
-                    // donc toujours le repli sabots (comportement de deduire_mur_total si vide).
-                    ['inox','Sabot Immerge Total',2] ],
+                    ['alimentation','Coffret Immerge',1] ],
+  // "Sabot Immerge Total x2" n'est plus ici : c'est le repli de stockDecompterMur() quand le mur
+  // n'est pas renseigné (byte-vérifié = comportement de deduire_mur_total), maintenant
+  // conditionnel puisque le champ mur existe désormais. Voir stockDecompterMur.
   banc: [ ['autre','Ski',2], ['autre','Palier Hors Sol',1], ['alimentation','Coffret Hors sol',1],
           ['pied','Pied + Capot Banc',2], ['autre','Lame Banc',5], ['aluminium','Poutre Banc',2],
           ['aluminium','Corniere Banc',10], ['autre','Plaque Diffusante Banc',2] ],
@@ -326,6 +326,256 @@ async function stockDecompterAlimentation(d) {
   return { ok:true, resultats };
 }
 
+/* ================================================================
+   STOCK (9 groupes de pièces portés le 2026-07-16, redécompilés depuis
+   fonctions.pyc + onglets/*.pyc du logiciel Stock.exe legacy — voir mémoire
+   projet pour le rapport complet byte-vérifié). Décisions actées avec
+   l'utilisateur pour les 2 points contre-intuitifs : "Flasque murale" ne
+   décompte PAS sa propre réf catalogue (reproduit tel quel) ; l'ajout d'un
+   coffret hors-sol déclenché par "Gestion sel = Electrolyseur" dans le
+   legacy N'EST PAS reproduit (effet de bord non compris).
+   ================================================================ */
+
+// Télécommande — 2 fonctions legacy distinctes (deduire_telecommande /
+// deduire_telecommande_banc), même structure mais quantité "Recepteur"
+// différente pour le Banc (2 au lieu de 1).
+const TELECOMMANDE_TABLE      = { Classique:[['Telecommande Recepteur',1],['Telecommande Emmeteur',2]], Bluetooth:[['Telecommande Bluetooth',1]] };
+const TELECOMMANDE_TABLE_BANC = { Classique:[['Telecommande Recepteur',2],['Telecommande Emmeteur',2]], Bluetooth:[['Telecommande Bluetooth',1]] };
+async function stockDecompterTelecommande(d) {
+  if (d.stockTelecommandeDecompteFait) return { ok:false, reason:'déjà décompté' };
+  const type = legacyVoletType(d.structure);
+  if (!['silver','xtrem','mouv','immerge','immerge_total','banc'].includes(type)) return { ok:false, reason:'télécommande non applicable à ce type de volet' };
+  if (!d.telecommande) return { ok:false, reason:'télécommande non renseignée (Non)' };
+  const table = type === 'banc' ? TELECOMMANDE_TABLE_BANC : TELECOMMANDE_TABLE;
+  const liste = table[d.telecommande];
+  if (!liste) return { ok:false, reason:`choix télécommande "${d.telecommande}" inconnu` };
+  const resultats = [];
+  for (const [label, qte] of liste) resultats.push({ label, qte, ...(await stockDecompteFixe('autre', label, qte)) });
+  return { ok:true, resultats };
+}
+
+// Gestion sel — PAS applicable à immerge/immerge_total (vérifié : aucune des deux ne référence
+// "Gestion Sel" dans le désassemblage). L'ajout de coffret hors-sol pour "Electrolyseur" dans le
+// legacy n'est délibérément pas reproduit (effet de bord non compris, décision actée).
+async function stockDecompterGestionSel(d) {
+  if (d.stockGestionSelDecompteFait) return { ok:false, reason:'déjà décompté' };
+  const type = legacyVoletType(d.structure);
+  if (!['silver','mouv','xtrem','banc'].includes(type)) return { ok:false, reason:'gestion sel non applicable à ce type de volet' };
+  if (!d.gestionSel) return { ok:false, reason:'gestion sel non renseignée (Non)' };
+  if (!['Electrolyseur','Oxeo'].includes(d.gestionSel)) return { ok:false, reason:`choix gestion sel "${d.gestionSel}" inconnu` };
+  return { ok:true, ...(await stockDecompteFixe('autre', d.gestionSel, 1)) };
+}
+
+// Passes-sangles — champ texte legacy validé seulement par isdigit(), aucune condition de type
+// dans la fonction elle-même ; appelée par 6 des 8 onglets (pas tablier, pas volet_manuel).
+async function stockDecompterPassesSangles(d) {
+  if (d.stockPassesSanglesDecompteFait) return { ok:false, reason:'déjà décompté' };
+  const type = legacyVoletType(d.structure);
+  if (!['silver','xtrem','mouv','immerge','immerge_total','banc'].includes(type)) return { ok:false, reason:'passes-sangles non applicables à ce type de volet' };
+  const nb = parseInt(d.passesSangles, 10);
+  if (!nb || nb <= 0) return { ok:false, reason:'passes-sangles non renseignées (0)' };
+  return { ok:true, ...(await stockDecompteFixe('attaches', 'Passes Sangles', nb)) };
+}
+
+// Flasque murale (Silver uniquement) — reproduit le legacy TEL QUEL (décision actée) : "Oui" ne
+// décompte JAMAIS la réf catalogue "Flasque de fixation murale" (vérifié : aucune fonction du
+// logiciel ne la référence) — ça décompte en réalité Bague+Bite+U de fixation+Palier Immerge.
+async function stockDecompterFlasqueMurale(d) {
+  if (d.stockFlasqueMuraleDecompteFait) return { ok:false, reason:'déjà décompté' };
+  if (legacyVoletType(d.structure) !== 'silver') return { ok:false, reason:'flasque murale non applicable à ce type de volet (Silver uniquement)' };
+  if (d.flasqueMurale !== 'Oui') return { ok:false, reason:'flasque murale non cochée' };
+  const resultats = [];
+  for (const [cat,label,qte] of [['aluminium','Bague',1],['aluminium','Bite',1],['aluminium','U de fixation',1],['autre','Palier Immerge',1]]) {
+    resultats.push({ label, qte, ...(await stockDecompteFixe(cat, label, qte)) });
+  }
+  return { ok:true, resultats };
+}
+
+// Mur immergé (deduire_mur, immerge simple) / mur total (deduire_mur_total, immerge_total) —
+// 2 fonctions legacy distinctes avec des signatures différentes (immerge a une hauteur, pas
+// immerge_total). Le repli "Sabot Immerge Total x2" pour immerge_total est byte-vérifié comme
+// exactement ce que fait deduire_mur_total quand largeur/couleur manquent — remplace l'ancien
+// LEGACY_PIECES_FIXES.immerge_total inconditionnel (qui était le bon comportement PAR DÉFAUT
+// tant que ce champ n'existait pas, mais doit maintenant devenir conditionnel).
+const MUR_COULEUR_TABLE = { Blanc:'Lame Mur Blanche', Sable:'Lame Mur Sable', Gris:'Lame Mur Grise' };
+async function stockDecompterMur(d) {
+  if (d.stockMurDecompteFait) return { ok:false, reason:'déjà décompté' };
+  const type = legacyVoletType(d.structure);
+  if (!['immerge','immerge_total'].includes(type)) return { ok:false, reason:'mur non applicable à ce type de volet' };
+
+  if (type === 'immerge_total') {
+    if (!d.largeur || !d.murCouleur) {
+      return { ok:true, repli:true, ...(await stockDecompteFixe('inox', 'Sabot Immerge Total', 2)) };
+    }
+    const ref = MUR_COULEUR_TABLE[d.murCouleur];
+    if (!ref) return { ok:false, reason:`couleur de mur "${d.murCouleur}" inconnue` };
+    const largeurCm = Math.round(Number(d.largeur)*100);
+    const qteLames = largeurCm <= 300 ? 4 : 8;
+    const rLame = await stockDecompteFixe('autre', ref, qteLames);
+    const rJambe = await stockDecompteFixe('inox', 'Jambe immerge total', 2);
+    return { ok:true, lame:rLame, jambe:rJambe };
+  }
+
+  // immerge simple : pas de repli — rien n'est décompté si un champ manque (comme le legacy).
+  if (!d.largeur || !d.murCouleur || !d.murHauteur) return { ok:false, reason:'largeur/couleur/hauteur de mur non renseignées' };
+  const ref = MUR_COULEUR_TABLE[d.murCouleur];
+  if (!ref) return { ok:false, reason:`couleur de mur "${d.murCouleur}" inconnue` };
+  const largeurCm = Math.round(Number(d.largeur)*100);
+  const QUANTITES = { '1m':[2,4], '1,25m':[3,5], '1,5m':[3,6], '2m':[4,8] };
+  const paire = QUANTITES[d.murHauteur];
+  if (!paire) return { ok:false, reason:`hauteur de mur "${d.murHauteur}" inconnue` };
+  const qteLames = largeurCm === 300 ? paire[0] : paire[1];
+  const rLame = await stockDecompteFixe('autre', ref, qteLames);
+  const refJambe = ['1m','1,25m','1,5m'].includes(d.murHauteur) ? 'Jambe de mur 1.5m' : 'Jambe de mur 2m';
+  const rJambe = await stockDecompteFixe('inox', refJambe, 2);
+  return { ok:true, lame:rLame, jambe:rJambe };
+}
+
+// Barre de renfort de mur (deduire_barre_renfort_mur) — appel INDÉPENDANT de deduire_mur dans le
+// legacy (même largeur/hauteur en entrée, mais pas de dépendance à son résultat) — immerge
+// simple UNIQUEMENT (jamais appelée pour immerge_total, vérifié : 0 occurrence dans total.pyc).
+async function stockDecompterBarreRenfortMur(d) {
+  if (d.stockBarreRenfortDecompteFait) return { ok:false, reason:'déjà décompté' };
+  if (legacyVoletType(d.structure) !== 'immerge') return { ok:false, reason:'barre de renfort non applicable à ce type de volet (immergé simple uniquement)' };
+  if (!d.largeur || !d.murHauteur) return { ok:false, reason:'largeur du bassin ou hauteur de mur non renseignées' };
+  const QTE = { '1m':2, '1,25m':2, '1,5m':3 }; // pas de cas '2m' dans le legacy
+  const qte = QTE[d.murHauteur];
+  if (!qte) return { ok:false, reason:`hauteur de mur "${d.murHauteur}" non concernée par la barre de renfort` };
+  return { ok:true, ...(await stockDecompteFixe('inox', 'Barre renfort de mur', qte)) };
+}
+
+// Caillebotis + IPE + Robinier (deduire_caillebotis + 2 sous-fonctions dédiées) — immerge et
+// immerge_total. Largeur/profondeur DÉDIÉES au caillebotis, distinctes des dimensions du bassin.
+const CAILLEBOTIS_COULEUR_TABLE = { Blanc:'Lame Caillebotis Blanche 6m', Gris:'Lame Caillebotis Grise 6m', Sable:'Lame Caillebotis Sable 6m' };
+async function stockDecompterCaillebotis(d) {
+  if (d.stockCaillebotisDecompteFait) return { ok:false, reason:'déjà décompté' };
+  const type = legacyVoletType(d.structure);
+  if (!['immerge','immerge_total'].includes(type)) return { ok:false, reason:'caillebotis non applicable à ce type de volet' };
+  if (!d.caillebotisChoix) return { ok:false, reason:'caillebotis non renseigné (Non)' };
+  const largeur = parseInt(d.caillebotisLargeur, 10) || 0;
+  const profondeur = parseInt(d.caillebotisProfondeur, 10) || 0;
+  if (!largeur || !profondeur) return { ok:false, reason:'largeur/profondeur du caillebotis non renseignées' };
+
+  if (['Blanc','Gris','Sable'].includes(d.caillebotisChoix)) {
+    const ref = CAILLEBOTIS_COULEUR_TABLE[d.caillebotisChoix];
+    const nbCoupe = Math.floor(600/profondeur);
+    if (!nbCoupe) return { ok:false, reason:'profondeur du caillebotis invalide' };
+    const besoin = largeur/12 + 2;
+    const lameDessus = Math.ceil(besoin/nbCoupe);
+    const nbTraverses = (largeur/60)*2;
+    const nbPlanchesTraverses = Math.ceil(nbTraverses/10);
+    const totalPlanches = Math.ceil(lameDessus + nbPlanchesTraverses);
+    return { ok:true, ...(await stockDecompteFixe('autre', ref, totalPlanches)) };
+  }
+
+  if (d.caillebotisChoix === 'IPE' || d.caillebotisChoix === 'Robinier') {
+    const diviseur = d.caillebotisChoix === 'IPE' ? 14 : 10;
+    let qte1m = 0, qte15m = 0;
+    if (profondeur > 70 && profondeur <= 150) qte1m = Math.ceil(largeur/diviseur) + 1;
+    if (profondeur <= 70) qte15m = Math.ceil((largeur/diviseur)/2 + Math.ceil(largeur/60)) + 1;
+    else if (profondeur > 70 && profondeur <= 150) qte15m = Math.ceil(largeur/60);
+    if (!qte1m && !qte15m) return { ok:false, reason:'profondeur du caillebotis hors plage connue (>150cm)' };
+    const resultats = {};
+    if (qte1m) resultats.r1m = await stockDecompteFixe('autre', `Lame Caillebotis ${d.caillebotisChoix} 1m`, qte1m);
+    if (qte15m) resultats.r15m = await stockDecompteFixe('autre', `Lame Caillebotis ${d.caillebotisChoix} 1.5m`, qte15m);
+    return { ok:true, ...resultats };
+  }
+
+  return { ok:false, reason:`choix caillebotis "${d.caillebotisChoix}" inconnu` };
+}
+
+// Contre-axe (Mouv uniquement, deduire_contre_axe) — utilise la chaîne BRUTE de "Coloris pieds"
+// (d.pieds) comme clé directe, PAS de split capot/pied comme pour l'alimentation (vérifié :
+// le radio group legacy a ces 13 valeurs exactes, dont 9 bicolores qui matchent toutes "7016").
+const CONTRE_AXE_TABLE = {
+  'Blanc':'Contre Axe Blanc', 'Gris':'Contre Axe Gris', 'Sable':'Contre Axe Sable', '7016':'Contre Axe 7016',
+  '7016/Blanc':'Contre Axe 7016', '7016/Sable':'Contre Axe 7016', '7016/Gris':'Contre Axe 7016',
+  '7016/Noir':'Contre Axe 7016', '7016/Brique':'Contre Axe 7016', '7016/Violet':'Contre Axe 7016',
+  '7016/Bleu':'Contre Axe 7016', '7016/Vert':'Contre Axe 7016', '7016/Or':'Contre Axe 7016',
+};
+async function stockDecompterContreAxe(d) {
+  if (d.stockContreAxeDecompteFait) return { ok:false, reason:'déjà décompté' };
+  if (legacyVoletType(d.structure) !== 'mouv') return { ok:false, reason:'contre-axe non applicable à ce type de volet (Mouv uniquement)' };
+  const couleur = (d.pieds||'').trim();
+  if (!couleur) return { ok:false, reason:'couleur de structure (pieds) non renseignée' };
+  const ref = CONTRE_AXE_TABLE[couleur];
+  if (!ref) return { ok:false, reason:`couleur de structure "${couleur}" inconnue pour contre-axe` };
+  return { ok:true, ...(await stockDecompteFixe('aluminium', ref, 1)) };
+}
+
+// Bouchons (Mouv uniquement, deduire_bouchons) — prend le PREMIER token de "Coloris pieds" avant
+// le "/" (donc la partie "capot" si bicolore) — inverse de l'intuition capot/pied habituelle.
+// AUCUNE condition de taille dans le legacy : les 2 tailles (80x80 x2, 100x100 x4) sont TOUJOURS
+// décomptées ensemble, jamais séparément — ne pas inventer de règle de taille.
+const BOUCHON_COULEUR_TABLE = { 'Blanc':'Blanc', 'Sable':'Blanc', 'Gris':'Gris', '7016':'Noir' };
+async function stockDecompterBouchons(d) {
+  if (d.stockBouchonsDecompteFait) return { ok:false, reason:'déjà décompté' };
+  if (legacyVoletType(d.structure) !== 'mouv') return { ok:false, reason:'bouchons non applicables à ce type de volet (Mouv uniquement)' };
+  const couleurStructure = (d.pieds||'').trim();
+  if (!couleurStructure) return { ok:false, reason:'couleur de structure (pieds) non renseignée' };
+  const couleurBase = couleurStructure.includes('/') ? couleurStructure.split('/')[0].trim() : couleurStructure;
+  const couleurBouchon = BOUCHON_COULEUR_TABLE[couleurBase];
+  if (!couleurBouchon) return { ok:false, reason:`couleur de structure "${couleurBase}" inconnue pour bouchons` };
+  const r80 = await stockDecompteFixe('bouchons', `Bouchon 80x80 ${couleurBouchon}`, 2);
+  const r100 = await stockDecompteFixe('bouchons', `Bouchon 100x100 ${couleurBouchon}`, 4);
+  return { ok:true, r80, r100 };
+}
+
+// Fixation béton/coque (deduire_fixation, immerge simple uniquement) — "Sur Paroi" (ou non
+// renseigné) ne décompte rien, comme le legacy.
+async function stockDecompterFixation(d) {
+  if (d.stockFixationDecompteFait) return { ok:false, reason:'déjà décompté' };
+  if (legacyVoletType(d.structure) !== 'immerge') return { ok:false, reason:'fixation non applicable à ce type de volet (immergé simple uniquement)' };
+  const map = { 'Sur Plage Béton':'Equerre de flasque/poutre bassin beton', 'Sur Plage Coque':'Equerre de flasque/poutre bassin coque' };
+  const ref = map[d.fixation];
+  if (!ref) return { ok:false, reason:'fixation "Sur Paroi" (ou non renseignée) — pas de décompte' };
+  return { ok:true, ...(await stockDecompteFixe('aluminium', ref, 6)) };
+}
+
+// Équerres de renfort télescopiques (deduire_equerres_renfort, immerge simple uniquement) —
+// champ texte 1 à 3, valeur par défaut légacy "0" = hors plage = aucun décompte.
+async function stockDecompterEquerresRenfort(d) {
+  if (d.stockEquerresRenfortDecompteFait) return { ok:false, reason:'déjà décompté' };
+  if (legacyVoletType(d.structure) !== 'immerge') return { ok:false, reason:'équerres de renfort non applicables à ce type de volet (immergé simple uniquement)' };
+  const nb = parseInt(d.equerresRenfort, 10);
+  if (!nb || nb < 1 || nb > 3) return { ok:false, reason:"nombre d'équerres de renfort non renseigné ou hors plage (1 à 3)" };
+  return { ok:true, ...(await stockDecompteFixe('aluminium', 'Equerre de renfort telescopique', nb)) };
+}
+
+// Cornière 60x60 (deduire_corniere_60x60, immerge simple uniquement) — Oui/Non, quantité fixe 1.
+async function stockDecompterCorniere6060(d) {
+  if (d.stockCorniere6060DecompteFait) return { ok:false, reason:'déjà décompté' };
+  if (legacyVoletType(d.structure) !== 'immerge') return { ok:false, reason:'cornière 60x60 non applicable à ce type de volet (immergé simple uniquement)' };
+  if (d.corniere6060 !== 'Oui') return { ok:false, reason:'cornière 60x60 non cochée' };
+  return { ok:true, ...(await stockDecompteFixe('aluminium', 'Corniere 60x60', 1)) };
+}
+
+// Poutre + sabots (deduire_poutre + deduire_sabots, immerge simple uniquement) — DEUX fonctions
+// legacy appelées avec la MÊME couleur, mais deduire_sabots ne teste JAMAIS la valeur elle-même
+// (juste "une couleur a été choisie") : toute couleur de poutre décompte AUSSI 2 sabots. Pas une
+// coïncidence liée à "Brute" — "Brute" n'existe même pas comme option de ce radio.
+async function stockDecompterPoutreEtSabots(d) {
+  if (d.stockPoutreDecompteFait) return { ok:false, reason:'déjà décompté' };
+  if (legacyVoletType(d.structure) !== 'immerge') return { ok:false, reason:'poutre/sabots non applicables à ce type de volet (immergé simple uniquement)' };
+  if (!d.poutreCouleur) return { ok:false, reason:'couleur de poutre non renseignée' };
+  const rSabots = await stockDecompteFixe('aluminium', 'Sabot Immerge Brute', 2);
+  const rPoutre = await stockDecompteFixe('aluminium', `Poutre 6m ${d.poutreCouleur}`, 1);
+  return { ok:true, sabots:rSabots, poutre:rPoutre };
+}
+
+// Poutre brute (deduire_poutre_brute, immerge_total uniquement) — mécanisme totalement distinct
+// de l'immerge simple : ici "poutre" est toujours "Poutre 6m Brute", en quantité 0/1/2 (jamais un
+// choix de couleur) ; deduire_sabots n'est jamais appelé pour immerge_total.
+async function stockDecompterPoutreBrute(d) {
+  if (d.stockPoutreBruteDecompteFait) return { ok:false, reason:'déjà décompté' };
+  if (legacyVoletType(d.structure) !== 'immerge_total') return { ok:false, reason:'poutre brute non applicable à ce type de volet (immergé total uniquement)' };
+  if (d.nombrePoutres === '' || d.nombrePoutres == null) return { ok:false, reason:'nombre de poutres non renseigné' };
+  const nb = parseInt(d.nombrePoutres, 10);
+  if (![0,1,2].includes(nb)) return { ok:false, reason:`nombre de poutres "${d.nombrePoutres}" invalide` };
+  if (nb === 0) return { ok:false, reason:'nombre de poutres = 0, rien à décompter' };
+  return { ok:true, ...(await stockDecompteFixe('aluminium', 'Poutre 6m Brute', nb)) };
+}
+
 // Point d'entrée unique du décompte auto de stock à l'entrée en production (sortie du statut
 // "verif"). Appelé depuis changerStatutDossier() dans index.html, quel que soit le bouton/menu
 // utilisé pour faire avancer le dossier — pour ne pas dépendre d'un chemin en particulier.
@@ -405,6 +655,146 @@ async function stockDecompterEntreeProduction(d) {
   } else if (!['déjà décompté','alimentation non applicable à ce type de volet'].includes(alimRes.reason)) {
     showToast(`⚠ Décompte alimentation impossible : ${alimRes.reason}`);
     logHistory(d.id,'stock',`Décompte alimentation automatique impossible : ${alimRes.reason}`);
+  }
+
+  const telecommandeRes = await stockDecompterTelecommande(d);
+  if (telecommandeRes.ok) {
+    d.stockTelecommandeDecompteFait = true;
+    const ok = telecommandeRes.resultats.filter(r=>r.ok);
+    if (ok.length) { logHistory(d.id,'stock',`Télécommande décomptée automatiquement : ${ok.map(r=>r.label).join(', ')}`); showToast(`Télécommande décomptée du stock (${ok.map(r=>r.label).join(', ')})`); }
+  } else if (!['déjà décompté','télécommande non applicable à ce type de volet','télécommande non renseignée (Non)'].includes(telecommandeRes.reason)) {
+    showToast(`⚠ Décompte télécommande impossible : ${telecommandeRes.reason}`);
+    logHistory(d.id,'stock',`Décompte télécommande automatique impossible : ${telecommandeRes.reason}`);
+  }
+
+  const gestionSelRes = await stockDecompterGestionSel(d);
+  if (gestionSelRes.ok) {
+    d.stockGestionSelDecompteFait = true;
+    logHistory(d.id,'stock',`Gestion sel décomptée automatiquement : ${gestionSelRes.label}`);
+    showToast(`${gestionSelRes.label} décompté du stock`);
+  } else if (!['déjà décompté','gestion sel non applicable à ce type de volet','gestion sel non renseignée (Non)'].includes(gestionSelRes.reason)) {
+    showToast(`⚠ Décompte gestion sel impossible : ${gestionSelRes.reason}`);
+    logHistory(d.id,'stock',`Décompte gestion sel automatique impossible : ${gestionSelRes.reason}`);
+  }
+
+  const passesSanglesRes = await stockDecompterPassesSangles(d);
+  if (passesSanglesRes.ok) {
+    d.stockPassesSanglesDecompteFait = true;
+    logHistory(d.id,'stock',`Passes-sangles décomptées automatiquement : ${passesSanglesRes.qte}`);
+    showToast(`${passesSanglesRes.qte} passe(s)-sangle(s) décomptée(s) du stock`);
+  } else if (!['déjà décompté','passes-sangles non applicables à ce type de volet','passes-sangles non renseignées (0)'].includes(passesSanglesRes.reason)) {
+    showToast(`⚠ Décompte passes-sangles impossible : ${passesSanglesRes.reason}`);
+    logHistory(d.id,'stock',`Décompte passes-sangles automatique impossible : ${passesSanglesRes.reason}`);
+  }
+
+  const flasqueMuraleRes = await stockDecompterFlasqueMurale(d);
+  if (flasqueMuraleRes.ok) {
+    d.stockFlasqueMuraleDecompteFait = true;
+    const ok = flasqueMuraleRes.resultats.filter(r=>r.ok);
+    if (ok.length) { logHistory(d.id,'stock',`Flasque murale : pièces décomptées automatiquement : ${ok.map(r=>r.label).join(', ')}`); showToast(`Flasque murale décomptée du stock (${ok.map(r=>r.label).join(', ')})`); }
+  } else if (!['déjà décompté','flasque murale non applicable à ce type de volet (Silver uniquement)','flasque murale non cochée'].includes(flasqueMuraleRes.reason)) {
+    showToast(`⚠ Décompte flasque murale impossible : ${flasqueMuraleRes.reason}`);
+    logHistory(d.id,'stock',`Décompte flasque murale automatique impossible : ${flasqueMuraleRes.reason}`);
+  }
+
+  const murRes = await stockDecompterMur(d);
+  if (murRes.ok) {
+    d.stockMurDecompteFait = true;
+    if (murRes.repli) { logHistory(d.id,'stock',`Mur non renseigné — repli sabots décompté automatiquement`); showToast('Mur non renseigné — sabots décomptés à la place (comportement legacy)'); }
+    else { logHistory(d.id,'stock',`Mur décompté automatiquement : ${murRes.lame?.label||'lame'} + ${murRes.jambe?.label||'jambe'}`); showToast('Mur décompté du stock'); }
+  } else if (!['déjà décompté','mur non applicable à ce type de volet','largeur/couleur/hauteur de mur non renseignées'].includes(murRes.reason)) {
+    showToast(`⚠ Décompte mur impossible : ${murRes.reason}`);
+    logHistory(d.id,'stock',`Décompte mur automatique impossible : ${murRes.reason}`);
+  }
+
+  const barreRenfortRes = await stockDecompterBarreRenfortMur(d);
+  if (barreRenfortRes.ok) {
+    d.stockBarreRenfortDecompteFait = true;
+    logHistory(d.id,'stock',`Barre de renfort de mur décomptée automatiquement : ${barreRenfortRes.qte}`);
+    showToast(`Barre de renfort de mur décomptée du stock`);
+  } else if (!['déjà décompté','barre de renfort non applicable à ce type de volet (immergé simple uniquement)','largeur du bassin ou hauteur de mur non renseignées'].includes(barreRenfortRes.reason) && !/non concernée par la barre de renfort/.test(barreRenfortRes.reason||'')) {
+    showToast(`⚠ Décompte barre de renfort impossible : ${barreRenfortRes.reason}`);
+    logHistory(d.id,'stock',`Décompte barre de renfort automatique impossible : ${barreRenfortRes.reason}`);
+  }
+
+  const caillebotisRes = await stockDecompterCaillebotis(d);
+  if (caillebotisRes.ok) {
+    d.stockCaillebotisDecompteFait = true;
+    logHistory(d.id,'stock',`Caillebotis décompté automatiquement`);
+    showToast(`Caillebotis décompté du stock`);
+  } else if (!['déjà décompté','caillebotis non applicable à ce type de volet','caillebotis non renseigné (Non)','largeur/profondeur du caillebotis non renseignées'].includes(caillebotisRes.reason)) {
+    showToast(`⚠ Décompte caillebotis impossible : ${caillebotisRes.reason}`);
+    logHistory(d.id,'stock',`Décompte caillebotis automatique impossible : ${caillebotisRes.reason}`);
+  }
+
+  const contreAxeRes = await stockDecompterContreAxe(d);
+  if (contreAxeRes.ok) {
+    d.stockContreAxeDecompteFait = true;
+    logHistory(d.id,'stock',`Contre-axe décompté automatiquement : ${contreAxeRes.label}`);
+    showToast(`${contreAxeRes.label} décompté du stock`);
+  } else if (!['déjà décompté','contre-axe non applicable à ce type de volet (Mouv uniquement)','couleur de structure (pieds) non renseignée'].includes(contreAxeRes.reason)) {
+    showToast(`⚠ Décompte contre-axe impossible : ${contreAxeRes.reason}`);
+    logHistory(d.id,'stock',`Décompte contre-axe automatique impossible : ${contreAxeRes.reason}`);
+  }
+
+  const bouchonsRes = await stockDecompterBouchons(d);
+  if (bouchonsRes.ok) {
+    d.stockBouchonsDecompteFait = true;
+    logHistory(d.id,'stock',`Bouchons décomptés automatiquement : ${bouchonsRes.r80?.label||''} + ${bouchonsRes.r100?.label||''}`);
+    showToast(`Bouchons décomptés du stock`);
+  } else if (!['déjà décompté','bouchons non applicables à ce type de volet (Mouv uniquement)','couleur de structure (pieds) non renseignée'].includes(bouchonsRes.reason)) {
+    showToast(`⚠ Décompte bouchons impossible : ${bouchonsRes.reason}`);
+    logHistory(d.id,'stock',`Décompte bouchons automatique impossible : ${bouchonsRes.reason}`);
+  }
+
+  const fixationRes = await stockDecompterFixation(d);
+  if (fixationRes.ok) {
+    d.stockFixationDecompteFait = true;
+    logHistory(d.id,'stock',`Fixation décomptée automatiquement : ${fixationRes.label}`);
+    showToast(`${fixationRes.label} décompté du stock`);
+  } else if (!['déjà décompté','fixation non applicable à ce type de volet (immergé simple uniquement)','fixation "Sur Paroi" (ou non renseignée) — pas de décompte'].includes(fixationRes.reason)) {
+    showToast(`⚠ Décompte fixation impossible : ${fixationRes.reason}`);
+    logHistory(d.id,'stock',`Décompte fixation automatique impossible : ${fixationRes.reason}`);
+  }
+
+  const equerresRes = await stockDecompterEquerresRenfort(d);
+  if (equerresRes.ok) {
+    d.stockEquerresRenfortDecompteFait = true;
+    logHistory(d.id,'stock',`Équerres de renfort décomptées automatiquement : ${equerresRes.qte}`);
+    showToast(`Équerres de renfort décomptées du stock`);
+  } else if (!['déjà décompté','équerres de renfort non applicables à ce type de volet (immergé simple uniquement)',"nombre d'équerres de renfort non renseigné ou hors plage (1 à 3)"].includes(equerresRes.reason)) {
+    showToast(`⚠ Décompte équerres de renfort impossible : ${equerresRes.reason}`);
+    logHistory(d.id,'stock',`Décompte équerres de renfort automatique impossible : ${equerresRes.reason}`);
+  }
+
+  const corniereRes = await stockDecompterCorniere6060(d);
+  if (corniereRes.ok) {
+    d.stockCorniere6060DecompteFait = true;
+    logHistory(d.id,'stock',`Cornière 60x60 décomptée automatiquement`);
+    showToast(`Cornière 60x60 décomptée du stock`);
+  } else if (!['déjà décompté','cornière 60x60 non applicable à ce type de volet (immergé simple uniquement)','cornière 60x60 non cochée'].includes(corniereRes.reason)) {
+    showToast(`⚠ Décompte cornière 60x60 impossible : ${corniereRes.reason}`);
+    logHistory(d.id,'stock',`Décompte cornière 60x60 automatique impossible : ${corniereRes.reason}`);
+  }
+
+  const poutreRes = await stockDecompterPoutreEtSabots(d);
+  if (poutreRes.ok) {
+    d.stockPoutreDecompteFait = true;
+    logHistory(d.id,'stock',`Poutre + sabots décomptés automatiquement : ${poutreRes.poutre?.label||''}`);
+    showToast(`Poutre + sabots décomptés du stock`);
+  } else if (!['déjà décompté','poutre/sabots non applicables à ce type de volet (immergé simple uniquement)','couleur de poutre non renseignée'].includes(poutreRes.reason)) {
+    showToast(`⚠ Décompte poutre/sabots impossible : ${poutreRes.reason}`);
+    logHistory(d.id,'stock',`Décompte poutre/sabots automatique impossible : ${poutreRes.reason}`);
+  }
+
+  const poutreBruteRes = await stockDecompterPoutreBrute(d);
+  if (poutreBruteRes.ok) {
+    d.stockPoutreBruteDecompteFait = true;
+    logHistory(d.id,'stock',`Poutre brute décomptée automatiquement : ${poutreBruteRes.qte}`);
+    showToast(`Poutre brute décomptée du stock`);
+  } else if (!['déjà décompté','poutre brute non applicable à ce type de volet (immergé total uniquement)','nombre de poutres non renseigné','nombre de poutres = 0, rien à décompter'].includes(poutreBruteRes.reason)) {
+    showToast(`⚠ Décompte poutre brute impossible : ${poutreBruteRes.reason}`);
+    logHistory(d.id,'stock',`Décompte poutre brute automatique impossible : ${poutreBruteRes.reason}`);
   }
 }
 
