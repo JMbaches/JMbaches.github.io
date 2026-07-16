@@ -55,7 +55,15 @@ function coloreurLameVersFinition(typeLame, couleur) {
   const c = String(couleur||'').trim();
   if (typeLame === 'Polycarbonate') {
     const map = { 'Bleu':'Poly Bleu', 'Nacré':'Poly Gris', 'Noir':'Poly Noir' };
-    return map[c] || null;
+    if (map[c]) return map[c];
+    // Bicolore (texte brut Mégao du type "B. BLEU Poly Bleu/Noir") — décision actée avec
+    // l'utilisateur (2026-07-16) : prendre la PREMIÈRE couleur mentionnée avant le "/".
+    const bicoloreM = c.match(/\b(Bleu|Noir|Nacré)\s*\/\s*(Bleu|Noir|Nacré)\b/i);
+    if (bicoloreM) {
+      const premiere = Object.keys(map).find(k => k.toLowerCase() === bicoloreM[1].toLowerCase());
+      if (premiere) return map[premiere];
+    }
+    return null;
   }
   return ['Blanc','Sable','Gris'].includes(c) ? c : null;
 }
