@@ -1821,7 +1821,7 @@ const TAB_GROUPS = {
     tabs:[{id:'emballage_view',icon:'ti-package',label:'Emballage'},{id:'emballage_grand',icon:'ti-layout-grid',label:'Grand écran',show:()=>can('emballage_grand')}]},
   'stock-g':    { icon:'ti-box-multiple',           label:'Stock',      show:()=>can('stock'),
     tabs:[{id:'stock_scan',icon:'ti-scan',label:'Scanner'},{id:'stock_liste',icon:'ti-list',label:'Références'},
-      ...STOCK_CATEGORIES.map(c=>({id:'stock_cat_'+c.id,icon:c.icon,label:c.label}))]},
+      {id:'stock_pieces',icon:'ti-category',label:'Pièces détachées'}]},
 };
 function _tabGroup(tabId) {
   for(const[gId,g] of Object.entries(TAB_GROUPS)) if(g.tabs.some(t=>t.id===tabId)) return {gId,g};
@@ -1904,7 +1904,7 @@ function goTab(tab) {
   else if(tab==='emballage_grand') renderEmballageGrand();
   else if(tab==='stock_scan') renderStockScan();
   else if(tab==='stock_liste') renderStockListe();
-  else if(tab.startsWith('stock_cat_')) renderStockCategorie(tab.slice('stock_cat_'.length));
+  else if(tab==='stock_pieces') renderStockPieces();
   else if(tab==='suivi') renderSuivi();
   else if(tab==='planning') renderPlanning();
   else if(tab==='planning_avance') renderPlanningAvance();

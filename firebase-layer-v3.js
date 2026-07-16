@@ -428,11 +428,6 @@ function showLoadingOverlay(show) {
 
 function refreshCurrentView() {
   if (typeof currentTab === 'undefined') return;
-  if (typeof currentTab === 'string' && currentTab.startsWith('stock_cat_')) {
-    if (typeof renderStockCategorie === 'function') renderStockCategorie(currentTab.slice('stock_cat_'.length));
-    updateBadge?.();
-    return;
-  }
   const map = {
     dashboard:       () => typeof renderDashboard      === 'function' && renderDashboard(),
     dossiers:        () => typeof renderDos            === 'function' && renderDos(),
@@ -445,6 +440,7 @@ function refreshCurrentView() {
     planning_avance: () => typeof _planningAvanceAutoSync === 'function' && _planningAvanceAutoSync(),
     stock_scan:      () => typeof renderStockScan      === 'function' && renderStockScan(),
     stock_liste:     () => typeof renderStockListe     === 'function' && renderStockListe(),
+    stock_pieces:    () => typeof renderStockPieces    === 'function' && renderStockPieces(),
   };
   const fn = map[currentTab];
   if (fn) fn();

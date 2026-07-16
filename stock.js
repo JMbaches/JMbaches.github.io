@@ -589,11 +589,11 @@ async function stockConfirmAction(code, action) {
   stockRefreshCurrentView(code);
 }
 
-// Réaffiche la vue Stock actuellement ouverte (Scanner, Références ou une catégorie de pièces)
+// Réaffiche la vue Stock actuellement ouverte (Scanner, Références ou Pièces détachées)
 function stockRefreshCurrentView(code) {
   if (currentTab === 'stock_scan') stockHandleScan(code);
   else if (currentTab === 'stock_liste') renderStockListe();
-  else if (typeof currentTab === 'string' && currentTab.startsWith('stock_cat_')) renderStockCategorie(currentTab.slice('stock_cat_'.length));
+  else if (currentTab === 'stock_pieces') renderStockCategorie(stockPiecesActiveCat);
 }
 
 let stockListeQuery = ''; // recherche texte dans Stock > Références
@@ -812,19 +812,55 @@ function stockCatFilter(catId, val) {
   }
 }
 
+// Catégorie actuellement affichée dans l'écran fusionné "Pièces détachées" (voir renderStockPieces)
+// — mémorisée par poste (localStorage) pour retomber sur la dernière catégorie consultée.
+let stockPiecesActiveCat = localStorage.getItem('jmb_stockPiecesActiveCat') || STOCK_CATEGORIES[0].id;
+
+function stockSetPiecesCat(catId) {
+  stockPiecesActiveCat = catId;
+  localStorage.setItem('jmb_stockPiecesActiveCat', catId);
+  renderStockPieces();
+}
+
+// Écran unique "Pièces détachées" — remplace les 9 anciens sous-onglets (un par catégorie) qui
+// débordaient du sous-menu (nécessitait de scroller horizontalement pour atteindre Inox/Moteur/
+// Pieds). Les 9 catégories deviennent des chips juste en dessous de l'en-tête, même pattern que
+// les filtres rapides de l'écran Admin (adminQuickFilter, voir index.html).
+function renderStockPieces() {
+  const mc = document.getElementById('main-content');
+  const totalProduits = stockRefs.filter(r => r.categorie).length;
+  const totalBas = STOCK_CATEGORIES.reduce((n,c) => n + stockRefs.filter(r => r.categorie===c.id && stockIsLow(r)).length, 0);
+  mc.innerHTML = `
+  <div class="page-header">
+    <h1 style="font-size:20px;font-weight:700;letter-spacing:-.2px">Stock — Pièces détachées</h1>
+    <p>${totalProduits} produit${totalProduits>1?'s':''} · 9 catégories${totalBas>0?` · <span style="color:var(--red);font-weight:600"><i class="ti ti-alert-triangle"></i> ${totalBas} sous le seuil</span>`:''}</p>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+    ${STOCK_CATEGORIES.map(c => {
+      const n = stockRefs.filter(r => r.categorie===c.id).length;
+      const nLow = stockRefs.filter(r => r.categorie===c.id && stockIsLow(r)).length;
+      const active = stockPiecesActiveCat === c.id;
+      return `<button class="btn btn-sm ${active?'btn-primary':'btn-ghost'}" onclick="stockSetPiecesCat('${c.id}')"${!active&&nLow>0?` style="color:var(--red);border-color:var(--red)"`:''}>
+        <i class="ti ${c.icon}"></i> ${c.label} <span style="opacity:.7">(${n})</span>${!active&&nLow>0?` <i class="ti ti-alert-triangle" style="font-size:10px"></i>`:''}
+      </button>`;
+    }).join('')}
+  </div>
+  <div id="stock-cat-body"></div>`;
+  renderStockCategorie(stockPiecesActiveCat);
+}
+
+// Rendu du contenu d'UNE catégorie — cible #stock-cat-body (écran fusionné ci-dessus) si présent,
+// sinon #main-content par repli. Ne touche jamais aux chips de renderStockPieces (pas de flicker
+// de la barre de catégories quand on filtre/édite/supprime un produit).
 function renderStockCategorie(catId) {
   const cat = STOCK_CATEGORIES.find(c => c.id === catId);
   if (!cat) return;
-  const mc = document.getElementById('main-content');
+  const mc = document.getElementById('stock-cat-body') || document.getElementById('main-content');
   const allRefs = stockRefs.filter(r => r.categorie === catId).sort((a,b) => (a.label||'').localeCompare(b.label||''));
   const q = (stockCatQuery[catId]||'').trim().toLowerCase();
   const refs = !q ? allRefs : allRefs.filter(r => (r.label||'').toLowerCase().includes(q));
   const nbLow = allRefs.filter(stockIsLow).length;
   mc.innerHTML = `
-  <div class="page-header">
-    <h1 style="font-size:20px;font-weight:700;letter-spacing:-.2px">Stock — ${cat.label}</h1>
-    <p>${allRefs.length} produit${allRefs.length>1?'s':''}${nbLow>0?` · <span style="color:var(--red);font-weight:600"><i class="ti ti-alert-triangle"></i> ${nbLow} sous le seuil</span>`:''}</p>
-  </div>
   <div class="section-header" style="margin-bottom:14px">
     <div class="section-title" style="font-size:15px;font-weight:700">${cat.label}</div>
     <div style="display:flex;gap:8px;align-items:center">
