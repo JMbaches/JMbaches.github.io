@@ -175,7 +175,7 @@ button { cursor: pointer; border: none; background: transparent; }
 .dash-card-sub { font-size: 11px; color: var(--ink-faint); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border); }
 .dash-section { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; }
 .dash-section-full { margin-bottom: 24px; }
-.pipeline-bar { display: grid; grid-template-columns: repeat(6,1fr); gap: 0; margin-bottom: 24px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: var(--paper); }
+.pipeline-bar { display: grid; grid-template-columns: repeat(7,1fr); gap: 0; margin-bottom: 24px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: var(--paper); }
 .pipeline-stage { padding: 14px 12px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; border-right: 1px solid var(--border); transition: background .14s; position: relative; }
 .pipeline-stage:last-child { border-right: none; }
 .pipeline-stage:hover { background: var(--bg); }
@@ -1409,10 +1409,14 @@ const ROLE_DEFAULT_PERMS = {
 // "attente_planif" volontairement absent de STATUT_NEXT/STATUT_NEXT_BTN : ce statut n'a pas de
 // bouton "avancer" générique, il se résout automatiquement (voir _retourSaisieSiPlanifie dans
 // planning.js) dès qu'une date de pose est fixée — pas d'action manuelle attendue ici.
-const STATUT_NEXT = {nouveau:'admin',admin:'verif',verif:'production',production:'emballage',emballage:'stocké',stocké:'expédié',expédié:'expédié',terminé:'emballage',posé:'posé',retiré:'retiré'};
-const STATUT_LABEL = {nouveau:'Nouveau',admin:'Saisie admin',verif:'Vérification',production:'En production',emballage:'Emballage',stocké:'Stocké',expédié:'Expédié',livré:'Livré',posé:'Posé',retiré:'Enlevé',attente_planif:'Attente planification'};
-const STATUT_COLORS = {nouveau:'#7C3AED',admin:'#D97706',verif:'#0891B2',production:'#2563EB',emballage:'#D97706',stocké:'#4338CA',expédié:'#059669',livré:'#047857',posé:'#065F46',retiré:'#374151',attente_planif:'#0B5C4C'};
-const STATUT_NEXT_BTN = {nouveau:'→ Envoyer en admin',admin:'→ Envoyer en vérification',verif:'→ Envoyer en production',production:'→ Envoyer en emballage',emballage:'→ Marquer stocké',stocké:'→ Marquer expédié',expédié:'→ Marquer livré',livré:'Dossier clôturé',posé:'Dossier clôturé',retiré:'Dossier clôturé',terminé:'→ Envoyer en emballage'};
+// "pret_atelier" : étape ajoutée entre "verif" et "production" (2026-07-16) — dossier vérifié
+// (fiche de calcul faite) mais pas encore effectivement envoyé à l'atelier. Sert de file d'attente
+// visible avant le dispatch réel ; le décompte stock (voir changerStatutDossier) ne se déclenche
+// qu'à l'entrée RÉELLE en "production", pas à ce stade intermédiaire.
+const STATUT_NEXT = {nouveau:'admin',admin:'verif',verif:'pret_atelier',pret_atelier:'production',production:'emballage',emballage:'stocké',stocké:'expédié',expédié:'expédié',terminé:'emballage',posé:'posé',retiré:'retiré'};
+const STATUT_LABEL = {nouveau:'Nouveau',admin:'Saisie admin',verif:'Vérification',pret_atelier:'Prêt pour l\'atelier',production:'En production',emballage:'Emballage',stocké:'Stocké',expédié:'Expédié',livré:'Livré',posé:'Posé',retiré:'Enlevé',attente_planif:'Attente planification'};
+const STATUT_COLORS = {nouveau:'#7C3AED',admin:'#D97706',verif:'#0891B2',pret_atelier:'#1D4ED8',production:'#2563EB',emballage:'#D97706',stocké:'#4338CA',expédié:'#059669',livré:'#047857',posé:'#065F46',retiré:'#374151',attente_planif:'#0B5C4C'};
+const STATUT_NEXT_BTN = {nouveau:'→ Envoyer en admin',admin:'→ Envoyer en vérification',verif:'→ Marquer vérifié (prêt atelier)',pret_atelier:'→ Envoyer à l\'atelier',production:'→ Envoyer en emballage',emballage:'→ Marquer stocké',stocké:'→ Marquer expédié',expédié:'→ Marquer livré',livré:'Dossier clôturé',posé:'Dossier clôturé',retiré:'Dossier clôturé',terminé:'→ Envoyer en emballage'};
 const EVT = {
   création:     {icon:'ti-file-plus',bg:'#EAF0F9',c:'#14479B'},
   statut:       {icon:'ti-arrow-right',bg:'#FAEEDA',c:'#633806'},
@@ -1533,6 +1537,9 @@ let dosPeriodeFilter = '';    // Filtre par période (ce_mois, mois_dernier, cet
 let dosMontantMin    = '';    // Filtre montant min TTC
 let dosMontantMax    = '';    // Filtre montant max TTC
 let dosRevendeurFilter = '';  // Filtre par revendeur
+// Filtre rapide de l'écran Admin fusionné (Saisie+Vérification+Prêt atelier, voir renderDos) —
+// mémorisé par utilisateur/poste (localStorage) pour que chacun retrouve sa vue par défaut.
+let adminQuickFilter = localStorage.getItem('jmb_adminQuickFilter') || 'saisie';
 let comptaAnnee           = '';    // Filtre année compta
 let comptaDevisFilter     = '';    // Filtre statut devis en compta
 let comptaChartPeriod     = 12;   // Période graphique CA en mois (null = tout)
@@ -1803,7 +1810,7 @@ const TAB_GROUPS = {
   'dos-g':      { icon:'ti-clipboard-list', label:'Dossiers',    show:()=>can('view_all')||can('create'),
     tabs:[{id:'dos',icon:'ti-list',label:'Liste'},{id:'archives',icon:'ti-archive',label:'Archives'}]},
   'admin-g':    { icon:'ti-file-description',label:'Admin',      show:()=>currentUser&&['admin','verif','direction'].includes(currentUser.role),
-    tabs:[{id:'admin_saisie',icon:'ti-pencil',label:'Saisie'},{id:'admin_verif',icon:'ti-check',label:'Vérification'}]},
+    tabs:[{id:'admin',icon:'ti-list-check',label:'Administration'}]},
   'atelier-g':  { icon:'ti-tool',            label:'Atelier',    show:()=>can('view_prod'),
     tabs:[{id:'atelier',icon:'ti-tool',label:'Atelier',show:()=>can('view_prod')},{id:'atelier_grand',icon:'ti-layout-grid',label:'Grand écran',show:()=>can('view_prod')&&can('atelier_grand')}]},
   'emballage-g':{ icon:'ti-package',         label:'Emballage',  show:()=>can('emballage'),
@@ -1885,7 +1892,7 @@ function goTab(tab) {
   mc.style.padding=''; // reset si on venait du Planning IA (iframe plein écran)
   mc.innerHTML='';
   if(tab==='dashboard') renderDashboard();
-  else if(tab==='dos'||tab==='admin_saisie'||tab==='admin_verif') renderDos();
+  else if(tab==='dos'||tab==='admin') renderDos();
   else if(tab==='archives') renderArchives();
   else if(tab==='atelier') renderAtelier();
   else if(tab==='atelier_grand') renderAtelierGrand();
@@ -2129,6 +2136,7 @@ function renderDashboard() {
     const stages=[
       {k:'admin',     label:'Saisie admin', color:'#D97706'},
       {k:'verif',     label:'Vérification', color:'#0891B2'},
+      {k:'pret_atelier',label:'Prêt atelier',color:'#1D4ED8'},
       {k:'production',label:'Production',   color:'#2563EB'},
       {k:'emballage', label:'Emballage',    color:'#D97706'},
       {k:'stocké',    label:'Stocké',       color:'#4338CA'},
@@ -2241,6 +2249,7 @@ function renderDos() {
   const enProd=dossiers.filter(d=>d.statut==='production').length;
   const enAdmin=dossiers.filter(d=>d.statut==='admin'||d.statut==='nouveau').length;
   const enVerif=dossiers.filter(d=>d.statut==='verif').length;
+  const enPretAtelier=dossiers.filter(d=>d.statut==='pret_atelier').length;
   const clotures=dossiers.filter(d=>['expédié','livré','posé','retiré'].includes(d.statut)).length;
   mc.innerHTML=`
   <div id="toast-msg" class="toast-msg"></div>
@@ -2269,9 +2278,17 @@ function renderDos() {
     </div>
   </div>
 
+  ${currentTab==='admin' ? `
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+    <button class="btn btn-sm ${adminQuickFilter==='saisie'?'btn-primary':'btn-ghost'}" onclick="setAdminQuickFilter('saisie')"><i class="ti ti-pencil"></i> À saisir (${enAdmin})</button>
+    <button class="btn btn-sm ${adminQuickFilter==='verif'?'btn-primary':'btn-ghost'}" onclick="setAdminQuickFilter('verif')"><i class="ti ti-check"></i> À vérifier (${enVerif})</button>
+    <button class="btn btn-sm ${adminQuickFilter==='pret_atelier'?'btn-primary':'btn-ghost'}" onclick="setAdminQuickFilter('pret_atelier')"><i class="ti ti-truck-delivery"></i> Prêt pour l'atelier (${enPretAtelier})</button>
+    <button class="btn btn-sm ${adminQuickFilter==='tous'?'btn-primary':'btn-ghost'}" onclick="setAdminQuickFilter('tous')"><i class="ti ti-list"></i> Tous (${enAdmin+enVerif+enPretAtelier})</button>
+  </div>` : ''}
+
   <div style="margin-bottom:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px">
-      <div class="section-title" style="font-size:17px;font-weight:700;letter-spacing:-.2px">${currentTab==='admin_saisie'?'Dossiers en saisie admin':currentTab==='admin_verif'?'Dossiers en vérification':'Dossiers clients'}</div>
+      <div class="section-title" style="font-size:17px;font-weight:700;letter-spacing:-.2px">${currentTab==='admin' ? ({saisie:'Dossiers en saisie admin',verif:'Dossiers en vérification',pret_atelier:'Dossiers prêts pour l\'atelier',tous:'Administration — saisie, vérification & envoi atelier'}[adminQuickFilter]) : 'Dossiers clients'}</div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <div style="position:relative">
           <i class="ti ti-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--ink-faint);font-size:14px;pointer-events:none"></i>
@@ -2371,7 +2388,14 @@ function renderDos() {
         <th>Activité</th><th>Actions</th>
       </tr></thead>
       ${globalSearchQuery ? `<caption style="caption-side:top;text-align:left;padding:8px 14px;font-size:12px;color:var(--accent);font-weight:600;background:var(--accent-light);border-bottom:1px solid var(--border)"><i class="ti ti-search"></i> ${filteredDossiers(dossiers).length} résultat(s) pour « ${globalSearchQuery} » <button class="btn btn-ghost btn-sm" style="margin-left:8px" onclick="document.getElementById('global-search-input').value='';globalSearch('')">✕ Effacer</button></caption>` : ""}
-      <tbody>${(()=>{let _l=applyDosFilters(dossiers).filter(d=>showArchived||!isArchivable(d));if(currentTab==='admin_saisie')_l=_l.filter(d=>d.statut==='admin'||d.statut==='nouveau');else if(currentTab==='admin_verif')_l=_l.filter(d=>d.statut==='verif');return _l;})().map(d=>{
+      <tbody>${(()=>{let _l=applyDosFilters(dossiers).filter(d=>showArchived||!isArchivable(d));
+        if(currentTab==='admin') {
+          if(adminQuickFilter==='saisie') _l=_l.filter(d=>d.statut==='admin'||d.statut==='nouveau');
+          else if(adminQuickFilter==='verif') _l=_l.filter(d=>d.statut==='verif');
+          else if(adminQuickFilter==='pret_atelier') _l=_l.filter(d=>d.statut==='pret_atelier');
+          else _l=_l.filter(d=>['admin','nouveau','verif','pret_atelier'].includes(d.statut));
+        }
+        return _l;})().map(d=>{
         const retard = d.dateLivraison && d.dateLivraison < new Date().toISOString().split('T')[0] && !['expédié','livré','posé','retiré'].includes(d.statut);
         return `<tr class="clickable" onclick="openFiche('${d.id}')" style="${retard?'background:rgba(163,45,45,.04)':''}">
           <td style="font-size:11px;color:var(--ink-faint);font-family:'JetBrains Mono',monospace;font-weight:500">${highlight(d.id, globalSearchQuery)}</td>
@@ -2412,7 +2436,7 @@ function renderDos() {
           <td><span style="font-size:12px;color:var(--ink-faint)">${d.history.length} action${d.history.length>1?'s':''}</span></td>
           <td onclick="event.stopPropagation()">
             <div style="display:flex;gap:5px;flex-wrap:wrap">
-              ${currentTab==='admin_verif'?`<button class="btn btn-primary btn-sm" onclick="ouvrirFicheCalcul('${d.id}')" title="Ouvrir directement la fiche de calcul"><i class="ti ti-calculator"></i> Fiche de calcul</button>`:''}
+              ${d.statut==='verif'?`<button class="btn btn-primary btn-sm" onclick="ouvrirFicheCalcul('${d.id}')" title="Ouvrir directement la fiche de calcul"><i class="ti ti-calculator"></i> Fiche de calcul</button>`:''}
               <button class="btn btn-ghost btn-sm" onclick="openFiche('${d.id}')"><i class="ti ti-file-description"></i> Fiche</button>
               ${can('advance')&&!isDossierCloture(d)?`<button class="btn btn-secondary btn-sm" onclick="avancerDos('${d.id}',event)">${getNextBtnLabel(d).split(' ')[0]}</button>`:''}
               ${can('create')?`<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="supprimerDossier('${d.id}',event)" title="Supprimer le dossier"><i class="ti ti-trash"></i></button>`:''}
@@ -2422,6 +2446,13 @@ function renderDos() {
       }).join('')}</tbody>
     </table>
   </div>`;
+}
+
+// Filtre rapide de l'écran Admin fusionné — voir déclaration de adminQuickFilter.
+function setAdminQuickFilter(f) {
+  adminQuickFilter = f;
+  localStorage.setItem('jmb_adminQuickFilter', f);
+  renderDos();
 }
 
 /* ================================================================
@@ -2810,7 +2841,7 @@ function renderPageCommande(d, p) { p = p || {};
         ? `<span style="font-size:12px;color:var(--teal)"><i class="ti ti-calendar-time"></i> En attente d'une date de pose — reviendra automatiquement en Saisie une fois planifié</span>`
         : `
         ${!d.needPose?`<button class="btn btn-ghost btn-sm" onclick="envoyerAuPlanning()" title="Envoie ce dossier dans l'onglet Planning pour planifier la pose, sans attendre la fabrication"><i class="ti ti-calendar-plus"></i> Envoyer au planning</button>`:`<span class="badge" style="color:var(--teal);border-color:var(--teal)" title="Ce dossier apparaît dans l'onglet Planning"><i class="ti ti-calendar-check"></i> Dans le planning</span>`}
-        ${d.statut==='verif'?`<button class="btn btn-ghost btn-sm" onclick="renvoyerSaisie()" style="color:var(--amber);border-color:rgba(217,119,6,.3)" title="Renvoyer en saisie admin"><i class="ti ti-arrow-back-up"></i> Renvoyer en saisie</button>`:''}
+        ${['verif','pret_atelier'].includes(d.statut)?`<button class="btn btn-ghost btn-sm" onclick="renvoyerSaisie()" style="color:var(--amber);border-color:rgba(217,119,6,.3)" title="Renvoyer en saisie admin"><i class="ti ti-arrow-back-up"></i> Renvoyer en saisie</button>`:''}
         <button class="btn btn-primary" onclick="avancerFiche()"><i class="ti ti-arrow-right"></i> ${getNextBtnLabel(d)}</button>
       `):`<span class="badge b-expedie">Dossier clôturé</span>`}
     </div>
@@ -3160,7 +3191,7 @@ function changerDevisStatut(dosId, val) {
 }
 
 function renvoyerSaisie() {
-  const d=dossiers.find(x=>x.id===currentDosId); if(!d||d.statut!=='verif') return;
+  const d=dossiers.find(x=>x.id===currentDosId); if(!d||!['verif','pret_atelier'].includes(d.statut)) return;
   d.statut='admin'; d.statutChangedAt=nowISO();
   logHistory(currentDosId,'statut','Renvoyé en saisie admin');
   pushNotif('statut:admin',currentDosId,d);
@@ -3314,19 +3345,25 @@ async function receptionnerPdfFicheCalcul({ dossierId, filename, base64 }) {
 async function changerStatutDossier(d, newStatut, logSuffix) {
   const prev = d.statut;
   if (prev === newStatut) return true;
-  // Le blocage fiche de calcul + le décompte auto de stock ne concernent que l'ENTRÉE EN
-  // PRODUCTION, c'est-à-dire une sortie de "verif" vers l'avant du pipeline. Un retour en
-  // arrière (renvoi en saisie admin / nouveau, via le menu statut ou le drag&drop du Kanban)
-  // ne doit ni bloquer ni décompter — même comportement que renvoyerSaisie().
+  // Le blocage fiche de calcul concerne toute sortie de "verif" vers l'avant du pipeline
+  // (aujourd'hui : vers "pret_atelier", éventuellement directement vers "production" si le menu
+  // statut est utilisé pour sauter l'étape). Un retour en arrière (renvoi en saisie admin /
+  // nouveau, via le menu statut ou le drag&drop du Kanban) ne doit jamais bloquer — même
+  // comportement que renvoyerSaisie().
   const STATUTS_AMONT_VERIF = ['nouveau', 'admin', 'attente_planif'];
   if (prev === 'verif' && newStatut !== 'verif' && !STATUTS_AMONT_VERIF.includes(newStatut)) {
-    // Un dossier volet (typeLame renseigné) ne peut pas partir en fabrication sans être passé
+    // Un dossier volet (typeLame renseigné) ne peut pas quitter la vérification sans être passé
     // par la fiche de calcul — c'est le calcul le plus précis qu'on fait, notamment pour le
     // nombre de fagots de lames. Les dossiers bâches (jamais de typeLame) ne sont pas concernés.
     if (d.typeLame && !d.nbFagotsCalcule) {
       showToast(`⚠ Impossible d'avancer : la fiche de calcul n'a pas été faite pour ce dossier`);
       return false;
     }
+  }
+  // Le décompte auto de stock ne se déclenche qu'à l'ENTRÉE RÉELLE en production (dispatch
+  // effectif à l'atelier) — pas au simple passage en "pret_atelier" (prêt, en attente d'envoi).
+  // "stock déduit dès que le dossier part en fabrication" = entrée dans "production", pas avant.
+  if (newStatut === 'production' && prev !== 'production') {
     await stockDecompterEntreeProduction(d);
     // ⚠ Pendant les awaits ci-dessus (jusqu'à ~17 transactions Firestore), chaque logHistory()
     // du décompte déclenche un saveData() dont l'écho onSnapshot RECONSTRUIT le tableau
@@ -4120,6 +4157,7 @@ function renderSuivi() {
     {k:'admin',     l:'Saisie admin', c:'var(--accent)', bg:'var(--accent-light)'},
     {k:'attente_planif', l:'Attente planification', c:'var(--teal)', bg:'var(--teal-light)'},
     {k:'verif',     l:'Vérification', c:'#0E7490',       bg:'#CFFAFE'},
+    {k:'pret_atelier', l:'Prêt atelier', c:'#1D4ED8',    bg:'#DBEAFE'},
     {k:'production',l:'Production',   c:'var(--amber)',  bg:'var(--amber-light)'},
     {k:'emballage', l:'Emballage',    c:'#92400E',       bg:'#FEF3C7'},
     {k:'stocké',    l:'Stocké',       c:'#3730A3',       bg:'#E0E7FF'},
@@ -4134,7 +4172,7 @@ function renderSuivi() {
     <div class="section-title">Pipeline global</div>
     <span style="font-size:12px;color:var(--ink-faint)"><i class="ti ti-drag-drop" style="vertical-align:-1px;margin-right:4px"></i>Glisser-déposer pour changer de statut</span>
   </div>
-  <div style="display:grid;grid-template-columns:repeat(10,minmax(130px,1fr));gap:10px;overflow-x:auto;padding-bottom:8px" id="suivi-pipeline">
+  <div style="display:grid;grid-template-columns:repeat(11,minmax(130px,1fr));gap:10px;overflow-x:auto;padding-bottom:8px" id="suivi-pipeline">
     ${cols.map(col=>{
       const items=dossiers.filter(d=>d.statut===col.k);
       return `<div class="pipe-col" id="col-${col.k}"
@@ -5634,13 +5672,13 @@ function highlight(text, query) {
 }
 
 // ----- BARRE DE PROGRESSION DOSSIER -----
-const STATUT_STEP = {nouveau:1,admin:2,verif:3,production:4,emballage:5,stocké:6,expédié:7,livré:8,posé:8,retiré:8};
+const STATUT_STEP = {nouveau:1,admin:2,verif:3,pret_atelier:4,production:5,emballage:6,stocké:7,expédié:8,livré:9,posé:9,retiré:9};
 function dosProgressBar(d) {
   const step = STATUT_STEP[d.statut] || 0;
-  const pct  = Math.round(step / 8 * 100);
-  const cols  = {nouveau:'var(--purple)',admin:'var(--accent)',verif:'#0891B2',production:'var(--amber)',emballage:'#D97706',stocké:'#4338CA',expédié:'var(--green)',livré:'#047857',posé:'var(--green)',retiré:'var(--ink-faint)'};
+  const pct  = Math.round(step / 9 * 100);
+  const cols  = {nouveau:'var(--purple)',admin:'var(--accent)',verif:'#0891B2',pret_atelier:'#1D4ED8',production:'var(--amber)',emballage:'#D97706',stocké:'#4338CA',expédié:'var(--green)',livré:'#047857',posé:'var(--green)',retiré:'var(--ink-faint)'};
   const col = cols[d.statut] || 'var(--accent)';
-  const bar = `<div title="Étape ${step}/8" style="height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:5px;width:100%"><div style="height:100%;width:${pct}%;background:${col};border-radius:2px;transition:width .4s"></div></div>`;
+  const bar = `<div title="Étape ${step}/9" style="height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:5px;width:100%"><div style="height:100%;width:${pct}%;background:${col};border-radius:2px;transition:width .4s"></div></div>`;
 
   // Complétude — uniquement utile en saisie/vérif
   if (!['admin','verif'].includes(d.statut)) return bar;
