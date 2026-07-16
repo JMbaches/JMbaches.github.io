@@ -1545,6 +1545,10 @@ let comptaDevisFilter     = '';    // Filtre statut devis en compta
 let comptaChartPeriod     = 12;   // Période graphique CA en mois (null = tout)
 let comptaRevendeurFilter = '';    // Drill-down par revendeur
 let showArchived       = false; // Afficher les dossiers clôturés archivés
+// Interrupteur global du décompte auto de stock — assigné SANS "window." par le listener
+// onSnapshot de config/stock (firebase-layer-v3.js), voir piège de scope documenté pour
+// users/dossiers/stockRefs. Valeur par défaut true = comportement actuel inchangé.
+let stockDecompteActif = true;
 
 /* ================================================================
    HELPERS
@@ -3364,7 +3368,9 @@ async function changerStatutDossier(d, newStatut, logSuffix) {
   // Le décompte auto de stock ne se déclenche qu'à l'ENTRÉE RÉELLE en production (dispatch
   // effectif à l'atelier) — pas au simple passage en "pret_atelier" (prêt, en attente d'envoi).
   // "stock déduit dès que le dossier part en fabrication" = entrée dans "production", pas avant.
-  if (newStatut === 'production' && prev !== 'production') {
+  // Interrupteur global (Stock → Références) : si désactivé, le dossier avance quand même
+  // normalement, seul le décompte est sauté — sortie de stock à faire à la main en attendant.
+  if (newStatut === 'production' && prev !== 'production' && stockDecompteActif) {
     await stockDecompterEntreeProduction(d);
     // ⚠ Pendant les awaits ci-dessus (jusqu'à ~17 transactions Firestore), chaque logHistory()
     // du décompte déclenche un saveData() dont l'écho onSnapshot RECONSTRUIT le tableau

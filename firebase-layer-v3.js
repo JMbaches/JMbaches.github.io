@@ -28,7 +28,7 @@ window._FieldValue = firebase.firestore.FieldValue;
 try { window._storage = firebase.storage(); } catch(e) { console.warn('Firebase Storage non disponible'); }
 
 let _firestoreReady = false;
-let _unsubUsers, _unsubDossiers, _unsubNotifs, _unsubMessages, _unsubStockRefs, _unsubStockMouvements;
+let _unsubUsers, _unsubDossiers, _unsubNotifs, _unsubMessages, _unsubStockRefs, _unsubStockMouvements, _unsubConfigStock;
 window._chatMessages = [];
 
 // Affiche un message propre au lieu de planter sur permission-denied
@@ -121,6 +121,16 @@ function startFirestoreListeners() {
         stockMouvements = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         if (_firestoreReady) refreshCurrentView();
       }, e => { handleFirestoreError(e, 'stock_mouvements'); });
+
+    // Interrupteur global "décompte auto du stock" (config/stock, champ decompteAutoActif).
+    // ⚠ Nécessite une règle Firestore dédiée (voir stock.js, stockToggleDecompteAuto) — tant
+    // qu'elle n'existe pas côté Firebase, cette lecture échoue silencieusement (pas de toast,
+    // juste un warning console) et stockDecompteActif garde sa valeur par défaut (true), donc
+    // le comportement reste identique à avant l'ajout de ce réglage.
+    _unsubConfigStock = _db.collection('config').doc('stock').onSnapshot(snap => {
+      stockDecompteActif = snap.exists ? (snap.data().decompteAutoActif !== false) : true;
+      if (_firestoreReady) refreshCurrentView();
+    }, e => { console.warn('config/stock indisponible (règle Firestore à ajouter ?)', e); });
   });
 }
 
@@ -131,7 +141,8 @@ function stopFirestoreListeners() {
   _unsubMessages?.();
   _unsubStockRefs?.();
   _unsubStockMouvements?.();
-  _unsubUsers = _unsubDossiers = _unsubNotifs = _unsubMessages = _unsubStockRefs = _unsubStockMouvements = null;
+  _unsubConfigStock?.();
+  _unsubUsers = _unsubDossiers = _unsubNotifs = _unsubMessages = _unsubStockRefs = _unsubStockMouvements = _unsubConfigStock = null;
   _firestoreReady = false;
   window._chatMessages = [];
 }

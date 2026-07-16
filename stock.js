@@ -10,6 +10,22 @@
 let stockRefs = []; // Rempli par Firestore au chargement — { id:codeBarre, type, finition, taille, quantite, createdAt }
 let stockMouvements = []; // Rempli par Firestore au chargement — historique entrées/sorties/inventaires
 
+// Interrupteur global du décompte auto de stock (bouton Stock → Références) — voir
+// stockDecompteActif (déclaré dans index.html, assigné par le listener config/stock de
+// firebase-layer-v3.js). Écrit dans Firestore ; ne modifie jamais la variable directement,
+// l'écho onSnapshot s'en charge (même logique que le reste de l'app).
+async function stockToggleDecompteAuto() {
+  const next = !stockDecompteActif;
+  if (!next && !confirm(`Désactiver le décompte automatique du stock ?\n\nLes dossiers continueront à avancer normalement vers l'atelier, mais le stock (lames, moteur, axe, accessoires…) ne sera plus décrémenté automatiquement à l'entrée en production — les sorties devront être faites à la main (onglet Scanner).`)) return;
+  try {
+    await window._db.collection('config').doc('stock').set({ decompteAutoActif: next }, { merge: true });
+    showToast(next ? '✓ Décompte automatique du stock réactivé' : '⚠ Décompte automatique du stock désactivé');
+  } catch (e) {
+    console.error(e);
+    showToast('⚠ Impossible de modifier ce réglage (permissions Firestore ?)');
+  }
+}
+
 /* ================================================================
    STOCK (lames PVC/polycarbonate)
    ================================================================ */
@@ -610,6 +626,15 @@ function renderStockListe() {
   <div class="page-header">
     <h1 style="font-size:20px;font-weight:700;letter-spacing:-.2px">Stock — Références</h1>
     <p>${allRefs.length} référence${allRefs.length>1?'s':''}${nbLow>0?` · <span style="color:var(--red);font-weight:600"><i class="ti ti-alert-triangle"></i> ${nbLow} sous le seuil</span>`:''}</p>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:16px;background:${stockDecompteActif?'var(--paper)':'var(--red-light)'}">
+    <div>
+      <div style="font-size:13px;font-weight:600">Décompte automatique du stock</div>
+      <div style="font-size:11px;color:var(--ink-faint)">Se déclenche à l'entrée réelle en production (lames, moteur, axe, accessoires…)</div>
+    </div>
+    <button class="btn btn-sm ${stockDecompteActif?'btn-secondary':'btn-primary'}" onclick="stockToggleDecompteAuto()">
+      <i class="ti ${stockDecompteActif?'ti-toggle-right':'ti-toggle-left'}"></i> ${stockDecompteActif?'Activé':'Désactivé'}
+    </button>
   </div>
   <div class="section-header" style="margin-bottom:14px">
     <div class="section-title" style="font-size:15px;font-weight:700">Références</div>
