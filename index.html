@@ -1077,7 +1077,7 @@ a:focus-visible, button:focus-visible,
         <div class="form-section-title"><i class="ti ti-package"></i> Produit</div>
         <div class="form-grid form-grid-2">
           <div class="form-group"><label class="form-label">Structure / Modèle *</label>
-            <select id="f-structure">
+            <select id="f-structure" onchange="updateAccessoiresVisibility()">
               <option value="">-- Choisir --</option>
               <optgroup label="Volets hors-sol">
                 <option>Volet hors-sol Silver Roll (2h30)</option>
@@ -1121,38 +1121,38 @@ a:focus-visible, button:focus-visible,
       <div class="form-section">
         <div class="form-section-title"><i class="ti ti-puzzle"></i> Accessoires (décompte stock)</div>
         <div class="form-grid form-grid-3">
-          <div class="form-group"><label class="form-label">Télécommande</label><select id="f-telecommande">
+          <div class="form-group" id="fg-telecommande"><label class="form-label">Télécommande</label><select id="f-telecommande">
             <option value="">Non</option><option value="Classique">Classique</option><option value="Bluetooth">Bluetooth</option>
           </select></div>
-          <div class="form-group"><label class="form-label">Gestion sel</label><select id="f-gestionSel">
+          <div class="form-group" id="fg-gestionSel"><label class="form-label">Gestion sel</label><select id="f-gestionSel">
             <option value="">Non</option><option value="Electrolyseur">Electrolyseur</option><option value="Oxeo">Oxeo</option>
           </select></div>
-          <div class="form-group"><label class="form-label">Passes-sangles</label><input id="f-passesSangles" type="number" min="0" max="5" placeholder="0"></div>
-          <div class="form-group"><label class="form-label">Flasque murale (Silver)</label><select id="f-flasqueMurale">
+          <div class="form-group" id="fg-passesSangles"><label class="form-label">Passes-sangles</label><input id="f-passesSangles" type="number" min="0" max="5" placeholder="0"></div>
+          <div class="form-group" id="fg-flasqueMurale"><label class="form-label">Flasque murale (Silver)</label><select id="f-flasqueMurale">
             <option value="">Non</option><option value="Oui">Oui</option>
           </select></div>
-          <div class="form-group"><label class="form-label">Mur — couleur (immergé)</label><select id="f-murCouleur">
+          <div class="form-group" id="fg-murCouleur"><label class="form-label">Mur — couleur (immergé)</label><select id="f-murCouleur">
             <option value="">—</option><option>Blanc</option><option>Sable</option><option>Gris</option>
           </select></div>
-          <div class="form-group"><label class="form-label">Mur — hauteur (immergé simple)</label><select id="f-murHauteur">
+          <div class="form-group" id="fg-murHauteur"><label class="form-label">Mur — hauteur (immergé simple)</label><select id="f-murHauteur">
             <option value="">—</option><option value="1m">1m</option><option value="1,25m">1,25m</option><option value="1,5m">1,5m</option>
           </select></div>
-          <div class="form-group"><label class="form-label">Caillebotis</label><select id="f-caillebotisChoix">
+          <div class="form-group" id="fg-caillebotisChoix"><label class="form-label">Caillebotis</label><select id="f-caillebotisChoix">
             <option value="">Non</option><option value="IPE">IPE</option><option value="Robinier">Robinier</option><option value="Blanc">Blanc</option><option value="Gris">Gris</option><option value="Sable">Sable</option>
           </select></div>
-          <div class="form-group"><label class="form-label">Caillebotis — largeur (cm)</label><input id="f-caillebotisLargeur" type="number" min="0" placeholder="ex: 300"></div>
-          <div class="form-group"><label class="form-label">Caillebotis — profondeur (cm)</label><input id="f-caillebotisProfondeur" type="number" min="0" placeholder="ex: 100"></div>
-          <div class="form-group"><label class="form-label">Fixation (immergé)</label><select id="f-fixation">
+          <div class="form-group" id="fg-caillebotisLargeur"><label class="form-label">Caillebotis — largeur (cm)</label><input id="f-caillebotisLargeur" type="number" min="0" placeholder="ex: 300"></div>
+          <div class="form-group" id="fg-caillebotisProfondeur"><label class="form-label">Caillebotis — profondeur (cm)</label><input id="f-caillebotisProfondeur" type="number" min="0" placeholder="ex: 100"></div>
+          <div class="form-group" id="fg-fixation"><label class="form-label">Fixation (immergé)</label><select id="f-fixation">
             <option value="">Sur Paroi</option><option value="Sur Plage Béton">Sur Plage Béton</option><option value="Sur Plage Coque">Sur Plage Coque</option>
           </select></div>
-          <div class="form-group"><label class="form-label">Équerres renfort 1 à 3 (immergé)</label><input id="f-equerresRenfort" type="number" min="0" max="3" placeholder="0"></div>
-          <div class="form-group"><label class="form-label">Cornière 60x60 (immergé)</label><select id="f-corniere6060">
+          <div class="form-group" id="fg-equerresRenfort"><label class="form-label">Équerres renfort 1 à 3 (immergé)</label><input id="f-equerresRenfort" type="number" min="0" max="3" placeholder="0"></div>
+          <div class="form-group" id="fg-corniere6060"><label class="form-label">Cornière 60x60 (immergé)</label><select id="f-corniere6060">
             <option value="">Non</option><option value="Oui">Oui</option>
           </select></div>
-          <div class="form-group"><label class="form-label">Couleur poutre (immergé)</label><select id="f-poutreCouleur">
+          <div class="form-group" id="fg-poutreCouleur"><label class="form-label">Couleur poutre (immergé)</label><select id="f-poutreCouleur">
             <option value="">—</option><option>Blanc</option><option>Gris</option><option>Sable</option><option value="7016">7016</option>
           </select></div>
-          <div class="form-group"><label class="form-label">Nombre de poutres (immergé total)</label><select id="f-nombrePoutres">
+          <div class="form-group" id="fg-nombrePoutres"><label class="form-label">Nombre de poutres (immergé total)</label><select id="f-nombrePoutres">
             <option value="">—</option><option value="0">0</option><option value="1">1</option><option value="2">2</option>
           </select></div>
         </div>
@@ -2806,7 +2806,7 @@ function renderPageCommande(d, p) { p = p || {};
     <div class="fiche-grid c3">
       <div class="fiche-cell"><div class="fiche-cell-label">Client</div><input value="${d.client||''}" onchange="setDosField('client',this.value)"></div>
       <div class="fiche-cell"><div class="fiche-cell-label">Revendeur</div><input value="${d.revendeur||''}" onchange="setDosField('revendeur',this.value)" placeholder="ex: ABATIK"></div>
-      <div class="fiche-cell"><div class="fiche-cell-label">Structure</div><select onchange="setDosField('structure',this.value)" style="background:transparent;border:none;padding:0;font-size:13px;font-weight:500">${STRUCTS.map(s=>`<option${d.structure===s?' selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="fiche-cell"><div class="fiche-cell-label">Structure</div><select onchange="setDosField('structure',this.value);renderFiche();" style="background:transparent;border:none;padding:0;font-size:13px;font-weight:500">${STRUCTS.map(s=>`<option${d.structure===s?' selected':''}>${s}</option>`).join('')}</select></div>
       <div class="fiche-cell"><div class="fiche-cell-label">Téléphone</div><input value="${d.tel||''}" onchange="setDosField('tel',this.value)"></div>
     </div>
     <div class="fiche-section">
@@ -2865,57 +2865,65 @@ function renderPageCommande(d, p) { p = p || {};
         </div>` : ''}
       </div>
     </div>
+    ${(() => {
+      // N'affiche chaque champ "Accessoires" que pour les types de volet réellement concernés
+      // (même table FIELD_VOLET_TYPES que la modale de création) — évite d'encombrer la fiche
+      // d'un Silver Roll avec des champs Immergé/Immergé total qui ne serviront jamais.
+      const _voletType = legacyVoletType(d.structure);
+      const champ = (field, html) => FIELD_VOLET_TYPES[field].includes(_voletType) ? html : '';
+      return `
     <div class="fiche-section">
       <div class="fiche-section-title">Accessoires (décompte stock)</div>
       <div class="fiche-section-body">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Télécommande</div><select onchange="setDosField('telecommande',this.value)">
+          ${champ('telecommande', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Télécommande</div><select onchange="setDosField('telecommande',this.value)">
             <option value=""${!d.telecommande?' selected':''}>Non</option>
             ${['Classique','Bluetooth'].map(t=>`<option${d.telecommande===t?' selected':''}>${t}</option>`).join('')}
-          </select></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Gestion sel</div><select onchange="setDosField('gestionSel',this.value)">
+          </select></div>`)}
+          ${champ('gestionSel', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Gestion sel</div><select onchange="setDosField('gestionSel',this.value)">
             <option value=""${!d.gestionSel?' selected':''}>Non</option>
             ${['Electrolyseur','Oxeo'].map(t=>`<option${d.gestionSel===t?' selected':''}>${t}</option>`).join('')}
-          </select></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Passes-sangles (0 à 5)</div><input type="number" min="0" max="5" value="${d.passesSangles||''}" onchange="setDosField('passesSangles',this.value)" placeholder="0"></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Flasque murale (Silver)</div><select onchange="setDosField('flasqueMurale',this.value)">
+          </select></div>`)}
+          ${champ('passesSangles', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Passes-sangles (0 à 5)</div><input type="number" min="0" max="5" value="${d.passesSangles||''}" onchange="setDosField('passesSangles',this.value)" placeholder="0"></div>`)}
+          ${champ('flasqueMurale', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Flasque murale (Silver)</div><select onchange="setDosField('flasqueMurale',this.value)">
             <option value=""${!d.flasqueMurale?' selected':''}>Non</option>
             <option value="Oui"${d.flasqueMurale==='Oui'?' selected':''}>Oui</option>
-          </select></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Mur — couleur (immergé)</div><select onchange="setDosField('murCouleur',this.value)">
+          </select></div>`)}
+          ${champ('murCouleur', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Mur — couleur (immergé)</div><select onchange="setDosField('murCouleur',this.value)">
             <option value=""${!d.murCouleur?' selected':''}>—</option>
             ${['Blanc','Sable','Gris'].map(t=>`<option${d.murCouleur===t?' selected':''}>${t}</option>`).join('')}
-          </select></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Mur — hauteur (immergé simple)</div><select onchange="setDosField('murHauteur',this.value)">
+          </select></div>`)}
+          ${champ('murHauteur', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Mur — hauteur (immergé simple)</div><select onchange="setDosField('murHauteur',this.value)">
             <option value=""${!d.murHauteur?' selected':''}>—</option>
             ${['1m','1,25m','1,5m'].map(t=>`<option${d.murHauteur===t?' selected':''}>${t}</option>`).join('')}
-          </select></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Caillebotis</div><select onchange="setDosField('caillebotisChoix',this.value)">
+          </select></div>`)}
+          ${champ('caillebotisChoix', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Caillebotis</div><select onchange="setDosField('caillebotisChoix',this.value)">
             <option value=""${!d.caillebotisChoix?' selected':''}>Non</option>
             ${['IPE','Robinier','Blanc','Gris','Sable'].map(t=>`<option${d.caillebotisChoix===t?' selected':''}>${t}</option>`).join('')}
-          </select></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Caillebotis — largeur (cm)</div><input type="number" min="0" value="${d.caillebotisLargeur||''}" onchange="setDosField('caillebotisLargeur',this.value)" placeholder="ex: 300"></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Caillebotis — profondeur (cm)</div><input type="number" min="0" value="${d.caillebotisProfondeur||''}" onchange="setDosField('caillebotisProfondeur',this.value)" placeholder="ex: 100"></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Fixation (immergé)</div><select onchange="setDosField('fixation',this.value)">
+          </select></div>`)}
+          ${champ('caillebotisLargeur', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Caillebotis — largeur (cm)</div><input type="number" min="0" value="${d.caillebotisLargeur||''}" onchange="setDosField('caillebotisLargeur',this.value)" placeholder="ex: 300"></div>`)}
+          ${champ('caillebotisProfondeur', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Caillebotis — profondeur (cm)</div><input type="number" min="0" value="${d.caillebotisProfondeur||''}" onchange="setDosField('caillebotisProfondeur',this.value)" placeholder="ex: 100"></div>`)}
+          ${champ('fixation', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Fixation (immergé)</div><select onchange="setDosField('fixation',this.value)">
             <option value=""${!d.fixation?' selected':''}>Sur Paroi</option>
             ${['Sur Plage Béton','Sur Plage Coque'].map(t=>`<option${d.fixation===t?' selected':''}>${t}</option>`).join('')}
-          </select></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Équerres renfort 1 à 3 (immergé)</div><input type="number" min="0" max="3" value="${d.equerresRenfort||''}" onchange="setDosField('equerresRenfort',this.value)" placeholder="0"></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Cornière 60x60 (immergé)</div><select onchange="setDosField('corniere6060',this.value)">
+          </select></div>`)}
+          ${champ('equerresRenfort', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Équerres renfort 1 à 3 (immergé)</div><input type="number" min="0" max="3" value="${d.equerresRenfort||''}" onchange="setDosField('equerresRenfort',this.value)" placeholder="0"></div>`)}
+          ${champ('corniere6060', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Cornière 60x60 (immergé)</div><select onchange="setDosField('corniere6060',this.value)">
             <option value=""${!d.corniere6060?' selected':''}>Non</option>
             <option value="Oui"${d.corniere6060==='Oui'?' selected':''}>Oui</option>
-          </select></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Couleur poutre (immergé)</div><select onchange="setDosField('poutreCouleur',this.value)">
+          </select></div>`)}
+          ${champ('poutreCouleur', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Couleur poutre (immergé)</div><select onchange="setDosField('poutreCouleur',this.value)">
             <option value=""${!d.poutreCouleur?' selected':''}>—</option>
             ${['Blanc','Gris','Sable','7016'].map(t=>`<option${d.poutreCouleur===t?' selected':''}>${t}</option>`).join('')}
-          </select></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Nombre de poutres (immergé total)</div><select onchange="setDosField('nombrePoutres',this.value)">
+          </select></div>`)}
+          ${champ('nombrePoutres', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Nombre de poutres (immergé total)</div><select onchange="setDosField('nombrePoutres',this.value)">
             <option value=""${!d.nombrePoutres?' selected':''}>—</option>
             ${['0','1','2'].map(t=>`<option${d.nombrePoutres===t?' selected':''}>${t}</option>`).join('')}
-          </select></div>
+          </select></div>`)}
         </div>
       </div>
-    </div>
+    </div>`;
+    })()}
     <div class="fiche-section">
       <div class="fiche-section-title">Remarques &amp; instructions</div>
       <div class="fiche-section-body">
@@ -3093,6 +3101,14 @@ function openPorteDoc(dosId){
     (d.documents||[]).forEach(doc=>{ if(doc.folder==='Fiche produit') doc.folder='Fiche de fabrication'; });
     saveData();
   }
+  if(d.docFolders && d.docFolders.includes('Général')){
+    // Migration : 'Général' ne doit JAMAIS être stocké dans docFolders — _pdFolderList() le
+    // préfixe déjà systématiquement. Un dossier créé avant le fix b8e7995 peut encore l'avoir
+    // en dur dans le tableau, ce qui produisait un doublon visible dans la liste des dossiers
+    // du porte-document (ex. ROBBA Fabrice, signalé 2026-07-15). Nettoyage auto à l'ouverture.
+    d.docFolders=d.docFolders.filter(f=>f!=='Général');
+    saveData();
+  }
   if(d.ficheTechniqueB64){
     // Migration : l'ancien widget dédié "fiche technique" est retiré — on bascule son contenu
     // (s'il en reste) vers un document normal dans le dossier "Fiche de fabrication".
@@ -3109,7 +3125,9 @@ function openPorteDoc(dosId){
   openModal('modal-portedoc');
 }
 
-function _pdFolderList(d){ return ['Général',...(d.docFolders||[])]; }
+// 'Général' filtré ici aussi par sécurité (defense en profondeur) — ne doit normalement jamais
+// être présent dans d.docFolders (voir migration de nettoyage dans openPorteDoc()).
+function _pdFolderList(d){ return ['Général',...(d.docFolders||[]).filter(f=>f!=='Général')]; }
 
 function renderPorteDoc(){
   const d=dossiers.find(x=>x.id===_pdDosId); if(!d) return;
@@ -3940,10 +3958,40 @@ function optionsSemainesFab(selected, nbSemaines = 26) {
   }
   return html;
 }
+// Types de volet (legacyVoletType, stock.js) concernés par chaque champ "Accessoires" — reflète
+// exactement les conditions de type déjà codées dans les fonctions stockDecompterXxx (stock.js).
+// ⚠ À maintenir aligné si une de ces fonctions change son périmètre de types applicables.
+const FIELD_VOLET_TYPES = {
+  telecommande:          ['silver','xtrem','mouv','immerge','immerge_total','banc'],
+  gestionSel:            ['silver','mouv','xtrem','banc'],
+  passesSangles:         ['silver','xtrem','mouv','immerge','immerge_total','banc'],
+  flasqueMurale:         ['silver'],
+  murCouleur:            ['immerge','immerge_total'],
+  murHauteur:            ['immerge'],
+  caillebotisChoix:      ['immerge','immerge_total'],
+  caillebotisLargeur:    ['immerge','immerge_total'],
+  caillebotisProfondeur: ['immerge','immerge_total'],
+  fixation:              ['immerge'],
+  equerresRenfort:       ['immerge'],
+  corniere6060:          ['immerge'],
+  poutreCouleur:         ['immerge'],
+  nombrePoutres:         ['immerge_total'],
+};
+// Affiche/masque chaque champ "Accessoires" de la modale de création selon le type de volet
+// choisi — structure vide (rien choisi encore) = tout afficher, pas encore de filtre possible.
+function updateAccessoiresVisibility() {
+  const structureVal = document.getElementById('f-structure')?.value || '';
+  const type = structureVal ? legacyVoletType(structureVal) : null;
+  Object.entries(FIELD_VOLET_TYPES).forEach(([field, types]) => {
+    const el = document.getElementById('fg-'+field);
+    if (el) el.style.display = (!type || types.includes(type)) ? '' : 'none';
+  });
+}
 function openNewDos() {
   ['f-client','f-tel','f-email','f-contact','f-revendeur','f-adresse','f-cp','f-ville','f-contraintes','f-options','f-typeLame','f-lames','f-pieds','f-alim','f-typeAlimentation','f-moteur','f-ref','f-remarques','f-autres','f-largeur','f-longueur','f-surface','f-hauteur','f-profondeur','f-notes-dims','f-telecommande','f-gestionSel','f-passesSangles','f-flasqueMurale','f-murCouleur','f-murHauteur','f-caillebotisChoix','f-caillebotisLargeur','f-caillebotisProfondeur','f-fixation','f-equerresRenfort','f-corniere6060','f-poutreCouleur','f-nombrePoutres'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const np=document.getElementById('f-need-pose');if(np)np.checked=false;;
   document.getElementById('f-structure').value='';
+  updateAccessoiresVisibility();
   document.getElementById('f-tva').value='20';
   document.getElementById('f-ht').value='';
   document.getElementById('f-ttc').value='';
