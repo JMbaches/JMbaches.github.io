@@ -6521,20 +6521,16 @@ function renderPilotage(){
   won.forEach(d=>{ const bd=piloBizDate(d); if(!bd) return; const k=piloMonthKey(bd); if(k in mIndex) months[mIndex[k]].value += (d.ht||0); });
   const caPeriode = months.reduce((s,m)=>s+m.value, 0);
 
-  // CA par commercial
-  const byCom = {};
-  won.forEach(d=>{ const k=d.createdBy||d.commercial||'—'; byCom[k]=(byCom[k]||0)+(d.ht||0); });
-  const comRows = Object.entries(byCom).map(([uid,v])=>({label:piloUserName(uid), value:v}))
-                  .sort((a,b)=>b.value-a.value).slice(0,8);
-
-  // Pipeline des devis
-  const devStat = [
+  // Pipeline des devis — seuls les statuts avec au moins un dossier sont affichés
+  // (une ligne à 0 €/0 dossier n'apporte aucune information, juste du bruit visuel)
+  const devStatAll = [
     {k:'en_attente', l:'En attente', c:'var(--ink-faint)'},
     {k:'accepte',    l:'Accepté',    c:'var(--accent)'},
     {k:'facture',    l:'Facturé',    c:'var(--amber)'},
     {k:'paye',       l:'Payé',       c:'var(--green)'},
     {k:'refuse',     l:'Refusé',     c:'var(--red)'},
-  ].map(s=>{ const it=D.filter(d=>d.devisStatut===s.k); return {label:s.l, value:it.reduce((a,d)=>a+(d.ht||0),0), sub:it.length+' dossier'+(it.length>1?'s':''), color:s.c}; });
+  ].map(s=>{ const it=D.filter(d=>d.devisStatut===s.k); return {label:s.l, value:it.reduce((a,d)=>a+(d.ht||0),0), sub:it.length+' dossier'+(it.length>1?'s':''), color:s.c, count:it.length}; });
+  const devStat = devStatAll.filter(s=>s.count>0);
 
   // Points d'attention
   const dormants   = enAttente.filter(d=>{ const c=piloCreatedDate(d); return c && (today-c)/86400000 > 21; });
@@ -6561,6 +6557,8 @@ function renderPilotage(){
         : `<div style="padding:11px 14px;border-top:1px solid var(--border);font-size:12px;color:var(--ink-faint)"><i class="ti ti-check" style="color:var(--green);vertical-align:-1px"></i> Rien à signaler</div>`}
     </div>`;
 
+  const groupLabel = txt => `<div class="page-header-label" style="margin:22px 0 8px">${txt}</div>`;
+
   mc.innerHTML = `
   <div class="page-header" style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap">
     <div>
@@ -6571,38 +6569,36 @@ function renderPilotage(){
     <button class="btn btn-secondary" onclick="piloExportCSV()"><i class="ti ti-download"></i> Exporter (CSV)</button>
   </div>
 
+  ${groupLabel('Financier')}
   <div class="stats-grid">
     ${kpi('CA signé', piloEUR(caSigne), won.length+' devis gagné'+(won.length>1?'s':''))}
     ${kpi('Encaissé', piloEUR(caEncaisse), pctEnc+'% du CA signé', 'var(--green)')}
     ${kpi('Reste à encaisser', piloEUR(encours), 'devis gagnés non payés', encours>0?'var(--amber)':'var(--ink)')}
     ${kpi('Taux de transformation', taux+' %', decided+' devis tranchés')}
   </div>
-  <div class="stats-grid" style="margin-top:-8px">
+
+  ${groupLabel('Activité')}
+  <div class="stats-grid">
     ${kpi('Devis en attente', piloEUR(caEnAttente), enAttente.length+' à relancer')}
     ${kpi('Dossiers actifs', actifs.length, 'en cours de traitement')}
-    ${kpi('En retard', retards.length, retards.length?'livraison dépassée':'aucun retard', retards.length?'var(--red)':'var(--green)')}
-  </div>
-  <div class="stats-grid" style="margin-top:-8px">
-    ${kpi('Saisie → Atelier', delaiAdminProd!==null ? delaiAdminProd+' j' : '—', 'délai moyen création → production')}
-    ${kpi('Atelier → Livraison', delaiAtelierLiv!==null ? delaiAtelierLiv+' j' : '—', 'délai moyen production → livraison')}
-    ${kpi('Délai total', delaiTotal!==null ? delaiTotal+' j' : '—', 'saisie + atelier + expédition', delaiTotal!==null&&delaiTotal>30?'var(--red)':delaiTotal!==null&&delaiTotal>20?'var(--amber)':'var(--ink)')}
-    ${kpi('Échantillon délais', delaisAdminProd.length+' dos.', 'dossiers avec historique complet')}
   </div>
 
-  <div class="card" style="margin-bottom:14px">
+  ${groupLabel('Délais de traitement')}
+  <div class="stats-grid">
+    ${kpi('Saisie → Atelier', delaiAdminProd!==null ? delaiAdminProd+' j' : '—', 'délai moyen création → production')}
+    ${kpi('Atelier → Livraison', delaiAtelierLiv!==null ? delaiAtelierLiv+' j' : '—', 'délai moyen production → livraison')}
+    ${delaiTotal!==null ? kpi('Délai total', delaiTotal+' j', 'saisie + atelier + expédition', delaiTotal>30?'var(--red)':delaiTotal>20?'var(--amber)':'var(--ink)') : ''}
+  </div>
+  <div style="font-size:11px;color:var(--ink-faint);margin-top:6px">Calculé sur ${delaisAdminProd.length} dossier${delaisAdminProd.length>1?'s':''} avec historique complet.</div>
+
+  <div class="card" style="margin-top:22px;margin-bottom:14px">
     <div class="card-hd"><span class="card-title">CA mensuel HT — devis gagnés</span><span style="font-size:12px;color:var(--ink-faint)">12 mois · total ${piloEUR(caPeriode)} HT</span></div>
     <div class="card-body">${piloBarChart(months)}</div>
   </div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px" class="pilo-2col">
-    <div class="card">
-      <div class="card-hd"><span class="card-title">CA HT par commercial</span><span style="font-size:12px;color:var(--ink-faint)">devis gagnés</span></div>
-      <div class="card-body">${piloHBars(comRows)}</div>
-    </div>
-    <div class="card">
-      <div class="card-hd"><span class="card-title">Pipeline des devis</span><span style="font-size:12px;color:var(--ink-faint)">par statut</span></div>
-      <div class="card-body">${piloHBars(devStat)}</div>
-    </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-hd"><span class="card-title">Pipeline des devis</span><span style="font-size:12px;color:var(--ink-faint)">par statut</span></div>
+    <div class="card-body">${devStat.length ? piloHBars(devStat) : '<div style="padding:11px 0;font-size:12px;color:var(--ink-faint)">Aucun devis à ce jour.</div>'}</div>
   </div>
 
   <div class="section-header" style="margin-top:4px;margin-bottom:14px">
