@@ -1729,6 +1729,7 @@ function connectUser(u) {
   loadBinomesConfig();
   goTab('dashboard');
   initChat();
+  resyncMessageListeners();
 }
 function doLogout() {
   localStorage.removeItem('jmb_session');

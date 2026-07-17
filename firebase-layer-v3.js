@@ -28,8 +28,65 @@ window._FieldValue = firebase.firestore.FieldValue;
 try { window._storage = firebase.storage(); } catch(e) { console.warn('Firebase Storage non disponible'); }
 
 let _firestoreReady = false;
-let _unsubUsers, _unsubDossiers, _unsubNotifs, _unsubMessages, _unsubStockRefs, _unsubStockMouvements, _unsubConfigStock;
+let _unsubUsers, _unsubDossiers, _unsubNotifs, _unsubStockRefs, _unsubStockMouvements, _unsubConfigStock;
+let _unsubMessagesByConv = {};
+let _messagesByConv = {};
 window._chatMessages = [];
+
+// Les règles Firestore de `messages` filtrent par convId (estMembreConv) : une
+// requête large non filtrée (ancien comportement) est donc rejetée en bloc par
+// Firestore (permission-denied), car il ne peut pas prouver statiquement que
+// TOUS les docs retournés respectent la règle. On souscrit donc à UN listener
+// par conversation (where convId == ...), ce que Firestore sait valider.
+// Nécessite l'index composite (convId ASC, at ASC) sur `messages`.
+function rebuildChatState() {
+  window._chatMessages = Object.values(_messagesByConv).flat();
+  if (!_firestoreReady || !currentUser || !currentUser.id) return;
+  Object.keys(_messagesByConv).forEach(cid => {
+    const unread = window._chatMessages.filter(m =>
+      m.convId === cid &&
+      m.from !== currentUser.id &&
+      (!m.readBy || !m.readBy.includes(currentUser.id))
+    ).length;
+    if (!chatConvs[cid]) chatConvs[cid] = {};
+    chatConvs[cid].unread = unread;
+  });
+  updateChatBadge?.();
+  if (typeof chatOpen !== 'undefined' && chatOpen) {
+    buildChatTabs?.();
+    renderChatMessages?.();
+  }
+}
+
+function resyncMessageListeners() {
+  const desired = currentUser && currentUser.id
+    ? ['general', ...users.filter(u => u.id !== currentUser.id && u.active).map(u => {
+        const ids = [currentUser.id, u.id].sort();
+        return 'priv_' + ids[0] + '_' + ids[1];
+      })]
+    : [];
+
+  Object.keys(_unsubMessagesByConv).forEach(cid => {
+    if (!desired.includes(cid)) {
+      _unsubMessagesByConv[cid]();
+      delete _unsubMessagesByConv[cid];
+      delete _messagesByConv[cid];
+    }
+  });
+
+  desired.forEach(cid => {
+    if (_unsubMessagesByConv[cid]) return;
+    _unsubMessagesByConv[cid] = _db.collection('messages')
+      .where('convId', '==', cid)
+      .orderBy('at', 'asc')
+      .onSnapshot(snap => {
+        _messagesByConv[cid] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        rebuildChatState();
+      }, e => { handleFirestoreError(e, 'messages'); });
+  });
+
+  rebuildChatState();
+}
 
 // Affiche un message propre au lieu de planter sur permission-denied
 function handleFirestoreError(e, context) {
@@ -59,6 +116,7 @@ function startFirestoreListeners() {
           typeof _planningAvanceAutoSync === 'function' && _planningAvanceAutoSync();
         }
       }
+      resyncMessageListeners();
       check();
     }, e => { handleFirestoreError(e, 'users'); check(); });
 
@@ -77,37 +135,6 @@ function startFirestoreListeners() {
       if (_firestoreReady) updateBadge?.();
       check();
     }, e => { handleFirestoreError(e, 'notifications'); check(); });
-
-    _unsubMessages = _db.collection('messages')
-      .orderBy('at', 'asc')
-      .onSnapshot(snap => {
-        window._chatMessages = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        // Vérification stricte avant tout accès à currentUser
-        if (!_firestoreReady || !currentUser || !currentUser.id) return;
-        // Recalculer non lus avec convIds canoniques (priv_u1_u9)
-        const otherUsers = users.filter(u => u.id !== currentUser.id);
-        const convIds = [
-          'general',
-          ...otherUsers.map(u => {
-            const ids = [currentUser.id, u.id].sort();
-            return 'priv_' + ids[0] + '_' + ids[1];
-          })
-        ];
-        convIds.forEach(cid => {
-          const unread = window._chatMessages.filter(m =>
-            m.convId === cid &&
-            m.from !== currentUser.id &&
-            (!m.readBy || !m.readBy.includes(currentUser.id))
-          ).length;
-          if (!chatConvs[cid]) chatConvs[cid] = {};
-          chatConvs[cid].unread = unread;
-        });
-        if (currentUser && currentUser.id) updateChatBadge?.();
-        if (typeof chatOpen !== 'undefined' && chatOpen && currentUser && currentUser.id) {
-          buildChatTabs?.();
-          renderChatMessages?.();
-          }
-      }, e => { handleFirestoreError(e, 'messages'); });
 
     _unsubStockRefs = _db.collection('stock_refs').onSnapshot(snap => {
       stockRefs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -138,11 +165,13 @@ function stopFirestoreListeners() {
   _unsubUsers?.();
   _unsubDossiers?.();
   _unsubNotifs?.();
-  _unsubMessages?.();
+  Object.values(_unsubMessagesByConv).forEach(unsub => unsub());
+  _unsubMessagesByConv = {};
+  _messagesByConv = {};
   _unsubStockRefs?.();
   _unsubStockMouvements?.();
   _unsubConfigStock?.();
-  _unsubUsers = _unsubDossiers = _unsubNotifs = _unsubMessages = _unsubStockRefs = _unsubStockMouvements = _unsubConfigStock = null;
+  _unsubUsers = _unsubDossiers = _unsubNotifs = _unsubStockRefs = _unsubStockMouvements = _unsubConfigStock = null;
   _firestoreReady = false;
   window._chatMessages = [];
 }
