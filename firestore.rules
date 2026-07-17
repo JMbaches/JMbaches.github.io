@@ -1,0 +1,131 @@
+// ============================================================================
+// MIROIR des règles Firestore déployées (projet `jm-baches`, via Firebase
+// Console — le déploiement reste manuel, PAS `firebase deploy` depuis ce repo).
+// Ce fichier sert de source pour les tests de règles (tests/firestore.rules.test.js).
+// ⚠️ À RECOPIER ICI À CHAQUE MODIFICATION DES RÈGLES DANS LA CONSOLE, sinon les
+// tests valident un ruleset obsolète. Récupéré en lecture seule le 2026-07-17
+// via le service account (`firebase-admin/security-rules`).
+// ============================================================================
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ----------------------------- Fonctions --------------------------------
+    function signedIn() {
+      return request.auth != null;
+    }
+    function meExists() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function active() {
+      return meExists() && me().active == true;
+    }
+    function role() {
+      return meExists() ? me().role : '';
+    }
+    function hasPerm(p) {
+      return meExists() && (me().perms is list) && (p in me().perms);
+    }
+    function isDirection() {
+      return role() == 'direction';
+    }
+    function canViewDossiers() {
+      return hasPerm('view_all') || hasPerm('view_prod') || hasPerm('metreur')
+          || hasPerm('emballage') || hasPerm('compta')   || hasPerm('planning');
+    }
+    function canEditDossiers() {
+      return hasPerm('edit') || hasPerm('advance') || hasPerm('adv_prod')
+          || hasPerm('planning') || hasPerm('metreur');
+    }
+
+    // -------------------------------- users ---------------------------------
+    match /users/{uid} {
+      // Lecture : TOUT utilisateur actif peut lire la liste
+      // (nécessaire au démarrage — le layer charge toute la collection users)
+      allow get, list: if active();
+
+      // Création : gestionnaires de comptes OU utilisateurs avec droit 'create'
+      allow create: if active() && (hasPerm('users') || hasPerm('create'));
+
+      // Suppression : gestionnaires de comptes uniquement
+      allow delete: if active() && hasPerm('users');
+
+      // Mise à jour :
+      //   • gestionnaires de comptes → tout champ
+      //   • un utilisateur peut modifier SON profil MAIS pas role/perms/active
+      allow update: if active() && (
+        hasPerm('users') || (
+          request.auth.uid == uid
+          && request.resource.data.role   == resource.data.role
+          && request.resource.data.perms  == resource.data.perms
+          && request.resource.data.active == resource.data.active
+        )
+      );
+    }
+
+    // ------------------------------ dossiers --------------------------------
+    match /dossiers/{id} {
+      allow read:   if active() && canViewDossiers();
+      allow create: if active() && hasPerm('create');
+      allow update: if active() && canEditDossiers();
+      allow delete: if active() && (isDirection() || hasPerm('users'));
+    }
+
+    // ---------------------------- notifications -----------------------------
+  match /notifications/{id} {
+  allow read:   if active();
+  allow create: if active();
+  allow update: if active() &&
+    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']) &&
+    request.resource.data.read.diff(resource.data.read).affectedKeys().hasOnly([request.auth.uid]);
+  allow delete: if active() && (isDirection() || hasPerm('users'));
+}
+
+    // -------- messagerie (collection plate avec champ convId) ---------------
+    match /messages/{mid} {
+      function estMembreConv(convId) {
+        return convId == 'general' || request.auth.uid in convId.split('_');
+      }
+      allow read:   if active() && estMembreConv(resource.data.convId);
+      allow create: if active() && estMembreConv(request.resource.data.convId) && request.resource.data.from == request.auth.uid;
+      allow update, delete: if active()
+        && (resource.data.from == request.auth.uid || isDirection());
+    }
+
+    // -------- meta (config partagée : horaires, etc.) -----------------------
+    match /meta/{doc} {
+      allow read:  if active();
+      allow write: if active() && (hasPerm('horaires_poseurs') || isDirection());
+    }
+
+    match /poseur_hours/{userId} {
+      allow read: if active() && (request.auth.uid == userId || hasPerm('horaires_poseurs') || isDirection());
+      allow write: if active() && request.auth.uid == userId;
+    }
+
+// ------------------------------- stock (lames) ---------------------------
+match /stock_refs/{codeBarre} {
+  allow read, write: if active() && hasPerm('stock');
+}
+
+match /stock_mouvements/{mid} {
+  allow read, create: if active() && hasPerm('stock');
+  allow update, delete: if false; // historique immuable, jamais modifié
+}
+
+match /config/{id} {
+  allow read: if active();
+  allow write: if active() && hasPerm('stock');
+}
+
+    // -------------- Tout le reste : ACCÈS REFUSÉ par défaut -----------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

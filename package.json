@@ -1,0 +1,11 @@
+{
+  "name": "jmbaches-gestion-dossiers",
+  "private": true,
+  "description": "App interne JM Bâches (gestion dossiers) — pas de build, HTML/JS vanilla. package.json présent uniquement pour les tests de règles Firestore.",
+  "scripts": {
+    "test:rules": "firebase emulators:exec --only firestore \"node tests/firestore.rules.test.js\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4"
+  }
+}
