@@ -12,7 +12,17 @@ name: Mégao Sync
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '*/5 * * * *'
+
+# La sync elle-même prend entre ~5 et ~15 min selon les cas — avec un cron
+# aussi rapproché, un déclenchement peut arriver alors que le run précédent
+# tourne encore. `cancel-in-progress: false` laisse le run en cours se
+# terminer normalement (jamais interrompu en plein milieu d'un import) ;
+# seuls les déclenchements EN ATTENTE (pas encore démarrés) sont fusionnés/
+# annulés au profit du plus récent — jamais deux syncs en parallèle.
+concurrency:
+  group: megao-sync
+  cancel-in-progress: false
 
 jobs:
   sync:
