@@ -1,10 +1,18 @@
 name: Mégao Sync
 
+# Cron natif GitHub plutôt qu'une auto-relance en fin de job (ancien design) :
+# l'auto-relance cassait DÉFINITIVEMENT et SILENCIEUSEMENT toute la récurrence
+# dès qu'une seule exécution ne parvenait même pas à démarrer (ex. "job was
+# not acquired by Runner" — incident d'infra GitHub ponctuel, cf. run du
+# 2026-07-09) : si le job ne démarre jamais, l'étape qui relance la chaîne ne
+# s'exécute pas non plus. Avec `schedule`, une exécution ratée n'empêche pas
+# la suivante de se déclencher à l'heure prévue — plus de point de rupture
+# unique. Voir aussi l'étape notify-sync-failure.js (alerte in-app en cas
+# d'échec, pour ne plus dépendre d'une vérification manuelle sur GitHub).
 on:
-  workflow_dispatch:   # déclenchement manuel + auto-relance
-
-permissions:
-  actions: write       # nécessaire pour déclencher le workflow suivant
+  workflow_dispatch:
+  schedule:
+    - cron: '*/10 * * * *'
 
 jobs:
   sync:
@@ -28,10 +36,9 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node megao-sync.js
 
-      - name: Planifier la prochaine sync dans 5 min
-        if: always()   # relancer même si la sync a échoué
+      - name: Alerter Direction/Admin dans l'app en cas d'échec
+        if: failure()
+        working-directory: scripts
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          sleep 300
-          gh workflow run megao-sync.yml --ref main
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node notify-sync-failure.js
