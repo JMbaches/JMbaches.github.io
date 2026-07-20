@@ -21,9 +21,15 @@ commande.jmbaches@gmail.com avec un mot de passe d'application dedie a CE
 script, distinct de GMAIL_APP_PASSWORD cote GitHub Actions, est recommande
 pour pouvoir revoquer l'un sans casser l'autre).
 
-Lancement prevu : Planificateur de taches Windows, toutes les 30-60 min
-(cf. memoire de session — pas besoin d'etre aussi reactif que la sync email
-a 5 min, cette VM ne fait qu'enrichir des dossiers deja crees).
+Lancement prevu : Planificateur de taches Windows, toutes les 5 min (comme la
+sync PDF). Tenable a cette frequence UNIQUEMENT parce que le script ne
+renvoie que ce qui a change depuis le dernier envoi (voir MEGAO_ENRICH_STATE_PATH
+ci-dessous) — sans ca, chaque run renverrait la fenetre complete (des
+centaines de commandes) toutes les 5 min, ce qui coute inutilement des
+lectures Firestore cote megao-enrich-sync.js. Mettre "Ne pas demarrer une
+nouvelle instance" dans les parametres de la tache planifiee, pour eviter
+que 2 lectures des fichiers Mégao (~640 Mo) se chevauchent si un run met
+plus de 5 min (reseau lent sur le lecteur M: par exemple).
 """
 
 import os
@@ -31,6 +37,7 @@ import struct
 import smtplib
 import json
 import sys
+import hashlib
 from datetime import datetime, timedelta
 from email.message import EmailMessage
 
@@ -47,6 +54,15 @@ SMTP_PASSWORD = os.environ.get('MEGAO_SMTP_PASSWORD')  # obligatoire, pas de val
 MAIL_TO = os.environ.get('MEGAO_MAIL_TO', 'commande.jmbaches@gmail.com')
 
 WINDOW_DAYS = int(os.environ.get('MEGAO_ENRICH_WINDOW_DAYS', '90'))
+
+# Fichier local (sur la VM) qui retient le dernier contenu envoye par commande,
+# pour ne renvoyer que ce qui a change. Ce n'est PAS une donnee sensible (aucun
+# secret dedans, juste des hachages) — perte du fichier sans consequence grave,
+# le prochain run renverrait juste tout comme si c'etait la premiere fois.
+STATE_PATH = os.environ.get(
+    'MEGAO_ENRICH_STATE_PATH',
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'megao_enrich_state.json'),
+)
 
 MARKER = b'\x93\xad\xc0\x38'
 STRIDE_CMDCLIB = 670
@@ -204,14 +220,40 @@ def send_payload(payload):
         server.send_message(msg)
 
 
+def hash_order(order):
+    return hashlib.sha256(json.dumps(order, sort_keys=True).encode('utf-8')).hexdigest()
+
+
+def load_state(path):
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def save_state(path, state):
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(state, f)
+
+
 def main():
     payload = build_payload(WINDOW_DAYS)
-    print(f"{len(payload['orders'])} commande(s) a enrichir (fenetre {WINDOW_DAYS}j)")
-    if not payload['orders']:
-        print('Rien a envoyer.')
+    orders = payload['orders']
+    print(f"{len(orders)} commande(s) dans la fenetre ({WINDOW_DAYS}j)")
+
+    prev_state = load_state(STATE_PATH)
+    new_state = {num: hash_order(o) for num, o in orders.items()}
+    changed = {num: o for num, o in orders.items() if new_state[num] != prev_state.get(num)}
+
+    if not changed:
+        print('Rien de nouveau depuis le dernier envoi — aucun email.')
         return
-    send_payload(payload)
-    print('Email envoye.')
+
+    print(f"{len(changed)} commande(s) modifiee(s) depuis le dernier envoi — envoi de l'email")
+    send_payload({**payload, 'orders': changed})
+    save_state(STATE_PATH, new_state)
+    print('Email envoyé, état local mis à jour.')
 
 
 if __name__ == '__main__':
