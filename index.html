@@ -1251,7 +1251,7 @@ a:focus-visible, button:focus-visible,
           <div class="form-group"><label class="form-label">Date limite de livraison</label><input id="f-date-livraison" type="date"></div>
           <div class="form-group"><label class="form-label">Semaine de fabrication souhaitée</label><select id="f-date-fab"></select></div>
         </div>
-        <div class="form-group" style="margin-top:12px">
+        <div class="form-group fg-volet-only" style="margin-top:12px">
           <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;padding:10px 12px;background:var(--bg);border-radius:var(--radius);border:1px solid var(--border)">
             <input type="checkbox" id="f-need-pose" style="width:auto;accent-color:var(--accent)">
             <div>
@@ -2575,7 +2575,7 @@ function renderDos() {
                 <i class="ti ti-chevron-down" style="font-size:9px;margin-left:3px;opacity:.6;vertical-align:middle"></i>
               </button>
               <div id="statut-menu-${d.id}" style="display:none;position:absolute;top:100%;left:0;z-index:500;background:var(--paper);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(22,24,29,.12);min-width:170px;padding:4px">
-                ${Object.entries(STATUT_LABEL).map(([k,v])=>`
+                ${Object.entries(STATUT_LABEL).filter(([k])=>k!=='attente_planif'||!isBacheDossier(d)).map(([k,v])=>`
                   <button onclick="changerStatutDirect('${d.id}','${k}',event)" style="display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;background:${d.statut===k?'var(--accent-light)':'none'};border:none;border-radius:4px;font-size:12px;cursor:pointer;text-align:left;color:var(--ink);font-weight:${d.statut===k?'600':'400'}">
                     ${d.statut===k?'<i class="ti ti-check" style="font-size:11px;color:var(--accent)"></i>':'<span style="width:11px"></span>'}
                     ${v}
@@ -2660,7 +2660,7 @@ function renderFiche() {
           ${statBadge(d.statut)}<i class="ti ti-chevron-down" style="font-size:9px;margin-left:3px;opacity:.6;vertical-align:middle"></i>
         </button>
         <div id="statut-menu-${d.id}" style="display:none;position:absolute;top:100%;left:0;z-index:500;background:var(--paper);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(22,24,29,.12);min-width:170px;padding:4px">
-          ${Object.entries(STATUT_LABEL).map(([k,v])=>`
+          ${Object.entries(STATUT_LABEL).filter(([k])=>k!=='attente_planif'||!isBacheDossier(d)).map(([k,v])=>`
             <button onclick="changerStatutDirect('${d.id}','${k}',event).then(()=>renderFiche())" style="display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;background:${d.statut===k?'var(--accent-light)':'none'};border:none;border-radius:4px;font-size:12px;cursor:pointer;text-align:left;color:var(--ink);font-weight:${d.statut===k?'600':'400'}">
               ${d.statut===k?'<i class="ti ti-check" style="font-size:11px;color:var(--accent)"></i>':'<span style="width:11px"></span>'}${v}
             </button>`).join('')}
@@ -3617,6 +3617,10 @@ function renvoyerSaisie() {
 // depuis un statut plus avancé (verif...) : needPose seul suffit, pas de changement de statut.
 async function envoyerAuPlanning() {
   const d = dossiers.find(x => x.id === currentDosId); if (!d || d.needPose) return;
+  // Garde défensive : aucun bouton n'appelle cette fonction pour un dossier bâches (pas de pose
+  // pour les bâches, cf. renderPageCommandeBache), mais on vérifie aussi ici en prévision d'un
+  // futur appel direct.
+  if (isBacheDossier(d)) return;
   d.needPose = true;
   if (d.statut === 'nouveau' || d.statut === 'admin') {
     await changerStatutDossier(d, 'attente_planif', 'envoyé au planning');
