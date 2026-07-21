@@ -1055,6 +1055,17 @@ a:focus-visible, button:focus-visible,
     </div>
     <div class="modal-body">
       <div class="form-section">
+        <div class="form-section-title"><i class="ti ti-category"></i> Type de dossier</div>
+        <div class="form-grid form-grid-2">
+          <div class="form-group"><label class="form-label">Type *</label>
+            <select id="f-type-dossier" onchange="updateTypeDossierVisibility()">
+              <option value="volet">Volet</option>
+              <option value="bache">Bâche</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="form-section">
         <div class="form-section-title"><i class="ti ti-user"></i> Client</div>
         <div class="form-grid form-grid-2">
           <div class="form-group"><label class="form-label">Nom / Raison sociale *</label><input id="f-client" placeholder="ex: SARL Martin BTP"></div>
@@ -1073,7 +1084,7 @@ a:focus-visible, button:focus-visible,
           <div class="form-group" style="grid-column:span 2"><label class="form-label">Contraintes d'accès</label><input id="f-contraintes" placeholder="ex: portail code 1234, chien, accès compliqué..."></div>
         </div>
       </div>
-      <div class="form-section">
+      <div class="form-section fg-volet-only">
         <div class="form-section-title"><i class="ti ti-package"></i> Produit</div>
         <div class="form-grid form-grid-2">
           <div class="form-group"><label class="form-label">Structure / Modèle *</label>
@@ -1118,7 +1129,60 @@ a:focus-visible, button:focus-visible,
           <div class="form-group"><label class="form-label">Puissance moteur</label><input id="f-moteur" placeholder="ex: 120BD newton"></div>
         </div>
       </div>
-      <div class="form-section">
+      <div class="form-section fg-bache-only" style="display:none">
+        <div class="form-section-title"><i class="ti ti-package"></i> Produit</div>
+        <div class="form-grid form-grid-2">
+          <div class="form-group"><label class="form-label">Structure / Modèle *</label>
+            <select id="f-structure-bache" onchange="updateBacheGammeVisibility()">
+              <option value="">-- Choisir --</option>
+              <option>Bâche à barres (1h)</option>
+              <option>Bâche à bulles (1h)</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">Options</label><input id="f-options-bache" placeholder="ex: précisions diverses..."></div>
+          <div class="form-group"><label class="form-label">Gamme</label><select id="f-bacheGamme" onchange="updateBacheGammeVisibility()">
+            <option value="">—</option>
+            <option value="Barres">Barres</option>
+            <option value="Bulles">Bulles</option>
+          </select></div>
+          <div class="form-group"><label class="form-label">Modèle</label><input id="f-bacheModele" placeholder="ex: BACLA, BUDUO4C/SO..."></div>
+          <div class="form-group" id="fg-bacheTypeBassin"><label class="form-label">Type de bassin (barres)</label><select id="f-bacheTypeBassin">
+            <option value="">—</option>
+            <option value="enterre">Enterré</option>
+            <option value="horssol">Hors-sol</option>
+          </select></div>
+          <div class="form-group" id="fg-bacheEpaisseur"><label class="form-label">Épaisseur (bulles, µm)</label><select id="f-bacheEpaisseur">
+            <option value="">—</option>
+            <option value="180">180</option>
+            <option value="400">400</option>
+            <option value="500">500</option>
+          </select></div>
+          <div class="form-group" id="fg-bacheBullesType"><label class="form-label">Bulles simple/double (si 500µm)</label><select id="f-bacheBullesType">
+            <option value="">—</option>
+            <option value="simple">Simple</option>
+            <option value="double">Double</option>
+          </select></div>
+          <div class="form-group"><label class="form-label">Coloris</label><input id="f-bacheColoris" placeholder="ex: Bleu/Beige"></div>
+          <div class="form-group"><label class="form-label">Découpe aspiration/échelle</label><select id="f-bacheDecoupeAspi">
+            <option value="">Non</option><option value="Oui">Oui</option>
+          </select></div>
+          <div class="form-group"><label class="form-label">Découpe escalier</label><select id="f-bacheDecoupeEscalier">
+            <option value="">Non</option><option value="Standard">Standard</option><option value="Hors-standard">Hors-standard</option>
+          </select></div>
+          <div class="form-group" id="fg-bacheBarreCharge"><label class="form-label">Barre de charge (barres, si escalier)</label><select id="f-bacheBarreCharge">
+            <option value="">Non</option><option value="Oui">Oui</option>
+          </select></div>
+          <div class="form-group" id="fg-bacheOeilletsSupp"><label class="form-label">Œillets supplémentaires (bulles)</label><select id="f-bacheOeilletsSupp">
+            <option value="">Non</option><option value="Oui">Oui</option>
+          </select></div>
+          <div class="form-group"><label class="form-label">Enrouleur</label><input id="f-bacheEnrouleur" placeholder="ex: RUPCDE, ENRHS..."></div>
+          <div class="form-group" id="fg-bachePansCoupes"><label class="form-label">Pans coupés (barres)</label><select id="f-bachePansCoupes">
+            <option value="">Non</option><option value="Oui">Oui</option>
+          </select></div>
+          <div class="form-group"><label class="form-label">Zone de transport</label><input id="f-bacheTransportZone" placeholder="ex: France, Corse, Italie..."></div>
+        </div>
+      </div>
+      <div class="form-section fg-volet-only">
         <div class="form-section-title"><i class="ti ti-puzzle"></i> Accessoires (décompte stock)</div>
         <div class="form-grid form-grid-3">
           <div class="form-group" id="fg-telecommande"><label class="form-label">Télécommande</label><select id="f-telecommande">
@@ -1478,6 +1542,8 @@ const NOTIF_RULES = [
   {trigger:'fiche_technique',   targets:['ouvrier'],            icon:'ti-file-description', bg:'#FAEEDA',c:'#633806', title:d=>`Fiche de fabrication disponible`,      body:d=>`${d.client} — ${d.structure||'—'} · Prête pour fabrication`},
 ];
 const VERIF_ROWS = ['Rayons','Pans coupés','Lames coupées','Lames finies','Axe','Contre axe + rails','Découpe ESC en équerre','Découpe ESC en lisse','Poutre + cornière','Cloison','Caillebotis'];
+// Contenu deviné (pas confirmé avec l'atelier bâches) — à ajuster une fois validé.
+const VERIF_ROWS_BACHE = ['Dimensions bâche conformes bassin','Coloris conforme commande','Découpes (aspi/escalier) conformes','Enrouleur conforme','Œillets/finitions','Contrôle qualité soudures','Emballage complet'];
 const VERIF_EXP = ['Longueur','Colis'];
 
 /* ================================================================
@@ -2519,7 +2585,7 @@ function openFiche(id) {
 }
 function renderFiche() {
   const d=dossiers.find(x=>x.id===currentDosId); if(!d) return;
-  if(!d.pages||!d.pages.length) d.pages=[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}];
+  if(!d.pages||!d.pages.length) d.pages=[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:isBacheDossier(d)?[...VERIF_ROWS_BACHE]:[...VERIF_ROWS]}];
   const mc=document.getElementById('main-content');
   const p=d.pages[currentPageIdx];
   const tabs=d.pages.map((pg,i)=>`<button class="page-tab${i===currentPageIdx?' active':''}" onclick="switchPage(${i})">${pg.label}</button>`).join('');
@@ -2611,7 +2677,7 @@ function renderFiche() {
   </div>`;
 }
 function renderPage(d,p) {
-  if(p.type==='commande') return renderPageCommande(d,p);
+  if(p.type==='commande') return isBacheDossier(d) ? renderPageCommandeBache(d,p) : renderPageCommande(d,p);
   if(p.type==='verif') return renderPageVerif(d,p);
   if(p.type==='notes') return renderPageNotes(p);
   if(p.type==='expedition') return renderPageExp(d,p);
@@ -2986,6 +3052,173 @@ function renderPageCommande(d, p) { p = p || {};
     </div>
   </div>`;
 }
+// Fonction sœur de renderPageCommande (pas des branches conditionnelles dedans) — évite de
+// fragiliser le chemin volet existant. Reprend le même squelette générique (header, dates/
+// transport, client, adresse, remarques, avance-bar, signature) et remplace uniquement la
+// section "Caractéristiques produit" par les champs bâches. Pas de section "Accessoires
+// (décompte stock)" : aucun module de décompte stock bâches (cf. isBacheDossier, stock.js).
+// Pas de "pose" pour les bâches (confirmé par l'utilisateur) : ni bouton transport "Liv+Pose"
+// (seulement Enlvt/Livraison), ni bouton "Envoyer au planning" dans l'avance-bar — le planning
+// de cette app ne concerne que la pose des poseurs, non applicable aux bâches.
+function renderPageCommandeBache(d, p) { p = p || {};
+  const tr=d.transport||'';
+  const STRUCTS_BACHE=['Bâche à barres (1h)','Bâche à bulles (1h)'];
+  const debordM = d.bacheTypeBassin==='enterre' ? 1 : d.bacheTypeBassin==='horssol' ? 0.4 : null;
+  const dimsBache = (debordM!=null && d.largeur && d.longueur)
+    ? `${(Number(d.largeur)+debordM).toFixed(2)} × ${(Number(d.longueur)+debordM).toFixed(2)} m (avec débord)`
+    : null;
+  return `<div class="card" style="margin-bottom:12px">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div style="font-size:15px;font-weight:600">Commande <span style="color:var(--accent);font-family:'JetBrains Mono',monospace">${d.id}</span></div>
+        <div style="font-size:12px;color:var(--ink-faint);margin-top:2px">${d.client} · ${d.ville||'—'}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        ${statBadge(d.statut)}
+        <span style="font-family:monospace;font-size:10px;background:var(--bg);padding:3px 8px;border-radius:var(--radius);color:var(--ink-faint);letter-spacing:2px">${d.id.replace('D-','').replace('-','')} ▌▌▌</span>
+      </div>
+    </div>
+    <div class="fiche-grid c3">
+      <div class="fiche-cell"><div class="fiche-cell-label">Date commande</div><input value="${d.dateLivraison||''}" type="date" onchange="setDosField('dateLivraison',this.value)"></div>
+      <div class="fiche-cell"><div class="fiche-cell-label">Semaine de fabrication souhaitée</div><select onchange="setDosField('dateFab',this.value)" title="Priorise ce dossier dans la file de l'atelier — plus tôt = traité plus tôt">${optionsSemainesFab(d.dateFab||'')}</select></div>
+      <div class="fiche-cell"><div class="fiche-cell-label">Transport</div>
+        <div class="transport-btns">
+          <button class="tb${tr==='enlvt'?' on':''}" onclick="setDosField('transport','enlvt');renderFiche()">Enlvt</button>
+          <button class="tb${tr==='livraison'?' on':''}" onclick="setDosField('transport','livraison');renderFiche()">Livraison</button>
+        </div>
+      </div>
+      ${canSeeCA()?`<div class="fiche-cell"><div class="fiche-cell-label">Montant TTC</div><div style="font-size:14px;font-weight:600;color:var(--accent)">${ttc(d).toLocaleString('fr-FR',{minimumFractionDigits:2})} €</div></div>`:'<div class="fiche-cell"></div>'}
+    </div>
+    <div class="fiche-grid c3">
+      <div class="fiche-cell"><div class="fiche-cell-label">Client</div><input value="${d.client||''}" onchange="setDosField('client',this.value)"></div>
+      <div class="fiche-cell"><div class="fiche-cell-label">Revendeur</div><input value="${d.revendeur||''}" onchange="setDosField('revendeur',this.value)" placeholder="ex: ABATIK"></div>
+      <div class="fiche-cell"><div class="fiche-cell-label">Structure</div><select onchange="setDosField('structure',this.value);renderFiche();" style="background:transparent;border:none;padding:0;font-size:13px;font-weight:500">${STRUCTS_BACHE.map(s=>`<option${d.structure===s?' selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="fiche-cell"><div class="fiche-cell-label">Téléphone</div><input value="${d.tel||''}" onchange="setDosField('tel',this.value)"></div>
+    </div>
+    <div class="fiche-section">
+      <div class="fiche-section-title">Adresse du chantier</div>
+      <div class="fiche-section-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr 120px;gap:12px;margin-bottom:10px">
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Adresse</div><input value="${d.adresse||''}" onchange="setDosField('adresse',this.value)"></div>
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Ville</div><input value="${d.ville||''}" onchange="setDosField('ville',this.value)"></div>
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Code postal</div><input value="${d.cp||''}" onchange="setDosField('cp',this.value)"></div>
+        </div>
+        <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--red);margin-bottom:4px">Contraintes d'accès</div><input value="${d.contraintes||''}" onchange="setDosField('contraintes',this.value)" placeholder="ex: code portail, chien, accès difficile..."></div>
+      </div>
+    </div>
+    <div class="fiche-section">
+      <div class="fiche-section-title">Caractéristiques produit (bâche)</div>
+      <div class="fiche-section-body">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Gamme</div><select onchange="setDosField('bacheGamme',this.value);renderFiche();">
+            <option value=""${!d.bacheGamme?' selected':''}>—</option>
+            <option value="Barres"${d.bacheGamme==='Barres'?' selected':''}>Barres</option>
+            <option value="Bulles"${d.bacheGamme==='Bulles'?' selected':''}>Bulles</option>
+          </select></div>
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Modèle</div><input value="${d.bacheModele||''}" onchange="setDosField('bacheModele',this.value)" placeholder="ex: BACLA, BUDUO4C/SO..."></div>
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Coloris</div><input value="${d.bacheColoris||''}" onchange="setDosField('bacheColoris',this.value)" placeholder="ex: Bleu/Beige"></div>
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Largeur bassin (m)</div><input type="number" step="0.01" min="0" value="${d.largeur||''}" onchange="setDosField('largeur',this.value);renderFiche();" placeholder="ex: 3.50"></div>
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Longueur bassin (m)</div><input type="number" step="0.01" min="0" value="${d.longueur||''}" onchange="setDosField('longueur',this.value);renderFiche();" placeholder="ex: 7.50"></div>
+          ${d.bacheGamme!=='Bulles'?`<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Type de bassin (barres)</div><select onchange="setDosField('bacheTypeBassin',this.value);renderFiche();">
+            <option value=""${!d.bacheTypeBassin?' selected':''}>—</option>
+            <option value="enterre"${d.bacheTypeBassin==='enterre'?' selected':''}>Enterré</option>
+            <option value="horssol"${d.bacheTypeBassin==='horssol'?' selected':''}>Hors-sol</option>
+          </select></div>`:''}
+          ${dimsBache?`<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Dimensions bâche (calculées)</div><div class="val">${dimsBache}</div></div>`:''}
+          ${d.bacheGamme!=='Barres'?`<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Épaisseur (bulles, µm)</div><select onchange="setDosField('bacheEpaisseur',this.value);renderFiche();">
+            <option value=""${!d.bacheEpaisseur?' selected':''}>—</option>
+            ${['180','400','500'].map(t=>`<option${d.bacheEpaisseur===t?' selected':''}>${t}</option>`).join('')}
+          </select></div>`:''}
+          ${d.bacheGamme!=='Barres'&&d.bacheEpaisseur==='500'?`<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Bulles simple/double</div><select onchange="setDosField('bacheBullesType',this.value)">
+            <option value=""${!d.bacheBullesType?' selected':''}>—</option>
+            <option value="simple"${d.bacheBullesType==='simple'?' selected':''}>Simple</option>
+            <option value="double"${d.bacheBullesType==='double'?' selected':''}>Double</option>
+          </select></div>`:''}
+          ${d.bacheGamme!=='Bulles'?`<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Pans coupés (barres)</div><select onchange="setDosField('bachePansCoupes',this.value)">
+            <option value=""${!d.bachePansCoupes?' selected':''}>Non</option>
+            <option value="Oui"${d.bachePansCoupes==='Oui'?' selected':''}>Oui</option>
+          </select></div>`:''}
+          ${d.bacheGamme!=='Barres'?`<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Œillets supplémentaires (bulles)</div><select onchange="setDosField('bacheOeilletsSupp',this.value)">
+            <option value=""${!d.bacheOeilletsSupp?' selected':''}>Non</option>
+            <option value="Oui"${d.bacheOeilletsSupp==='Oui'?' selected':''}>Oui</option>
+          </select></div>`:''}
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Découpe aspiration/échelle</div><select onchange="setDosField('bacheDecoupeAspi',this.value)">
+            <option value=""${!d.bacheDecoupeAspi?' selected':''}>Non</option>
+            <option value="Oui"${d.bacheDecoupeAspi==='Oui'?' selected':''}>Oui</option>
+          </select></div>
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Découpe escalier</div><select onchange="setDosField('bacheDecoupeEscalier',this.value);renderFiche();">
+            <option value=""${!d.bacheDecoupeEscalier?' selected':''}>Non</option>
+            <option value="Standard"${d.bacheDecoupeEscalier==='Standard'?' selected':''}>Standard</option>
+            <option value="Hors-standard"${d.bacheDecoupeEscalier==='Hors-standard'?' selected':''}>Hors-standard</option>
+          </select></div>
+          ${d.bacheGamme!=='Bulles'&&d.bacheDecoupeEscalier?`<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Barre de charge (barres)</div><select onchange="setDosField('bacheBarreCharge',this.value)">
+            <option value=""${!d.bacheBarreCharge?' selected':''}>Non</option>
+            <option value="Oui"${d.bacheBarreCharge==='Oui'?' selected':''}>Oui</option>
+          </select></div>`:''}
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Enrouleur</div><input value="${d.bacheEnrouleur||''}" onchange="setDosField('bacheEnrouleur',this.value)" placeholder="ex: RUPCDE, ENRHS..."></div>
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Zone de transport</div><input value="${d.bacheTransportZone||''}" onchange="setDosField('bacheTransportZone',this.value)" placeholder="ex: France, Corse, Italie..."></div>
+          <div style="grid-column:span 2"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Options</div><input value="${d.options||''}" onchange="setDosField('options',this.value)"></div>
+        </div>
+      </div>
+    </div>
+    ${(() => {
+      // Enrichissement Mégao : générique, réutilisée telle quelle (cf. renderPageCommande) —
+      // fonctionnera pour un dossier bâches dès que la sync Mégao bâches existera un jour.
+      const accCats = Object.entries(d.megaoAccessoires || {}).filter(([,qte]) => qte > 0);
+      const notes = d.megaoNotes || [];
+      if (!accCats.length && !notes.length) return '';
+      const detailFor = cat => (d.megaoAccessoiresDetail?.[cat] || [])
+        .map(l => `${escapeHtml(l.codeart || '')} — ${escapeHtml(l.design || '')}${l.qte != null ? ` (×${l.qte})` : ''}`)
+        .join('\n');
+      return `
+    <div class="fiche-section">
+      <div class="fiche-section-title">Mégao — accessoires &amp; notes (lecture automatique)</div>
+      <div class="fiche-section-body">
+        ${accCats.length ? `
+        <div style="margin-bottom:${notes.length ? '10px' : '0'}">
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Accessoires détectés</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${accCats.map(([cat, qte]) => `<span style="background:var(--accent-light);color:var(--accent-deep);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500" title="${escapeHtml(detailFor(cat))}">${escapeHtml(MEGAO_ACCESSOIRE_LABELS[cat] || cat)} × ${qte}</span>`).join('')}
+          </div>
+        </div>` : ''}
+        ${notes.length ? `
+        <div>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Notes de suivi chantier</div>
+          ${notes.map(n => `<div style="font-size:12px;padding:6px 10px;background:var(--bg);border-radius:var(--radius);margin-bottom:4px;white-space:pre-line">${escapeHtml(n.texte || '')}</div>`).join('')}
+        </div>` : ''}
+      </div>
+    </div>`;
+    })()}
+    <div class="fiche-section">
+      <div class="fiche-section-title">Remarques &amp; instructions</div>
+      <div class="fiche-section-body">
+        <div style="margin-bottom:10px">
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Remarques fabrication</div>
+          <textarea class="rem-area" onchange="setDosField('remarques',this.value)">${d.remarques||''}</textarea>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--red);margin-bottom:5px">Accès chantier / Autres informations poseurs</div>
+          <textarea class="rem-area" style="border-color:#F09595;color:var(--red)" onchange="setDosField('autres',this.value)">${d.autres||''}</textarea>
+        </div>
+      </div>
+    </div>
+    <div class="avance-bar no-print">
+      <div style="font-size:12px;color:var(--ink-faint)">Prochaine étape :</div>
+      ${can('advance')&&!isDossierCloture(d)?(
+        d.statut==='attente_planif'
+        ? `<span style="font-size:12px;color:var(--teal)"><i class="ti ti-calendar-time"></i> En attente d'une date de pose — reviendra automatiquement en Saisie une fois planifié</span>`
+        : `
+        ${['verif','pret_atelier'].includes(d.statut)?`<button class="btn btn-ghost btn-sm" onclick="renvoyerSaisie()" style="color:var(--amber);border-color:rgba(217,119,6,.3)" title="Renvoyer en saisie admin"><i class="ti ti-arrow-back-up"></i> Renvoyer en saisie</button>`:''}
+        <button class="btn btn-primary" onclick="avancerFiche()"><i class="ti ti-arrow-right"></i> ${getNextBtnLabel(d)}</button>
+      `):`<span class="badge b-expedie">Dossier clôturé</span>`}
+    </div>
+    <div style="display:flex;gap:12px;padding:12px 16px;border-top:1px solid var(--border)">
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Responsable</div><input value="${p.sigResponsable||''}" placeholder="Nom / initiales" onchange="setPageField(${currentPageIdx},'sigResponsable',this.value)"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Date livraison prévue</div><input type="date" value="${p.sigDate||d.dateLivraison||''}" onchange="setPageField(${currentPageIdx},'sigDate',this.value)"></div>
+      <div style="flex:1"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:3px">Visa direction</div><input value="${p.sigVisa||''}" placeholder="Initiales" onchange="setPageField(${currentPageIdx},'sigVisa',this.value)"></div>
+    </div>
+  </div>`;
+}
 function renderPageVerif(d,p) {
   const rows=p.rows||[...VERIF_ROWS]; const chk=p.checks||{};
   const makeRow=(row,ri)=>{const s=chk[ri]||{};return`<tr>
@@ -3086,7 +3319,7 @@ function addPage(type) {
   const d=dossiers.find(x=>x.id===currentDosId); if(!d) return;
   const labels={commande:'Fiche commande',verif:'Vérification atelier',notes:'Notes',expedition:'Expédition'};
   const n=d.pages.filter(p=>p.type===type).length;
-  d.pages.push({type,label:labels[type]+(n>0?' '+(n+1):''),checks:{},rows:type==='verif'?[...VERIF_ROWS]:undefined});
+  d.pages.push({type,label:labels[type]+(n>0?' '+(n+1):''),checks:{},rows:type==='verif'?(isBacheDossier(d)?[...VERIF_ROWS_BACHE]:[...VERIF_ROWS]):undefined});
   currentPageIdx=d.pages.length-1;
   closeModal('modal-page-type'); saveData(); renderFiche();
 }
@@ -3094,7 +3327,7 @@ function addVerifRow() {
   const d=dossiers.find(x=>x.id===currentDosId); if(!d) return;
   const p=d.pages[currentPageIdx]; if(!p||p.type!=='verif') return;
   const name=prompt('Désignation de la ligne :'); if(!name) return;
-  if(!p.rows) p.rows=[...VERIF_ROWS];
+  if(!p.rows) p.rows=isBacheDossier(d)?[...VERIF_ROWS_BACHE]:[...VERIF_ROWS];
   p.rows.push(name); saveData(); renderFiche();
 }
 // ---- DOCUMENTS DOSSIER (Firebase Storage) ----
@@ -3499,7 +3732,7 @@ async function changerStatutDossier(d, newStatut, logSuffix) {
     // Un dossier volet (typeLame renseigné) ne peut pas quitter la vérification sans être passé
     // par la fiche de calcul — c'est le calcul le plus précis qu'on fait, notamment pour le
     // nombre de fagots de lames. Les dossiers bâches (jamais de typeLame) ne sont pas concernés.
-    if (d.typeLame && !d.nbFagotsCalcule) {
+    if (!isBacheDossier(d) && d.typeLame && !d.nbFagotsCalcule) {
       showToast(`⚠ Impossible d'avancer : la fiche de calcul n'a pas été faite pour ce dossier`);
       return false;
     }
@@ -3509,7 +3742,7 @@ async function changerStatutDossier(d, newStatut, logSuffix) {
   // "stock déduit dès que le dossier part en fabrication" = entrée dans "production", pas avant.
   // Interrupteur global (Stock → Références) : si désactivé, le dossier avance quand même
   // normalement, seul le décompte est sauté — sortie de stock à faire à la main en attendant.
-  if (newStatut === 'production' && prev !== 'production' && stockDecompteActif) {
+  if (newStatut === 'production' && prev !== 'production' && stockDecompteActif && !isBacheDossier(d)) {
     await stockDecompterEntreeProduction(d);
     // ⚠ Pendant les awaits ci-dessus (jusqu'à ~17 transactions Firestore), chaque logHistory()
     // du décompte déclenche un saveData() dont l'écho onSnapshot RECONSTRUIT le tableau
@@ -3989,6 +4222,10 @@ function optionsSemainesFab(selected, nbSemaines = 26) {
   }
   return html;
 }
+// Type de dossier — 'volet' (défaut, dossiers existants sans le champ) ou 'bache'. Ne jamais
+// migrer les dossiers Firestore existants : partout où c'est lu, passer par ce helper plutôt
+// que par d.type direct, pour que l'absence du champ retombe silencieusement sur 'volet'.
+function isBacheDossier(d) { return (d.type||'volet')==='bache'; }
 // Types de volet (legacyVoletType, stock.js) concernés par chaque champ "Accessoires" — reflète
 // exactement les conditions de type déjà codées dans les fonctions stockDecompterXxx (stock.js).
 // ⚠ À maintenir aligné si une de ces fonctions change son périmètre de types applicables.
@@ -4033,11 +4270,37 @@ function updateAccessoiresVisibility() {
     if (el) el.style.display = (!type || types.includes(type)) ? '' : 'none';
   });
 }
+// Bascule Volet/Bâche dans la modale de création — même principe que
+// updateAccessoiresVisibility() : classes CSS posées sur les sections, pas de
+// duplication de logique. Un dossier bâches n'a ni lames/moteur/axe (pas de
+// module de décompte stock bâches, cf. isBacheDossier) — voir stock.js.
+function updateTypeDossierVisibility() {
+  const type = document.getElementById('f-type-dossier')?.value || 'volet';
+  document.querySelectorAll('.fg-volet-only').forEach(el => el.style.display = type==='volet' ? '' : 'none');
+  document.querySelectorAll('.fg-bache-only').forEach(el => el.style.display = type==='bache' ? '' : 'none');
+  if (type==='volet') updateAccessoiresVisibility();
+  else updateBacheGammeVisibility();
+}
+// Affiche/masque les champs Barres vs Bulles à l'intérieur de la section Bâche —
+// purement informatif (pas de moteur de prix dans cette app), donc pas grave si
+// l'atelier laisse un champ non pertinent vide plutôt que de le masquer.
+function updateBacheGammeVisibility() {
+  const gamme = document.getElementById('f-bacheGamme')?.value || '';
+  const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
+  show('fg-bacheTypeBassin', gamme!=='Bulles');
+  show('fg-bachePansCoupes', gamme!=='Bulles');
+  show('fg-bacheBarreCharge', gamme!=='Bulles');
+  show('fg-bacheEpaisseur', gamme!=='Barres');
+  show('fg-bacheBullesType', gamme!=='Barres' && document.getElementById('f-bacheEpaisseur')?.value==='500');
+  show('fg-bacheOeilletsSupp', gamme!=='Barres');
+}
 function openNewDos() {
-  ['f-client','f-tel','f-email','f-contact','f-revendeur','f-adresse','f-cp','f-ville','f-contraintes','f-options','f-typeLame','f-lames','f-pieds','f-alim','f-typeAlimentation','f-moteur','f-ref','f-remarques','f-autres','f-largeur','f-longueur','f-surface','f-hauteur','f-profondeur','f-notes-dims','f-telecommande','f-gestionSel','f-passesSangles','f-flasqueMurale','f-murCouleur','f-murHauteur','f-caillebotisChoix','f-caillebotisLargeur','f-caillebotisProfondeur','f-fixation','f-equerresRenfort','f-corniere6060','f-poutreCouleur','f-nombrePoutres'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['f-client','f-tel','f-email','f-contact','f-revendeur','f-adresse','f-cp','f-ville','f-contraintes','f-options','f-typeLame','f-lames','f-pieds','f-alim','f-typeAlimentation','f-moteur','f-ref','f-remarques','f-autres','f-largeur','f-longueur','f-surface','f-hauteur','f-profondeur','f-notes-dims','f-telecommande','f-gestionSel','f-passesSangles','f-flasqueMurale','f-murCouleur','f-murHauteur','f-caillebotisChoix','f-caillebotisLargeur','f-caillebotisProfondeur','f-fixation','f-equerresRenfort','f-corniere6060','f-poutreCouleur','f-nombrePoutres','f-options-bache','f-bacheGamme','f-bacheModele','f-bacheTypeBassin','f-bacheEpaisseur','f-bacheBullesType','f-bacheColoris','f-bacheDecoupeAspi','f-bacheDecoupeEscalier','f-bacheBarreCharge','f-bacheOeilletsSupp','f-bacheEnrouleur','f-bachePansCoupes','f-bacheTransportZone'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const np=document.getElementById('f-need-pose');if(np)np.checked=false;;
   document.getElementById('f-structure').value='';
-  updateAccessoiresVisibility();
+  document.getElementById('f-structure-bache').value='';
+  document.getElementById('f-type-dossier').value='volet';
+  updateTypeDossierVisibility();
   document.getElementById('f-tva').value='20';
   document.getElementById('f-ht').value='';
   document.getElementById('f-ttc').value='';
@@ -4062,7 +4325,9 @@ function calcTTC() { const ht=parseFloat(document.getElementById('f-ht').value)|
 function calcHT() { const ttcv=parseFloat(document.getElementById('f-ttc').value)||0; const tva=parseFloat(document.getElementById('f-tva').value)||20; if(ttcv>0)document.getElementById('f-ht').value=(ttcv/(1+tva/100)).toFixed(2); }
 function saveDossier() {
   const clientEl = document.getElementById('f-client');
-  const structEl = document.getElementById('f-structure');
+  const type = document.getElementById('f-type-dossier')?.value || 'volet';
+  const isBache = type === 'bache';
+  const structEl = document.getElementById(isBache ? 'f-structure-bache' : 'f-structure');
   const client = clientEl.value.trim();
   const structure = structEl.value;
   // Reset styles
@@ -4082,12 +4347,12 @@ function saveDossier() {
   const id='D-2024-0'+nextDosNum++;
   const tva=parseFloat(document.getElementById('f-tva').value)||20;
   const ht=parseFloat(document.getElementById('f-ht').value)||0;
-  const d={id,
+  const d={id,type,
     client,tel:document.getElementById('f-tel').value,email:document.getElementById('f-email').value,
     contact:document.getElementById('f-contact').value,revendeur:document.getElementById('f-revendeur')?.value||'',adresse:document.getElementById('f-adresse').value,
     cp:document.getElementById('f-cp').value,ville:document.getElementById('f-ville').value,
     contraintes:document.getElementById('f-contraintes').value,
-    structure:document.getElementById('f-structure').value,options:document.getElementById('f-options').value,
+    structure,options:document.getElementById(isBache ? 'f-options-bache' : 'f-options').value,
     lames:document.getElementById('f-lames').value,pieds:document.getElementById('f-pieds').value,
     typeLame:document.getElementById('f-typeLame')?.value||'',
     alim:document.getElementById('f-alim').value,typeAlimentation:document.getElementById('f-typeAlimentation')?.value||'',moteur:document.getElementById('f-moteur').value,
@@ -4105,6 +4370,19 @@ function saveDossier() {
     corniere6060:document.getElementById('f-corniere6060')?.value||'',
     poutreCouleur:document.getElementById('f-poutreCouleur')?.value||'',
     nombrePoutres:document.getElementById('f-nombrePoutres')?.value||'',
+    bacheGamme:document.getElementById('f-bacheGamme')?.value||'',
+    bacheModele:document.getElementById('f-bacheModele')?.value||'',
+    bacheTypeBassin:document.getElementById('f-bacheTypeBassin')?.value||'',
+    bacheEpaisseur:document.getElementById('f-bacheEpaisseur')?.value||'',
+    bacheBullesType:document.getElementById('f-bacheBullesType')?.value||'',
+    bacheColoris:document.getElementById('f-bacheColoris')?.value||'',
+    bacheDecoupeAspi:document.getElementById('f-bacheDecoupeAspi')?.value||'',
+    bacheDecoupeEscalier:document.getElementById('f-bacheDecoupeEscalier')?.value||'',
+    bacheBarreCharge:document.getElementById('f-bacheBarreCharge')?.value||'',
+    bacheOeilletsSupp:document.getElementById('f-bacheOeilletsSupp')?.value||'',
+    bacheEnrouleur:document.getElementById('f-bacheEnrouleur')?.value||'',
+    bachePansCoupes:document.getElementById('f-bachePansCoupes')?.value||'',
+    bacheTransportZone:document.getElementById('f-bacheTransportZone')?.value||'',
     ht,tva,ref:document.getElementById('f-ref').value,devisStatut:document.getElementById('f-devis-statut').value,
     dateFrom:document.getElementById('f-date-from').value,dateTo:document.getElementById('f-date-to').value,
     dateLivraison:document.getElementById('f-date-livraison').value,
@@ -4121,7 +4399,7 @@ function saveDossier() {
     autres:document.getElementById('f-autres').value,
     statut:'admin',statutChangedAt:nowISO(),createdBy:currentUser.id,
     history:[{id:Date.now(),type:'création',action:'Dossier créé',detail:'',user:currentUser.id,at:now()}],
-    pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]
+    pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:isBache?[...VERIF_ROWS_BACHE]:[...VERIF_ROWS]}]
   };
   dossiers.unshift(d);
   pushNotif('statut:admin',id,d);

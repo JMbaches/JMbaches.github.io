@@ -165,7 +165,7 @@ function renderEmballageGrand() {
     mc.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:420px;gap:18px">
       <div style="width:88px;height:88px;border-radius:50%;background:#FEF3C7;display:flex;align-items:center;justify-content:center"><i class="ti ti-package" style="font-size:44px;color:#92400E"></i></div>
       <div style="font-size:22px;color:var(--ink-soft);font-weight:600">Rien à emballer pour le moment</div>
-      <div style="font-size:14px;color:var(--ink-faint)">Les volets prêts à emballer apparaîtront ici</div>
+      <div style="font-size:14px;color:var(--ink-faint)">Les dossiers prêts à emballer apparaîtront ici</div>
     </div>`;
     return;
   }

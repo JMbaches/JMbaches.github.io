@@ -197,6 +197,9 @@ async function stockDecompteFixe(categorie, label, qte) {
 // manuel qui ont chacun leur propre jeu de pièces détachées dans le logiciel legacy. "silver" =
 // tout hors-sol standard non distingué (Silver Roll, Golden Roll, Coffre...), comme dans
 // structureToCalcType — c'est aussi le comportement par défaut du logiciel legacy.
+// ⚠️ Ne JAMAIS appeler sur un dossier bâches : le repli 'silver' par défaut (ligne ci-dessous)
+// déclencherait un décompte de stock volet Silver Roll erroné. Garde-fou : voir
+// stockDecompterEntreeProduction ci-dessous + changerStatutDossier (index.html).
 function legacyVoletType(structure) {
   const s = (structure||'').toLowerCase();
   if (/tablier\s+seul/.test(s)) return 'tablier';
@@ -588,6 +591,11 @@ async function stockDecompterPoutreBrute(d) {
 // "verif"). Appelé depuis changerStatutDossier() dans index.html, quel que soit le bouton/menu
 // utilisé pour faire avancer le dossier — pour ne pas dépendre d'un chemin en particulier.
 async function stockDecompterEntreeProduction(d) {
+  // Garde défensive (ceinture et bretelles) : changerStatutDossier (index.html) n'appelle déjà
+  // plus cette fonction pour un dossier bâches, mais on vérifie aussi ici — inline, sans dépendre
+  // du helper isBacheDossier() défini dans index.html — pour un check aussi critique (évite un
+  // décompte de stock volet erroné via legacyVoletType('') → 'silver' par défaut).
+  if ((d.type||'volet')==='bache') return;
   const lamesRes = await stockDecompterDossier(d);
   if (lamesRes.ok) {
     d.stockDecompteFait = true;
