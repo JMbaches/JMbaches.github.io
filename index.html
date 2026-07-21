@@ -2925,6 +2925,36 @@ function renderPageCommande(d, p) { p = p || {};
       </div>
     </div>`;
     })()}
+    ${(() => {
+      // Enrichissement Mégao : lu automatiquement dans la base Mégao (CMDCLI/CMDCLIB) par
+      // scripts/megao_enrich_vm.py, traité par scripts/megao-enrich-sync.js — purement informatif
+      // pour l'instant (pas relié aux champs "Accessoires (décompte stock)" ci-dessus, qui restent
+      // saisis manuellement). N'affiche rien tant que le dossier n'a pas encore été enrichi.
+      const accCats = Object.entries(d.megaoAccessoires || {}).filter(([,qte]) => qte > 0);
+      const notes = d.megaoNotes || [];
+      if (!accCats.length && !notes.length) return '';
+      const detailFor = cat => (d.megaoAccessoiresDetail?.[cat] || [])
+        .map(l => `${escapeHtml(l.codeart || '')} — ${escapeHtml(l.design || '')}${l.qte != null ? ` (×${l.qte})` : ''}`)
+        .join('\n');
+      return `
+    <div class="fiche-section">
+      <div class="fiche-section-title">Mégao — accessoires &amp; notes (lecture automatique)</div>
+      <div class="fiche-section-body">
+        ${accCats.length ? `
+        <div style="margin-bottom:${notes.length ? '10px' : '0'}">
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Accessoires détectés</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${accCats.map(([cat, qte]) => `<span style="background:var(--accent-light);color:var(--accent-deep);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500" title="${escapeHtml(detailFor(cat))}">${escapeHtml(MEGAO_ACCESSOIRE_LABELS[cat] || cat)} × ${qte}</span>`).join('')}
+          </div>
+        </div>` : ''}
+        ${notes.length ? `
+        <div>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Notes de suivi chantier</div>
+          ${notes.map(n => `<div style="font-size:12px;padding:6px 10px;background:var(--bg);border-radius:var(--radius);margin-bottom:4px;white-space:pre-line">${escapeHtml(n.texte || '')}</div>`).join('')}
+        </div>` : ''}
+      </div>
+    </div>`;
+    })()}
     <div class="fiche-section">
       <div class="fiche-section-title">Remarques &amp; instructions</div>
       <div class="fiche-section-body">
@@ -3977,6 +4007,21 @@ const FIELD_VOLET_TYPES = {
   corniere6060:          ['immerge'],
   poutreCouleur:         ['immerge'],
   nombrePoutres:         ['immerge_total'],
+};
+// Libellés d'affichage des catégories d'accessoires détectées automatiquement dans la base
+// Mégao (CMDCLI/CMDCLIB, cf. scripts/megao_enrich_vm.py) — distinct des champs "Accessoires
+// (décompte stock)" ci-dessus, qui sont saisis manuellement. Mapping à faire valider avec JM
+// (voir memoire de session projet_megao_github_action.md) — reste informatif en attendant.
+const MEGAO_ACCESSOIRE_LABELS = {
+  telecommande:               'Télécommande',
+  flasque_murale:             'Flasque murale',
+  mur_caillebotis_bois:       'Caillebotis bois',
+  mur_caillebotis_pvc:        'Caillebotis PVC',
+  mur_immerge:                'Mur immergé',
+  passes_sangles:             'Passes-sangles',
+  bouchons:                   'Bouchons',
+  equerres_poutres_cornieres: 'Équerres / poutres / cornières',
+  boucle_sangle:              'Boucle sangle',
 };
 // Affiche/masque chaque champ "Accessoires" de la modale de création selon le type de volet
 // choisi — structure vide (rien choisi encore) = tout afficher, pas encore de filtre possible.
