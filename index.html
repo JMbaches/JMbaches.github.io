@@ -1133,36 +1133,18 @@ a:focus-visible, button:focus-visible,
         <div class="form-section-title"><i class="ti ti-package"></i> Produit</div>
         <div class="form-grid form-grid-2">
           <div class="form-group"><label class="form-label">Structure / Modèle *</label>
-            <select id="f-structure-bache" onchange="updateBacheGammeVisibility()">
-              <option value="">-- Choisir --</option>
-              <option>Bâche à barres (1h)</option>
-              <option>Bâche à bulles (1h)</option>
-            </select>
+            <select id="f-structure-bache" onchange="updateBacheModeleFromStructure()"></select>
           </div>
           <div class="form-group"><label class="form-label">Options</label><input id="f-options-bache" placeholder="ex: précisions diverses..."></div>
-          <div class="form-group"><label class="form-label">Gamme</label><select id="f-bacheGamme" onchange="updateBacheGammeVisibility()">
-            <option value="">—</option>
-            <option value="Barres">Barres</option>
-            <option value="Bulles">Bulles</option>
-          </select></div>
-          <div class="form-group"><label class="form-label">Modèle</label><input id="f-bacheModele" placeholder="ex: BACLA, BUDUO4C/SO..."></div>
+          <input type="hidden" id="f-bacheGamme">
+          <input type="hidden" id="f-bacheEpaisseur">
+          <input type="hidden" id="f-bacheBullesType">
           <div class="form-group" id="fg-bacheTypeBassin"><label class="form-label">Type de bassin (barres)</label><select id="f-bacheTypeBassin">
             <option value="">—</option>
             <option value="enterre">Enterré</option>
             <option value="horssol">Hors-sol</option>
           </select></div>
-          <div class="form-group" id="fg-bacheEpaisseur"><label class="form-label">Épaisseur (bulles, µm)</label><select id="f-bacheEpaisseur">
-            <option value="">—</option>
-            <option value="180">180</option>
-            <option value="400">400</option>
-            <option value="500">500</option>
-          </select></div>
-          <div class="form-group" id="fg-bacheBullesType"><label class="form-label">Bulles simple/double (si 500µm)</label><select id="f-bacheBullesType">
-            <option value="">—</option>
-            <option value="simple">Simple</option>
-            <option value="double">Double</option>
-          </select></div>
-          <div class="form-group"><label class="form-label">Coloris</label><input id="f-bacheColoris" placeholder="ex: Bleu/Beige"></div>
+          <div class="form-group" id="fg-bacheColoris"><label class="form-label">Coloris (barres)</label><input id="f-bacheColoris" placeholder="ex: Bleu/Beige"></div>
           <div class="form-group"><label class="form-label">Découpe aspiration/échelle</label><select id="f-bacheDecoupeAspi">
             <option value="">Non</option><option value="Oui">Oui</option>
           </select></div>
@@ -1544,6 +1526,70 @@ const NOTIF_RULES = [
 const VERIF_ROWS = ['Rayons','Pans coupés','Lames coupées','Lames finies','Axe','Contre axe + rails','Découpe ESC en équerre','Découpe ESC en lisse','Poutre + cornière','Cloison','Caillebotis'];
 // Contenu deviné (pas confirmé avec l'atelier bâches) — à ajuster une fois validé.
 const VERIF_ROWS_BACHE = ['Dimensions bâche conformes bassin','Coloris conforme commande','Découpes (aspi/escalier) conformes','Enrouleur conforme','Œillets/finitions','Contrôle qualité soudures','Emballage complet'];
+// Catalogue des vrais modèles de bâches (repris de configurateur-baches.html, projet séparé
+// de configurateur de devis — mêmes réfs produits, ici juste pour le suivi de dossier, pas de
+// prix). Un seul select "Structure/Modèle" pour l'utilisateur (pas de question Gamme/Épaisseur
+// séparée et redondante) — gamme/épaisseur/simple-double sont déduits automatiquement du modèle
+// choisi via bacheModeleInfo(). Coloris pas redemandé pour les bulles (déjà dans le libellé du
+// modèle, ex. "Bleu — Bordée 4 côtés") — uniquement pertinent pour les barres.
+const BACHE_MODELES = [
+  { groupe:'Bâches à barres', gamme:'Barres', modeles:[
+    {ref:'BABAS',     label:'Sécu Basic'},
+    {ref:'BAPRI',     label:'Sécu Primo'},
+    {ref:'BACLA',     label:'Sécu Classic'},
+    {ref:'BACLATOP',  label:'Sécu Top'},
+    {ref:'BACLAFC',   label:'Sécu Easy Clip'},
+    {ref:'BASEC+',    label:'Sécu+'},
+    {ref:'BAHS',      label:'Cover Wood (hors-sol uniquement)'},
+  ]},
+  { groupe:'Bâches à bulles — 180µm (été légère)', gamme:'Bulles', epaisseur:'180', modeles:[
+    {ref:'BU180NB', label:'Bleu — Non bordée'},
+  ]},
+  { groupe:'Bâches à bulles — 400µm', gamme:'Bulles', epaisseur:'400', modeles:[
+    {ref:'BU4004C/BB', label:'Bleu — Bordée 4 côtés'},
+    {ref:'BU4002C/BB', label:'Bleu — Bordée 2 côtés'},
+    {ref:'BU400NB/BB', label:'Bleu — Non bordée'},
+    {ref:'BU4004C/T',  label:'Translucide — Bordée 4 côtés'},
+    {ref:'BU4002C/T',  label:'Translucide — Bordée 2 côtés'},
+    {ref:'BU400NB/T',  label:'Translucide — Non bordée'},
+  ]},
+  { groupe:'Bâches à bulles — 500µm simple', gamme:'Bulles', epaisseur:'500', bullesType:'simple', modeles:[
+    {ref:'BU5004C/BB', label:'Bleu — Bordée 4 côtés'},
+    {ref:'BU5002C/BB', label:'Bleu — Bordée 2 côtés'},
+    {ref:'BU500NB/BB', label:'Bleu — Non bordée'},
+  ]},
+  { groupe:'Bâches à bulles — 500µm double', gamme:'Bulles', epaisseur:'500', bullesType:'double', modeles:[
+    {ref:'BUDUO4C/SO', label:'SOLIBULL — Bleu nuit — Bordée 4 côtés'},
+    {ref:'BUDUO2C/SO', label:'SOLIBULL — Bleu nuit — Bordée 2 côtés'},
+    {ref:'BUDUONB/SO', label:'SOLIBULL — Bleu nuit — Non bordée'},
+    {ref:'BUDUO4C/T',  label:'SOL+ Guard — Translucide — Bordée 4 côtés'},
+    {ref:'BUDUO2C/T',  label:'SOL+ Guard — Translucide — Bordée 2 côtés'},
+    {ref:'BUDUONB/T',  label:'SOL+ Guard — Translucide — Non bordée'},
+    {ref:'BUDUO4C/GB', label:'I-ZOL — Bleu glacial — Bordée 4 côtés'},
+    {ref:'BUDUO2C/GB', label:'I-ZOL — Bleu glacial — Bordée 2 côtés'},
+    {ref:'BUDUONB/GB', label:'I-ZOL — Bleu glacial — Non bordée'},
+    {ref:'BUSW500',    label:'SW500 — Été/Hiver (boudin ramasse-feuille inclus)'},
+  ]},
+];
+function bacheModeleInfo(ref) {
+  for (const g of BACHE_MODELES) {
+    const m = g.modeles.find(x => x.ref === ref);
+    if (m) return { ref: m.ref, label: m.label, groupe: g.groupe, gamme: g.gamme, epaisseur: g.epaisseur||'', bullesType: g.bullesType||'' };
+  }
+  return null;
+}
+// Libellé complet et non-ambigu stocké dans d.structure (le même libellé court, ex. "Bleu —
+// Bordée 4 côtés", existe dans plusieurs groupes d'épaisseur — préfixer par le groupe évite
+// toute confusion à l'affichage/dans l'historique).
+function bacheStructureLabel(ref) {
+  const info = bacheModeleInfo(ref);
+  return info ? `${info.groupe} — ${info.label}` : '';
+}
+function bacheStructureOptionsHtml(selectedRef) {
+  return '<option value="">-- Choisir --</option>' + BACHE_MODELES.map(g => `<optgroup label="${g.groupe}">
+    ${g.modeles.map(m => `<option value="${m.ref}"${m.ref===selectedRef?' selected':''}>${m.label}</option>`).join('')}
+  </optgroup>`).join('');
+}
 const VERIF_EXP = ['Longueur','Colis'];
 
 /* ================================================================
@@ -3062,7 +3108,6 @@ function renderPageCommande(d, p) { p = p || {};
 // de cette app ne concerne que la pose des poseurs, non applicable aux bâches.
 function renderPageCommandeBache(d, p) { p = p || {};
   const tr=d.transport||'';
-  const STRUCTS_BACHE=['Bâche à barres (1h)','Bâche à bulles (1h)'];
   const debordM = d.bacheTypeBassin==='enterre' ? 1 : d.bacheTypeBassin==='horssol' ? 0.4 : null;
   const dimsBache = (debordM!=null && d.largeur && d.longueur)
     ? `${(Number(d.largeur)+debordM).toFixed(2)} × ${(Number(d.longueur)+debordM).toFixed(2)} m (avec débord)`
@@ -3092,7 +3137,7 @@ function renderPageCommandeBache(d, p) { p = p || {};
     <div class="fiche-grid c3">
       <div class="fiche-cell"><div class="fiche-cell-label">Client</div><input value="${d.client||''}" onchange="setDosField('client',this.value)"></div>
       <div class="fiche-cell"><div class="fiche-cell-label">Revendeur</div><input value="${d.revendeur||''}" onchange="setDosField('revendeur',this.value)" placeholder="ex: ABATIK"></div>
-      <div class="fiche-cell"><div class="fiche-cell-label">Structure</div><select onchange="setDosField('structure',this.value);renderFiche();" style="background:transparent;border:none;padding:0;font-size:13px;font-weight:500">${STRUCTS_BACHE.map(s=>`<option${d.structure===s?' selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="fiche-cell"><div class="fiche-cell-label">Structure / Modèle</div><select onchange="setBacheStructure(this.value)" style="background:transparent;border:none;padding:0;font-size:13px;font-weight:500">${bacheStructureOptionsHtml(d.bacheModele)}</select></div>
       <div class="fiche-cell"><div class="fiche-cell-label">Téléphone</div><input value="${d.tel||''}" onchange="setDosField('tel',this.value)"></div>
     </div>
     <div class="fiche-section">
@@ -3110,30 +3155,15 @@ function renderPageCommandeBache(d, p) { p = p || {};
       <div class="fiche-section-title">Caractéristiques produit (bâche)</div>
       <div class="fiche-section-body">
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Gamme</div><select onchange="setDosField('bacheGamme',this.value);renderFiche();">
-            <option value=""${!d.bacheGamme?' selected':''}>—</option>
-            <option value="Barres"${d.bacheGamme==='Barres'?' selected':''}>Barres</option>
-            <option value="Bulles"${d.bacheGamme==='Bulles'?' selected':''}>Bulles</option>
-          </select></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Modèle</div><input value="${d.bacheModele||''}" onchange="setDosField('bacheModele',this.value)" placeholder="ex: BACLA, BUDUO4C/SO..."></div>
-          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Coloris</div><input value="${d.bacheColoris||''}" onchange="setDosField('bacheColoris',this.value)" placeholder="ex: Bleu/Beige"></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Largeur bassin (m)</div><input type="number" step="0.01" min="0" value="${d.largeur||''}" onchange="setDosField('largeur',this.value);renderFiche();" placeholder="ex: 3.50"></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Longueur bassin (m)</div><input type="number" step="0.01" min="0" value="${d.longueur||''}" onchange="setDosField('longueur',this.value);renderFiche();" placeholder="ex: 7.50"></div>
+          ${dimsBache?`<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Dimensions bâche (calculées)</div><div class="val">${dimsBache}</div></div>`:''}
           ${d.bacheGamme!=='Bulles'?`<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Type de bassin (barres)</div><select onchange="setDosField('bacheTypeBassin',this.value);renderFiche();">
             <option value=""${!d.bacheTypeBassin?' selected':''}>—</option>
             <option value="enterre"${d.bacheTypeBassin==='enterre'?' selected':''}>Enterré</option>
             <option value="horssol"${d.bacheTypeBassin==='horssol'?' selected':''}>Hors-sol</option>
           </select></div>`:''}
-          ${dimsBache?`<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Dimensions bâche (calculées)</div><div class="val">${dimsBache}</div></div>`:''}
-          ${d.bacheGamme!=='Barres'?`<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Épaisseur (bulles, µm)</div><select onchange="setDosField('bacheEpaisseur',this.value);renderFiche();">
-            <option value=""${!d.bacheEpaisseur?' selected':''}>—</option>
-            ${['180','400','500'].map(t=>`<option${d.bacheEpaisseur===t?' selected':''}>${t}</option>`).join('')}
-          </select></div>`:''}
-          ${d.bacheGamme!=='Barres'&&d.bacheEpaisseur==='500'?`<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Bulles simple/double</div><select onchange="setDosField('bacheBullesType',this.value)">
-            <option value=""${!d.bacheBullesType?' selected':''}>—</option>
-            <option value="simple"${d.bacheBullesType==='simple'?' selected':''}>Simple</option>
-            <option value="double"${d.bacheBullesType==='double'?' selected':''}>Double</option>
-          </select></div>`:''}
+          ${d.bacheGamme!=='Bulles'?`<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Coloris (barres)</div><input value="${d.bacheColoris||''}" onchange="setDosField('bacheColoris',this.value)" placeholder="ex: Bleu/Beige"></div>`:''}
           ${d.bacheGamme!=='Bulles'?`<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Pans coupés (barres)</div><select onchange="setDosField('bachePansCoupes',this.value)">
             <option value=""${!d.bachePansCoupes?' selected':''}>Non</option>
             <option value="Oui"${d.bachePansCoupes==='Oui'?' selected':''}>Oui</option>
@@ -4283,22 +4313,48 @@ function updateTypeDossierVisibility() {
 }
 // Affiche/masque les champs Barres vs Bulles à l'intérieur de la section Bâche —
 // purement informatif (pas de moteur de prix dans cette app), donc pas grave si
-// l'atelier laisse un champ non pertinent vide plutôt que de le masquer.
+// l'atelier laisse un champ non pertinent vide plutôt que de le masquer. La gamme
+// n'est plus redemandée séparément : déduite automatiquement du modèle choisi,
+// cf. updateBacheModeleFromStructure().
 function updateBacheGammeVisibility() {
   const gamme = document.getElementById('f-bacheGamme')?.value || '';
   const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
   show('fg-bacheTypeBassin', gamme!=='Bulles');
+  show('fg-bacheColoris', gamme!=='Bulles');
   show('fg-bachePansCoupes', gamme!=='Bulles');
   show('fg-bacheBarreCharge', gamme!=='Bulles');
-  show('fg-bacheEpaisseur', gamme!=='Barres');
-  show('fg-bacheBullesType', gamme!=='Barres' && document.getElementById('f-bacheEpaisseur')?.value==='500');
   show('fg-bacheOeilletsSupp', gamme!=='Barres');
 }
+// Déduit gamme/épaisseur/simple-double du modèle sélectionné (BACHE_MODELES) — évite de
+// redemander la gamme séparément, cf. retour utilisateur (question redondante + modèles
+// génériques au lieu des vrais modèles). d.structure stockera le libellé complet non-ambigu
+// (bacheStructureLabel), d.bacheModele la réf courte (BACLA, BUDUO4C/SO...).
+function updateBacheModeleFromStructure() {
+  const ref = document.getElementById('f-structure-bache')?.value || '';
+  const info = bacheModeleInfo(ref);
+  document.getElementById('f-bacheGamme').value = info?.gamme || '';
+  document.getElementById('f-bacheEpaisseur').value = info?.epaisseur || '';
+  document.getElementById('f-bacheBullesType').value = info?.bullesType || '';
+  updateBacheGammeVisibility();
+}
+// Équivalent de updateBacheModeleFromStructure() mais pour la fiche d'un dossier existant
+// (renderPageCommandeBache) — change le modèle met aussi à jour gamme/épaisseur/simple-double
+// en une fois, pour ne pas les redemander séparément (cf. retour utilisateur).
+function setBacheStructure(ref) {
+  const d = dossiers.find(x => x.id === currentDosId); if (!d) return;
+  const info = bacheModeleInfo(ref);
+  setDosField('structure', info ? bacheStructureLabel(ref) : '');
+  setDosField('bacheModele', ref);
+  setDosField('bacheGamme', info?.gamme || '');
+  setDosField('bacheEpaisseur', info?.epaisseur || '');
+  setDosField('bacheBullesType', info?.bullesType || '');
+  renderFiche();
+}
 function openNewDos() {
-  ['f-client','f-tel','f-email','f-contact','f-revendeur','f-adresse','f-cp','f-ville','f-contraintes','f-options','f-typeLame','f-lames','f-pieds','f-alim','f-typeAlimentation','f-moteur','f-ref','f-remarques','f-autres','f-largeur','f-longueur','f-surface','f-hauteur','f-profondeur','f-notes-dims','f-telecommande','f-gestionSel','f-passesSangles','f-flasqueMurale','f-murCouleur','f-murHauteur','f-caillebotisChoix','f-caillebotisLargeur','f-caillebotisProfondeur','f-fixation','f-equerresRenfort','f-corniere6060','f-poutreCouleur','f-nombrePoutres','f-options-bache','f-bacheGamme','f-bacheModele','f-bacheTypeBassin','f-bacheEpaisseur','f-bacheBullesType','f-bacheColoris','f-bacheDecoupeAspi','f-bacheDecoupeEscalier','f-bacheBarreCharge','f-bacheOeilletsSupp','f-bacheEnrouleur','f-bachePansCoupes','f-bacheTransportZone'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['f-client','f-tel','f-email','f-contact','f-revendeur','f-adresse','f-cp','f-ville','f-contraintes','f-options','f-typeLame','f-lames','f-pieds','f-alim','f-typeAlimentation','f-moteur','f-ref','f-remarques','f-autres','f-largeur','f-longueur','f-surface','f-hauteur','f-profondeur','f-notes-dims','f-telecommande','f-gestionSel','f-passesSangles','f-flasqueMurale','f-murCouleur','f-murHauteur','f-caillebotisChoix','f-caillebotisLargeur','f-caillebotisProfondeur','f-fixation','f-equerresRenfort','f-corniere6060','f-poutreCouleur','f-nombrePoutres','f-options-bache','f-bacheGamme','f-bacheTypeBassin','f-bacheEpaisseur','f-bacheBullesType','f-bacheColoris','f-bacheDecoupeAspi','f-bacheDecoupeEscalier','f-bacheBarreCharge','f-bacheOeilletsSupp','f-bacheEnrouleur','f-bachePansCoupes','f-bacheTransportZone'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const np=document.getElementById('f-need-pose');if(np)np.checked=false;;
   document.getElementById('f-structure').value='';
-  document.getElementById('f-structure-bache').value='';
+  document.getElementById('f-structure-bache').innerHTML = bacheStructureOptionsHtml('');
   document.getElementById('f-type-dossier').value='volet';
   updateTypeDossierVisibility();
   document.getElementById('f-tva').value='20';
@@ -4329,7 +4385,9 @@ function saveDossier() {
   const isBache = type === 'bache';
   const structEl = document.getElementById(isBache ? 'f-structure-bache' : 'f-structure');
   const client = clientEl.value.trim();
-  const structure = structEl.value;
+  // Pour une bâche, structEl.value est la réf courte du modèle (ex. BACLA) — d.structure
+  // stocke le libellé complet non-ambigu (groupe+modèle), d.bacheModele garde la réf.
+  const structure = isBache ? bacheStructureLabel(structEl.value) : structEl.value;
   // Reset styles
   clientEl.style.borderColor = ''; clientEl.style.boxShadow = '';
   structEl.style.borderColor = ''; structEl.style.boxShadow = '';
@@ -4371,7 +4429,7 @@ function saveDossier() {
     poutreCouleur:document.getElementById('f-poutreCouleur')?.value||'',
     nombrePoutres:document.getElementById('f-nombrePoutres')?.value||'',
     bacheGamme:document.getElementById('f-bacheGamme')?.value||'',
-    bacheModele:document.getElementById('f-bacheModele')?.value||'',
+    bacheModele:isBache ? (structEl.value||'') : '',
     bacheTypeBassin:document.getElementById('f-bacheTypeBassin')?.value||'',
     bacheEpaisseur:document.getElementById('f-bacheEpaisseur')?.value||'',
     bacheBullesType:document.getElementById('f-bacheBullesType')?.value||'',
