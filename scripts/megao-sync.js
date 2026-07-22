@@ -48,9 +48,19 @@ function parseMegaoText(text) {
   const dateFrom = dateM ? `${dateM[3]}-${dateM[2]}-${dateM[1]}` : '';
 
   // Codes produits en début de ligne, collés à la désignation
-  // Backtracking : VR[A-Z0-9]+ greedy, recule jusqu'à trouver [A-Z][a-zÀ-ÿ]
+  // Backtracking : VR[A-Z0-9<>]+ greedy, recule jusqu'à trouver [A-Z][a-zÀ-ÿ]. Classe élargie
+  // à <> car les codes découpe (VRDEC<20E, VRDEC<60F...) en contiennent.
   const isVolet   = /^(VR[A-Z0-9]|LAM[A-Z]*\d)/m.test(text);
-  const vrM       = text.match(/^(VR[A-Z0-9]+)\s*([A-Z][a-zÀ-ÿé].+)/m);
+  // Plusieurs lignes VR par commande sont fréquentes (escalier + découpe + structure, vus sur
+  // 42% des commandes réelles) — matchAll plutôt qu'un simple match, sinon la première ligne VR
+  // rencontrée (parfois un escalier ou une découpe, pas la structure) écrase le vrai type de
+  // volet. VRES*/VRDEC* explicitement exclus de la recherche de la ligne "structure".
+  const vrAllM    = [...text.matchAll(/^(VR[A-Z0-9<>]+)\s*([A-Z][a-zÀ-ÿé].+)/gm)];
+  const isAccessoireVR = code => /^VRES|^VRDEC/.test(code);
+  const vrM       = vrAllM.find(m => !isAccessoireVR(m[1])) || null;
+  const cleanDesig = m => m[2].replace(/\s*(UN|ML|M2|PCS)\s+.*$/i, '').trim();
+  const escalier  = [...new Set(vrAllM.filter(m => /^VRES/.test(m[1])).map(cleanDesig))].join(' ; ');
+  const decoupe   = [...new Set(vrAllM.filter(m => /^VRDEC/.test(m[1])).map(cleanDesig))].join(' ; ');
   const lamM      = text.match(/^(LAM[A-Z0-9]+)\s*([A-Z][a-zÀ-ÿé].+)/m);
   // Type de lame : le code produit distingue PVC (LAM…) et Polycarbonate (LAMPOL…)
   const typeLame  = lamM ? (/POL/i.test(lamM[1]) ? 'Polycarbonate' : 'PVC') : '';
@@ -139,6 +149,11 @@ function parseMegaoText(text) {
       if (!adresse) { adresse = l; continue; }
     }
   }
+  // Cas "enlèvement" (bloc client remplacé par une instruction de retrait plutôt qu'un nom,
+  // confirmé sur données réelles Mégao — CMDCLI.Nomliv contient littéralement "ENLEVEMENT" ou
+  // "ENLEVEMENT LE <date>" dans ce cas) : repli sur le revendeur plutôt que de garder un nom
+  // manifestement faux (même correction que pour les bâches, cf. parseMegaoBacheText).
+  if (/^enl[eè]vement\b/i.test(client) && revendeur) { client = revendeur; contact = revendeur; }
 
   // HT : "Net HT\n 1 823,84" (valeur sur la ligne suivante dans pdf-parse)
   const htM = text.match(/Net\s+HT\s*\n\s*([\d][\d\s]*,\d{2})/i)
@@ -147,7 +162,7 @@ function parseMegaoText(text) {
 
   return {
     ref, refCommande: ref, client, contact, tel, email, adresse, cp, ville,
-    structure, lames, pieds, alim, moteur, typeLame,
+    structure, lames, pieds, alim, moteur, typeLame, escalier, decoupe,
     options: '', remarques: '', autres: '',
     largeur, longueur, revendeur,
     transport, ht, dateFrom, isVolet,
@@ -338,7 +353,7 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
     const doc    = { id: dosId, ref: docRef };
     const prev   = existing.data();
     const fields = ['client','tel','email','contact','adresse','cp','ville',
-                    'structure','lames','typeLame','pieds','alim','moteur','options','remarques','autres','transport',
+                    'structure','lames','typeLame','pieds','alim','moteur','escalier','decoupe','options','remarques','autres','transport',
                     'largeur','longueur','revendeur','refCommande'];
     const update = {};
     for (const f of fields) {
@@ -372,6 +387,8 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
       ville:       data.ville      || '',
       contraintes: '',
       structure:   data.structure  || '',
+      escalier:    data.escalier   || '',
+      decoupe:     data.decoupe    || '',
       options:     data.options    || '',
       lames:       data.lames      || '',
       typeLame:    data.typeLame   || '',

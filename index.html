@@ -3000,6 +3000,8 @@ function renderPageCommande(d, p) { p = p || {};
           </select></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Puissance moteur</div><input value="${d.moteur||''}" onchange="setDosField('moteur',this.value)" placeholder="ex: 120BD newton"></div>
           <div style="grid-column:span 2"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Options</div><input value="${d.options||''}" onchange="setDosField('options',this.value)"></div>
+          <div style="grid-column:span 3"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Escalier</div><input value="${d.escalier||''}" onchange="setDosField('escalier',this.value)" placeholder="ex: Escalier roman de 3 m Maxi - Equerre"></div>
+          <div style="grid-column:span 3"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Découpe</div><input value="${d.decoupe||''}" onchange="setDosField('decoupe',this.value)" placeholder="ex: Découpe équerre rayon ou pan coupé de 1 à 20cm"></div>
         </div>
         ${d.nbLamesCalcule ? `<div style="margin-top:10px;background:var(--teal-light);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--teal)">
           <i class="ti ti-calculator"></i> Fiche de calcul reçue : <strong>${d.nbLamesCalcule} lames${d.nbFagotsCalcule?` (${d.nbFagotsCalcule} fagots)`:''}</strong>${d.moteurLabelCalcule?` · Moteur : ${d.moteurLabelCalcule}`:''}${d.axeLabelCalcule?` · Axe : ${d.axeLabelCalcule}`:''}
@@ -4348,6 +4350,8 @@ const MEGAO_ACCESSOIRE_LABELS = {
   bouchons:                   'Bouchons',
   equerres_poutres_cornieres: 'Équerres / poutres / cornières',
   boucle_sangle:              'Boucle sangle',
+  escalier:                   'Escalier',
+  decoupe:                    'Découpe',
 };
 // Affiche/masque chaque champ "Accessoires" de la modale de création selon le type de volet
 // choisi — structure vide (rien choisi encore) = tout afficher, pas encore de filtre possible.

@@ -67,12 +67,21 @@ async function enrichirDossier(numcmdc, payload, nowAt) {
   // ne remplace PAS la déduction existante côté stock.js (BOUCHON_COULEUR_TABLE), qui reste le
   // repli quand Mégao ne précise rien de plus fin.
   const megaoBouchonCouleurs = payload.bouchonCouleurs || [];
+  // Nom client corrigé (lu directement dans CMDCLI.Nomfac côté VM) : uniquement appliqué si le
+  // nom ACTUELLEMENT enregistré est manifestement un placeholder d'enlèvement ("ENLEVEMENT",
+  // "ENLEVEMENT LE ..."), jamais pour écraser un nom déjà correct (ex. corrigé manuellement) —
+  // cf. audit réel 2026-07-22 : plusieurs dossiers avaient le nom du client remplacé par cette
+  // instruction plutôt que le vrai nom (disponible via Nomfac, le revendeur).
+  const clientCorrigeDisponible = payload.clientCorrige || '';
+  const clientActuelPlaceholder = /^enl[eè]vement\b/i.test(prev.client || '');
+  const applyClientFix = clientCorrigeDisponible && clientActuelPlaceholder;
 
   const inchange =
     JSON.stringify(prev.megaoAccessoires || {})       === JSON.stringify(megaoAccessoires) &&
     JSON.stringify(prev.megaoAccessoiresDetail || {}) === JSON.stringify(megaoAccessoiresDetail) &&
     JSON.stringify(prev.megaoNotes || [])              === JSON.stringify(megaoNotes) &&
-    JSON.stringify(prev.megaoBouchonCouleurs || [])    === JSON.stringify(megaoBouchonCouleurs);
+    JSON.stringify(prev.megaoBouchonCouleurs || [])    === JSON.stringify(megaoBouchonCouleurs) &&
+    !applyClientFix;
 
   if (inchange) {
     console.log(`  → dossier ${dosId} déjà à jour — rien à faire`);
@@ -80,9 +89,14 @@ async function enrichirDossier(numcmdc, payload, nowAt) {
   }
 
   const update = { megaoAccessoires, megaoAccessoiresDetail, megaoNotes, megaoBouchonCouleurs };
+  if (applyClientFix) {
+    update.client = clientCorrigeDisponible;
+    update.contact = clientCorrigeDisponible;
+    console.log(`  → nom client corrigé : "${prev.client}" → "${clientCorrigeDisponible}"`);
+  }
   update.history = [
     ...(prev.history || []),
-    { id: Date.now(), type: 'megao', action: 'Enrichissement Mégao (accessoires/notes)', detail: '', user: 'megao-enrich-sync', at: nowAt },
+    { id: Date.now(), type: 'megao', action: applyClientFix ? 'Enrichissement Mégao (accessoires/notes) + correction nom client' : 'Enrichissement Mégao (accessoires/notes)', detail: applyClientFix ? `"${prev.client}" → "${clientCorrigeDisponible}"` : '', user: 'megao-enrich-sync', at: nowAt },
   ];
   await docRef.update(update);
   console.log(`  ✓ dossier ${dosId} enrichi`);

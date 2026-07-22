@@ -84,6 +84,13 @@ ACCESSORY_PREFIXES = {
     'bouchons':                   ['ACVRBOUCH'],
     'equerres_poutres_cornieres': ['ACVREQUPOUTR', 'ACVREQUTELESC', 'ACVREQUROUL', 'ACVRPOUTR', 'ACVRCORN'],
     'boucle_sangle':              ['ACVRBOUCL'],
+    # Escalier/découpe : trouvés dans 42% des commandes volet réelles (audit 2026-07-22), jamais
+    # captés jusqu'ici — le parseur PDF (megao-sync.js) ne gardait que la première ligne "VR..."
+    # rencontrée, parfois un escalier/une découpe au lieu de la structure elle-même. Corrigé côté
+    # PDF (megao-sync.js), et capté ici en plus comme repli/recoupement (lecture directe de la
+    # base, plus fiable que le texte du PDF glissé par pdf-parse).
+    'escalier':                   ['VRES'],
+    'decoupe':                    ['VRDEC'],
 }
 
 
@@ -129,28 +136,43 @@ def parse_bouchon_couleur(codeart, design):
 
 # ─── Lecture CMDCLI.mkd (en-tete commande, pour la date) ─────────────────────
 
-def extract_cmdcli_dates(path, start_scan=50000):
+# Placeholder d'enlèvement vu en clair dans Nomliv sur des vraies commandes ("ENLEVEMENT",
+# "ENLEVEMENT LE 21 SEPTEMBRE 2026"...) — le vrai nom client est alors dans Nomfac (le
+# revendeur, ex. "SHELTOM"/"DERCYA SAS") plutôt qu'une instruction de retrait. Même logique que
+# le repli déjà en place côté PDF (megao-sync.js::parseMegaoText) — ici en repli/recoupement
+# direct depuis la base, confirmé sur des dossiers réels au moment de l'audit (2026-07-22).
+ENLEVEMENT_RE = re.compile(r'^enl[eè]vement\b', re.IGNORECASE)
+
+
+def extract_cmdcli_info(path, start_scan=50000):
     data = open(path, 'rb').read()
-    dates = {}
+    info = {}
     i = start_scan
     while True:
         i = data.find(MARKER, i)
         if i == -1:
             break
-        rec = data[i:i + 20]
-        if len(rec) < 14:
+        rec = data[i:i + 400]
+        if len(rec) < 367:
             i += 4
             continue
         numcmdc = struct.unpack_from('<i', rec, 4)[0]
         day, month = rec[9], rec[10]
         year = struct.unpack_from('<H', rec, 11)[0]
-        if 1000 <= numcmdc <= 999999 and 1 <= month <= 12 and 1 <= day <= 31 and 1990 <= year <= 2030:
-            try:
-                dates[numcmdc] = datetime(year, month, day)
-            except ValueError:
-                pass
+        if not (1000 <= numcmdc <= 999999 and 1 <= month <= 12 and 1 <= day <= 31 and 1990 <= year <= 2030):
+            i += 4
+            continue
+        try:
+            date = datetime(year, month, day)
+        except ValueError:
+            i += 4
+            continue
+        nomfac = rec[80:122].split(b'\x00')[0].decode('latin1', 'replace').strip()
+        nomliv = rec[323:365].split(b'\x00')[0].decode('latin1', 'replace').strip()
+        client_corrige = nomfac if (ENLEVEMENT_RE.match(nomliv) and nomfac) else None
+        info[numcmdc] = {'date': date, 'nomfac': nomfac, 'nomliv': nomliv, 'clientCorrige': client_corrige}
         i += 4
-    return dates
+    return info
 
 
 # ─── Lecture CMDCLIB.mkd (lignes produits + notes) ───────────────────────────
@@ -198,13 +220,17 @@ def dedupe_lines(lines):
 # ─── Construction du payload ──────────────────────────────────────────────────
 
 def build_payload(window_days):
-    dates = extract_cmdcli_dates(CMDCLI_PATH)
+    cmdcli = extract_cmdcli_info(CMDCLI_PATH)
     lines = dedupe_lines(extract_cmdclib_lines(CMDCLIB_PATH))
 
     cutoff = datetime.now() - timedelta(days=window_days)
-    recent_orders = {num for num, d in dates.items() if d >= cutoff}
+    recent_orders = {num for num, info in cmdcli.items() if info['date'] >= cutoff}
 
     orders = {}
+
+    def get_entry(num):
+        return orders.setdefault(str(num), {'accessoires': {}, 'notes': [], 'bouchonCouleurs': []})
+
     for l in lines:
         num = l['numcmdc']
         if num not in recent_orders:
@@ -213,7 +239,7 @@ def build_payload(window_days):
         is_note = (l['codeart'] == '' and l['design'])
         if not cat and not is_note:
             continue
-        entry = orders.setdefault(str(num), {'accessoires': {}, 'notes': [], 'bouchonCouleurs': []})
+        entry = get_entry(num)
         if cat:
             entry['accessoires'].setdefault(cat, []).append({
                 'codeart': l['codeart'], 'design': l['design'], 'qte': l['qte'],
@@ -224,6 +250,14 @@ def build_payload(window_days):
                     entry['bouchonCouleurs'].append(couleur)
         elif is_note:
             entry['notes'].append({'numligne': l['numligne'], 'texte': l['design']})
+
+    # Nom client corrigé (Nomfac quand Nomliv est un placeholder d'enlèvement) : rattaché même
+    # si la commande n'a par ailleurs aucun accessoire/note classé (get_entry crée l'entrée au
+    # besoin, sinon une commande "ENLEVEMENT" simple sans accessoire ne serait jamais corrigée).
+    for num in recent_orders:
+        corrige = cmdcli[num]['clientCorrige']
+        if corrige:
+            get_entry(num)['clientCorrige'] = corrige
 
     # Champ vide retire (pas de bruit dans le payload pour les commandes sans bouchon coloré)
     for entry in orders.values():
