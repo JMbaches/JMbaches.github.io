@@ -3157,7 +3157,11 @@ function renderPageCommande(d, p) { p = p || {};
 // fragiliser le chemin volet existant. Reprend le même squelette générique (header, dates/
 // transport, client, adresse, remarques, avance-bar, signature) et remplace uniquement la
 // section "Caractéristiques produit" par les champs bâches. Pas de section "Accessoires
-// (décompte stock)" : aucun module de décompte stock bâches (cf. isBacheDossier, stock.js).
+// (décompte stock)" affichée ici comme côté volet — le décompte stock bâche existe désormais
+// (stockDecompterAccessoiresBache, stock.js, 2026-07-22) mais tourne en tâche de fond à l'entrée
+// en production, pas d'UI dédiée de contrôle avant décompte (contrairement à la fiche de calcul
+// volet) : les accessoires détectés se voient dans les tags "Accessoires détectés (Mégao)" de la
+// fiche édition (index.html, section bâches) et dans l'historique du dossier après décompte.
 // Pas de "pose" pour les bâches (confirmé par l'utilisateur) : ni bouton transport "Liv+Pose"
 // (seulement Enlvt/Livraison), ni bouton "Envoyer au planning" dans l'avance-bar — le planning
 // de cette app ne concerne que la pose des poseurs, non applicable aux bâches.
@@ -3832,8 +3836,9 @@ async function changerStatutDossier(d, newStatut, logSuffix) {
   // "stock déduit dès que le dossier part en fabrication" = entrée dans "production", pas avant.
   // Interrupteur global (Stock → Références) : si désactivé, le dossier avance quand même
   // normalement, seul le décompte est sauté — sortie de stock à faire à la main en attendant.
-  if (newStatut === 'production' && prev !== 'production' && stockDecompteActif && !isBacheDossier(d)) {
-    await stockDecompterEntreeProduction(d);
+  if (newStatut === 'production' && prev !== 'production' && stockDecompteActif) {
+    if (isBacheDossier(d)) await stockDecompterEntreeProductionBache(d);
+    else await stockDecompterEntreeProduction(d);
     // ⚠ Pendant les awaits ci-dessus (jusqu'à ~17 transactions Firestore), chaque logHistory()
     // du décompte déclenche un saveData() dont l'écho onSnapshot RECONSTRUIT le tableau
     // `dossiers` avec de nouveaux objets : notre `d` est alors détaché du tableau, et le
@@ -3849,7 +3854,7 @@ async function changerStatutDossier(d, newStatut, logSuffix) {
        'stockFlasqueMuraleDecompteFait','stockMurDecompteFait','stockBarreRenfortDecompteFait',
        'stockCaillebotisDecompteFait','stockContreAxeDecompteFait','stockBouchonsDecompteFait',
        'stockFixationDecompteFait','stockEquerresRenfortDecompteFait','stockCorniere6060DecompteFait',
-       'stockPoutreDecompteFait','stockPoutreBruteDecompteFait']
+       'stockPoutreDecompteFait','stockPoutreBruteDecompteFait','stockBacheAccessoiresDecompteFait']
         .forEach(k => { if (d[k]) live[k] = d[k]; });
       d = live;
     }
@@ -4390,8 +4395,9 @@ function updateAccessoiresVisibility() {
 }
 // Bascule Volet/Bâche dans la modale de création — même principe que
 // updateAccessoiresVisibility() : classes CSS posées sur les sections, pas de
-// duplication de logique. Un dossier bâches n'a ni lames/moteur/axe (pas de
-// module de décompte stock bâches, cf. isBacheDossier) — voir stock.js.
+// duplication de logique. Un dossier bâches n'a ni lames/moteur/axe (produits
+// spécifiques volet, sans équivalent bâche) — le décompte stock accessoires bâche
+// (stockDecompterAccessoiresBache, stock.js) est séparé, câblé sur bacheAccessoiresDetail.
 function updateTypeDossierVisibility() {
   const type = document.getElementById('f-type-dossier')?.value || 'volet';
   document.querySelectorAll('.fg-volet-only').forEach(el => el.style.display = type==='volet' ? '' : 'none');

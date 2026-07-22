@@ -197,7 +197,14 @@ function parseMegaoText(text) {
 // exploitable (BA*, BU*, SE*, TRSP*, ENLEV*, ENR*, AC*, GESTECO*) : la coupure fiable est
 // la frontière MAJUSCULES-only (le code) → Majuscule+minuscule (début de la désignation en
 // Title Case), qui correspond exactement à l'espace supprimé par pdf-parse.
-const BACHE_LIGNE_RE = /^([A-Z][A-Z0-9\/\+]{1,15})([A-ZÀ-Þ][a-zà-ÿ][\s\S]*?)(?:M2|UN)/gm;
+// Groupe 3 : quantité juste après l'unité (UN|M2), même convention que le volet
+// (cf. lamQtyM plus haut : "ML\s+([\d,]+)") — pas vérifié sur un vrai PDF bâches
+// pour cette ligne précise, à confirmer si un dossier réel remonte un écart.
+// Groupe 3 (quantité) rendu OPTIONNEL exprès : s'il ne matche pas sur un vrai PDF (format
+// différent de ce qu'on suppose), la ligne reste quand même détectée comme avant — seul le
+// décompte stock (qui a besoin de la quantité) sera dégradé, pas la détection de structure/
+// options qui existait déjà et fonctionne en prod.
+const BACHE_LIGNE_RE = /^([A-Z][A-Z0-9\/\+]{1,15})([A-ZÀ-Þ][a-zà-ÿ][\s\S]*?)(?:M2|UN)(?:\s+([\d,]+))?/gm;
 
 function isBache(text) {
   return /^(BA[A-Z]|BU[A-Z0-9]|SEES|SEECH|TRSPBA|TRSPBU|TRSPHI|ENLEVBA)/m.test(text);
@@ -280,10 +287,11 @@ function parseMegaoBacheText(text) {
            || text.match(/Total\s+HT\s*\n\s*([\d][\d\s]*,\d{2})/i);
   const ht  = htM ? parseFloat(htM[1].replace(/\s/g, '').replace(',', '.')) : 0;
 
-  // Lignes produit : {code, design} pour chaque ligne détectée
+  // Lignes produit : {code, design, qte} pour chaque ligne détectée
   const lignes = [...text.matchAll(BACHE_LIGNE_RE)].map(m => ({
     code: m[1],
     design: m[2].replace(/\s*\n\s*/g, ' ').trim(),
+    qte: m[3] ? parseFloat(m[3].replace(',', '.')) : null,
   }));
 
   // Ligne "principale" = le produit bâche lui-même, pas un accessoire/transport.
@@ -336,6 +344,12 @@ function parseMegaoBacheText(text) {
   // Accessoires classés (voir BACHE_ACCESSORY_PREFIXES) — dédupliqués, affichés en plus du champ
   // "options" plutôt que noyés dedans en texte brut.
   const bacheAccessoires = [...new Set(lignes.map(l => classifyBacheAccessoire(l.code)).filter(Boolean))];
+  // Détail par ligne (code+qté), nécessaire au décompte stock auto (stock.js::
+  // stockDecompterAccessoiresBache) — bacheAccessoires seul (juste les catégories) ne suffit
+  // pas à savoir QUELLE réf précise décrémenter ni de COMBIEN.
+  const bacheAccessoiresDetail = lignes
+    .filter(l => classifyBacheAccessoire(l.code))
+    .map(l => ({ code: l.code, design: l.design, qte: l.qte, categorie: classifyBacheAccessoire(l.code) }));
   // Notes SAV/reprise (code générique "*T" ou ACNEGOCE) → remarques, pas "options" ni perdues.
   const bacheSavNotes = lignes.filter(l => BACHE_SAV_CODES.has(l.code)).map(l => l.design);
   const remarques = bacheSavNotes.join(' / ');
@@ -363,7 +377,7 @@ function parseMegaoBacheText(text) {
     type: 'bache',
     structure, bacheModele, bacheGamme,
     bacheDecoupeEscalier, bacheBarreCharge, bacheDecoupeAspi, bacheOeilletsSupp,
-    bacheEnrouleur, bacheTransportZone, bacheAccessoires, remarques,
+    bacheEnrouleur, bacheTransportZone, bacheAccessoires, bacheAccessoiresDetail, remarques,
     options,
     transport: isEnlevement ? 'enlvt' : 'livraison',
     isBache: isBache(text),
@@ -533,7 +547,7 @@ async function upsertDossierBache(data, pdfBuffer = null, pdfFilename = '') {
     const prev   = existing.data();
     const fields = ['client','tel','email','contact','adresse','cp','ville',
                     'structure','bacheModele','bacheGamme','bacheDecoupeEscalier','bacheBarreCharge',
-                    'bacheDecoupeAspi','bacheOeilletsSupp','bacheAccessoires','remarques',
+                    'bacheDecoupeAspi','bacheOeilletsSupp','bacheAccessoires','bacheAccessoiresDetail','remarques',
                     'bacheEnrouleur','bacheTransportZone','options','transport','revendeur','refCommande'];
     const update = {};
     for (const f of fields) {
@@ -575,6 +589,7 @@ async function upsertDossierBache(data, pdfBuffer = null, pdfFilename = '') {
       bacheDecoupeAspi:     data.bacheDecoupeAspi     || '',
       bacheOeilletsSupp:    data.bacheOeilletsSupp    || '',
       bacheAccessoires:     data.bacheAccessoires     || [],
+      bacheAccessoiresDetail: data.bacheAccessoiresDetail || [],
       bacheEnrouleur:       data.bacheEnrouleur       || '',
       bacheTransportZone:   data.bacheTransportZone   || '',
       options:     data.options    || '',

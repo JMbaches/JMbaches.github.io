@@ -821,6 +821,111 @@ async function stockDecompterEntreeProduction(d) {
   }
 }
 
+/* ================================================================
+   STOCK (accessoires bâches — importé depuis INVENTAIRE 2025.xlsx, 2026-07-22)
+   ================================================================ */
+
+// Code Mégao -> [categorie, label] réf stock exacte (mêmes 5 catégories que
+// BACHE_ACCESSORY_PREFIXES côté scripts/megao-sync.js, mêmes libellés que
+// scripts/import-bache-stock.js). Seulement les codes SANS AMBIGUÏTÉ (un code = une seule réf
+// stock) — voir BACHE_CODES_AMBIGUS juste en dessous pour ceux volontairement exclus.
+const BACHE_STOCK_REF_PAR_CODE = {
+  'ACBOUFEUIL':    ['bache_bulles', 'BOUDIN RAMASSE FEUILLE'],
+  'ACSANENR':      ['bache_bulles', 'SANDOWS ENROULEUR'],
+  'ACENRDEMUL':    ['bache_bulles', 'DEMULTIPLICATEUR'],
+  'ACBUSANGLET':   ['bache_bulles', 'SANGLETTES'],
+  'ACBUBACHET':    ['bache_bulles', 'ROULEAU DE BACHETTE'],
+  'ACBUROUL':      ['bache_bulles', 'BORDAGE PVC AMANDE / 8cm de large par 60 de long'],
+  'ACBABOUCH':     ['bache_securite', 'BOUCHONS DIAM 48'],
+  'ACRUPRELAIS':   ['bache_enrouleur', 'RELAIS'],
+  'ACRUPBOUT':     ['bache_enrouleur', 'BOUTONS'],
+  'ACRUPCHARG':    ['bache_enrouleur', 'CHARGEUR'],
+  'ACBAENR':       ['bache_securite', 'BARRES GALVA 5.00'],
+  'ACBACARR':      ['bache_enrouleur', 'CARRE ENROUL GALVA'],
+  'ACROINOX':      ['bache_securite', 'CROCHETS INOX HS'],
+  'ACROPLAST':     ['bache_securite', 'CROCHETS PLASTIQUES HS'],
+  'ACAB':          ['bache_securite', 'CABICLIC'],
+  'ACPITCROS':     ['bache_securite', 'PITONS CROSSES'],
+  'ACPITGAZ':      ['bache_securite', 'PITONS GAZON'],
+  'ACPLAQUET':     ['bache_securite', 'PLAQUETTES SECURITIS'],
+  'ACMANIV':       ['bache_securite', 'MANIVELLE MANUEL'],
+  'ACSANCROACIER': ['bache_securite', 'SANDOWS CROCHET ACIER'],
+  'ACSANVECO':     ['bache_securite', 'SANDOWS V'],
+  'ACSANGLUX':     ['bache_securite', 'SANGLES LUXE'],
+  'ACSANGD':       ['bache_securite', 'SANGLE D'],
+  'ACSANGRAP':     ['bache_securite', 'SANGLE DE RAPPEL'],
+  'ACSANGGAN':     ['bache_securite', 'SANGLE GANSE'],
+  'ACKITPAT':      ['bache_securite', 'PATINS'],
+  'ACBAVOL':       ['bache_securite', 'VOLANTS HS'],
+  'ACOL':          ['bache_securite', 'TUBE COLLE PVC'],
+  'ACBOUEAU':      ['bache_divers', "BOUDIN D'EAU"],
+  'CHHJO80501':    ['bache_entretien', 'KIT ETE'],
+  'CHHJO80503':    ['bache_entretien', 'KIT HIVER'],
+  'BROME':         ['bache_entretien', 'BROME PERMANENT'],
+  'CHEMOBROME':    ['bache_entretien', 'CHEMOBROME'],
+  'CHLORE':        ['bache_entretien', 'CHLORE MULTIFONCTION'],
+  'CLEARPOOL':     ['bache_entretien', 'CLEARPOOL 2'],
+  'CHHJKIT4.50':   ['bache_entretien', 'KIT SANS CHLORE'],
+};
+// Codes dont le préfixe correspond à PLUSIEURS réfs stock différentes (variante non distinguée
+// par le seul code dans les commandes, ex. ACPITESC = 14mm OU bois, ACSANGCLIQ = Sécu+ OU Barre,
+// ACBAALU = 6.90m OU 5.90m, DIACLOR = 3 produits distincts) — jamais décomptés automatiquement,
+// juste signalés comme "ambigu" (voir stockDecompterAccessoiresBache), pour éviter de
+// décrémenter la mauvaise réf silencieusement.
+const BACHE_CODES_AMBIGUS = new Set(['ACPITESC', 'ACSANGCLIQ', 'ACBAALU', 'DIACLOR']);
+
+// Décompte tous les accessoires détectés sur un dossier bâche (d.bacheAccessoiresDetail, posé
+// par parseMegaoBacheText côté megao-sync.js). Jamais bloquant (un code introuvable/ambigu
+// n'empêche pas les autres) — cohérent avec stockDecompterPiecesFixes côté volet.
+async function stockDecompterAccessoiresBache(d) {
+  if (d.stockBacheAccessoiresDecompteFait) return { ok:false, reason:'déjà décompté', resultats:[] };
+  const detail = d.bacheAccessoiresDetail || [];
+  if (!detail.length) return { ok:false, reason:'aucun accessoire détecté sur ce dossier', resultats:[] };
+  const resultats = [];
+  for (const l of detail) {
+    if (BACHE_CODES_AMBIGUS.has(l.code)) {
+      resultats.push({ ok:false, code:l.code, label:l.design, reason:'code ambigu (plusieurs réfs stock possibles) — décompte manuel requis' });
+      continue;
+    }
+    const mapping = BACHE_STOCK_REF_PAR_CODE[l.code];
+    if (!mapping) {
+      resultats.push({ ok:false, code:l.code, label:l.design, reason:'aucune réf stock connue pour ce code' });
+      continue;
+    }
+    const [categorie, label] = mapping;
+    const qte = (l.qte && l.qte > 0) ? l.qte : 1;
+    const res = await stockDecompteFixe(categorie, label, qte);
+    resultats.push({ ok: res.ok, code: l.code, label, qte, reason: res.reason });
+  }
+  return { ok:true, resultats };
+}
+
+// Point d'entrée unique du décompte auto de stock bâches — fonction sœur de
+// stockDecompterEntreeProduction (volet), appelée depuis changerStatutDossier (index.html)
+// uniquement pour les dossiers bâches (garde défensive inline en plus du check côté appelant,
+// même logique que la garde ci-dessus).
+async function stockDecompterEntreeProductionBache(d) {
+  if ((d.type||'volet')!=='bache') return;
+  const res = await stockDecompterAccessoiresBache(d);
+  if (!res.ok) {
+    if (res.reason !== 'déjà décompté' && res.reason !== 'aucun accessoire détecté sur ce dossier') {
+      showToast(`⚠ Décompte accessoires bâche impossible : ${res.reason}`);
+    }
+    return;
+  }
+  d.stockBacheAccessoiresDecompteFait = true;
+  const ok = res.resultats.filter(r => r.ok);
+  const echecs = res.resultats.filter(r => !r.ok);
+  if (ok.length) {
+    logHistory(d.id,'stock',`Accessoires bâche décomptés automatiquement : ${ok.map(r=>`${r.label} (x${r.qte})`).join(', ')}`);
+    showToast(`${ok.length} accessoire${ok.length>1?'s':''} décompté${ok.length>1?'s':''} du stock`);
+  }
+  if (echecs.length) {
+    logHistory(d.id,'stock',`Accessoires bâche non décomptés : ${echecs.map(r=>`${r.code} (${r.reason})`).join(', ')}`);
+    showToast(`⚠ ${echecs.length} accessoire${echecs.length>1?'s':''} non décompté${echecs.length>1?'s':''} (voir historique)`);
+  }
+}
+
 function stockFmtDate(ts) {
   if (!ts) return '—';
   const d = ts.toDate ? ts.toDate() : new Date(ts);
