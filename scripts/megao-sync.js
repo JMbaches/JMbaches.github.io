@@ -290,6 +290,13 @@ async function uploadPdfToStorage(pdfBuffer, dosId, originalFilename) {
   return { url, path, size: pdfBuffer.length };
 }
 
+// Empêche de ré-uploader/ré-attacher le même PDF plusieurs fois quand un dossier existant
+// est retraité (ex. plusieurs passages sur le même email avant sa suppression) — bug réel
+// observé en production (jusqu'à 5 copies du même bon de commande sur un même dossier).
+function hasSameDoc(existingDocuments, folder, filename) {
+  return (existingDocuments || []).some(d => d.folder === folder && d.name === filename);
+}
+
 function buildDocEntry(uploaded, filename, nowAt) {
   return {
     id:         `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -338,7 +345,7 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
       if (data[f]) update[f] = data[f];
     }
     if (data.ht > 0 && !prev.ht) update.ht = data.ht;
-    if (pdfBuffer && pdfFilename) {
+    if (pdfBuffer && pdfFilename && !hasSameDoc(prev.documents, 'Bon de commande', pdfFilename)) {
       const uploaded = await uploadPdfToStorage(pdfBuffer, dosId, pdfFilename);
       update.documents  = admin.firestore.FieldValue.arrayUnion(buildDocEntry(uploaded, pdfFilename, nowAt));
       update.docFolders = admin.firestore.FieldValue.arrayUnion(...PD_DEFAULT_FOLDERS);
@@ -433,7 +440,7 @@ async function upsertDossierBache(data, pdfBuffer = null, pdfFilename = '') {
       if (data[f]) update[f] = data[f];
     }
     if (data.ht > 0 && !prev.ht) update.ht = data.ht;
-    if (pdfBuffer && pdfFilename) {
+    if (pdfBuffer && pdfFilename && !hasSameDoc(prev.documents, 'Bon de commande', pdfFilename)) {
       const uploaded = await uploadPdfToStorage(pdfBuffer, dosId, pdfFilename);
       update.documents  = admin.firestore.FieldValue.arrayUnion(buildDocEntry(uploaded, pdfFilename, nowAt));
       update.docFolders = admin.firestore.FieldValue.arrayUnion(...PD_DEFAULT_FOLDERS);
@@ -511,28 +518,32 @@ async function upsertDercyaPair(dercyaItem, poseItem) {
   const existingSnap = await pairDocRef.get();
   const existingDoc  = existingSnap.exists ? { id: dosId, ref: pairDocRef, data: () => existingSnap.data() } : null;
 
-  // Upload les 2 PDFs
+  // Upload les 2 PDFs (sauf si déjà attachés — évite les doublons en cas de retraitement)
+  const existingDocuments = existingSnap.exists ? existingSnap.data().documents : null;
   const docs = [];
   for (const { buf, name } of [
     { buf: dercyaItem.pdfBuffer, name: dercyaItem.pdfFilename },
     { buf: poseItem.pdfBuffer,   name: poseItem.pdfFilename   },
   ]) {
-    if (buf) docs.push(buildDocEntry(await uploadPdfToStorage(buf, dosId, name), name, nowAt));
+    if (buf && !hasSameDoc(existingDocuments, 'Bon de commande', name)) {
+      docs.push(buildDocEntry(await uploadPdfToStorage(buf, dosId, name), name, nowAt));
+    }
   }
 
   if (existingDoc) {
     const prev = existingDoc.data();
-    await pairDocRef.update({
-      transport: 'liv_pose', needPose: true,
-      documents:  admin.firestore.FieldValue.arrayUnion(...docs),
-      docFolders: admin.firestore.FieldValue.arrayUnion(...PD_DEFAULT_FOLDERS),
-      history: [...(prev.history || []), {
-        id: Date.now(), type: 'megao',
-        action: 'Fusionné paire Dercya → liv+pose',
-        detail: `${dercyaItem.data.ref} + ${poseItem.data.ref}`,
-        user: 'megao-sync', at: nowAt,
-      }],
-    });
+    const update = { transport: 'liv_pose', needPose: true };
+    if (docs.length > 0) {
+      update.documents  = admin.firestore.FieldValue.arrayUnion(...docs);
+      update.docFolders = admin.firestore.FieldValue.arrayUnion(...PD_DEFAULT_FOLDERS);
+    }
+    update.history = [...(prev.history || []), {
+      id: Date.now(), type: 'megao',
+      action: 'Fusionné paire Dercya → liv+pose',
+      detail: `${dercyaItem.data.ref} + ${poseItem.data.ref}`,
+      user: 'megao-sync', at: nowAt,
+    }];
+    await pairDocRef.update(update);
     console.log(`✓ Paire Dercya mise à jour : ${dosId}`);
   } else {
     await pairDocRef.set({
@@ -683,7 +694,7 @@ async function main() {
                           + ' à ' + nowDate.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
             const prev    = snap.docs[0].data();
             const update  = { transport: 'liv_pose', needPose: true };
-            if (pdfBuffer) {
+            if (pdfBuffer && !hasSameDoc(prev.documents, 'Bon de commande', pdfFilename)) {
               const up = await uploadPdfToStorage(pdfBuffer, snap.docs[0].id, pdfFilename);
               update.documents  = admin.firestore.FieldValue.arrayUnion(buildDocEntry(up, pdfFilename, nowAt));
               update.docFolders = admin.firestore.FieldValue.arrayUnion(...PD_DEFAULT_FOLDERS);
