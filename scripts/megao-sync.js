@@ -6,6 +6,11 @@ const { simpleParser } = require('mailparser');
 const pdfParse         = require('pdf-parse');
 const admin            = require('firebase-admin');
 const { randomUUID }   = require('crypto');
+// Classification code→famille (BA/BU/HI), extraite de la table ARTICLE.mkd de Mégao
+// (catalogue produit officiel — voir mémoire projet pour la méthode de décodage). Volontairement
+// réduite à la classification seule (pas de désignation ni de prix, données catalogue internes,
+// repo public) : sert uniquement à fiabiliser bacheGamme au-delà de l'heuristique par préfixe.
+const MEGAO_BACHE_FAMILLES = require('./megao-bache-familles.json');
 
 // ─── Firebase ────────────────────────────────────────────────────────────────
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -149,6 +154,126 @@ function parseMegaoText(text) {
   };
 }
 
+// ─── Parser PDF Mégao — bâches (barres/bulles/Sécuritis) ─────────────────────
+// Même mise en page Mégao que les volets (en-tête/client/revendeur/date/HT identiques,
+// cf. parseMegaoText ci-dessus) — seule la partie "lignes produit" change.
+// Découverte sur 10 vrais bons de commande : le code produit et sa désignation sont
+// collés sans espace par pdf-parse (ex. "BACLASécu Classic SableM2"). Contrairement aux
+// codes volet (préfixes fixes VR.../LAM...), les codes bâches n'ont pas de préfixe unique
+// exploitable (BA*, BU*, SE*, TRSP*, ENLEV*, ENR*, AC*, GESTECO*) : la coupure fiable est
+// la frontière MAJUSCULES-only (le code) → Majuscule+minuscule (début de la désignation en
+// Title Case), qui correspond exactement à l'espace supprimé par pdf-parse.
+const BACHE_LIGNE_RE = /^([A-Z][A-Z0-9\/\+]{1,15})([A-ZÀ-Þ][a-zà-ÿ][\s\S]*?)(?:M2|UN)/gm;
+
+function isBache(text) {
+  return /^(BA[A-Z]|BU[A-Z0-9]|SEES|SEECH|TRSPBA|TRSPBU|TRSPHI|ENLEVBA)/m.test(text);
+}
+
+function parseMegaoBacheText(text) {
+  // En-tête / client / revendeur / date / HT : identique à parseMegaoText (même mise en
+  // page Mégao) — dupliqué ici plutôt que factorisé pour ne pas fragiliser le chemin volet
+  // existant (cf. convention "fonction sœur" déjà utilisée pour renderPageCommandeBache).
+  const refM = text.match(/COMMANDE\s+N[°º]\s*([A-Z0-9\-\/]+)/i);
+  const ref  = refM ? refM[1].trim() : '';
+
+  const revBlockM = text.match(/Date\s*:[^\n]*\n([\s\S]*?)COMMANDE\s+N[°º]/i);
+  let revendeur = '';
+  if (revBlockM) {
+    const revLines = revBlockM[1].split('\n').map(l => l.trim()).filter(Boolean);
+    revendeur = revLines.find(l => /^[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜ][A-ZÀÂÄÉÈÊËÎÏÔÙÛÜ\s\-&\.]+$/.test(l) && !/^\d+$/.test(l)) || '';
+  }
+
+  const dateM    = text.match(/Date\s*:\s*(?:[^\d\n]{0,30}\n\s*)?(\d{2})\/(\d{2})\/(\d{4})/i);
+  const dateFrom = dateM ? `${dateM[3]}-${dateM[2]}-${dateM[1]}` : '';
+
+  const telM   = text.match(/T[eé]l\s*:\s*([\d\s.\-\/]+?)(?=\s*\n)/im);
+  const tel    = telM ? telM[1].replace(/\s*\/\s*$/, '').trim() : '';
+  const emailM = text.match(/E-?mail\s*:\s*([\w.+\-]+@[\w.\-]+\.[a-z]{2,})/i)
+              || text.match(/([\w.+\-]+@[\w.\-]+\.[a-z]{2,})/i);
+  const email  = emailM ? emailM[1].trim() : '';
+
+  let client = '', contact = '', adresse = '', cp = '', ville = '';
+  if (refM) {
+    const afterRef = text.slice(refM.index + refM[0].length);
+    for (const l of afterRef.split('\n').map(s => s.trim()).filter(Boolean)) {
+      if (/^(page\s*:|code\s*client|repr[eé]sentant|r[eé]f[eé]rences|d[eé]lai|t[eé]l|e-?mail|contact\b|d[eé]signation|bulles)/i.test(l)) break;
+      if (/^france$/i.test(l)) continue;
+      const cpVm = l.match(/^(\d{5})\s+([A-ZÀ-Ÿ][^\n]+)/);
+      if (cpVm) { cp = cpVm[1]; ville = cpVm[2].trim(); continue; }
+      if (!client)  { client = l; contact = l; continue; }
+      if (!adresse) { adresse = l; continue; }
+    }
+  }
+  // Cas "enlèvement" (vu sur commande 120791 réelle) : le bloc client n'est pas un nom mais
+  // une instruction ("ENLEVEMENT" / "PREVENIR ..."), le vrai client apparaît dans le bloc
+  // revendeur à la place. Repli sur revendeur plutôt que de garder un nom manifestement faux.
+  if (/^enl[eè]vement$/i.test(client) && revendeur) { client = revendeur; contact = revendeur; }
+
+  const htM = text.match(/Net\s+HT\s*\n\s*([\d][\d\s]*,\d{2})/i)
+           || text.match(/Total\s+HT\s*\n\s*([\d][\d\s]*,\d{2})/i);
+  const ht  = htM ? parseFloat(htM[1].replace(/\s/g, '').replace(',', '.')) : 0;
+
+  // Lignes produit : {code, design} pour chaque ligne détectée
+  const lignes = [...text.matchAll(BACHE_LIGNE_RE)].map(m => ({
+    code: m[1],
+    design: m[2].replace(/\s*\n\s*/g, ' ').trim(),
+  }));
+
+  // Ligne "principale" = le produit bâche lui-même, pas un accessoire/transport.
+  // SEES (escalier standard Sécuritis) exclu explicitement : commence comme SE/SEEC mais
+  // c'est un accessoire, pas le produit (vu sur la commande 120892 réelle, les deux
+  // apparaissent dans le même bon de commande).
+  const mainLigne = lignes.find(l => /^(BA|BU)/.test(l.code) || l.code === 'SE' || /^SEEC/.test(l.code)) || null;
+  const structure = mainLigne ? mainLigne.design : '';
+  const bacheModele = mainLigne ? mainLigne.code : '';
+  // Gamme déduite en priorité du catalogue officiel Mégao (ARTICLE.mkd, code→famille
+  // BA/BU/HI — voir megao-bache-familles.json et la mémoire projet pour la méthode de
+  // décodage), repli sur une heuristique de préfixe si le code n'y figure pas (ex. variante
+  // pas encore au catalogue, commande multi-produits). "HIVER" (bâche dite "Sécuritis") est
+  // une 3e famille Mégao officielle, confirmée via FAMART.mkd — l'app ne modélise aujourd'hui
+  // que Barres/Bulles pour bacheGamme, donc "Hiver" y est stocké tel quel (donnée honnête,
+  // n'importe quelle valeur hors Barres/Bulles affiche déjà les deux jeux de champs sans
+  // erreur côté fiche — décision produit actée avec l'utilisateur de ne pas retoucher la
+  // modale pour l'instant).
+  const FAMILLE_GAMME = { BA: 'Barres', BU: 'Bulles', HI: 'Hiver' };
+  const bacheGamme = mainLigne
+    ? (FAMILLE_GAMME[MEGAO_BACHE_FAMILLES[mainLigne.code]]
+       || (/^BA/.test(mainLigne.code) ? 'Barres' : /^BU/.test(mainLigne.code) ? 'Bulles' : ''))
+    : '';
+
+  const bacheDecoupeEscalier = lignes.some(l => l.code === 'ACESBAR' || l.code === 'SEES') ? 'Standard' : '';
+  const bacheBarreCharge     = lignes.some(l => l.code === 'ACBACHAR') ? 'Oui' : '';
+  const enrouleurLigne       = lignes.find(l => /^ENR/.test(l.code));
+  const bacheEnrouleur       = enrouleurLigne ? enrouleurLigne.code : '';
+
+  const transportLigne = lignes.find(l => /^TRSP/.test(l.code));
+  const bacheTransportZone = transportLigne
+    ? transportLigne.design.replace(/^Transport[^-]*-\s*/i, '').trim()
+    : '';
+  const isEnlevement = lignes.some(l => /^ENLEV/.test(l.code));
+
+  // Lignes ni principale, ni transport/enlèvement, ni catégorisées dans un champ dédié
+  // (remises, kits, gestes commerciaux…) → conservées en texte libre dans "options" plutôt
+  // que devinées, faute d'exemples suffisants pour mapper chaque code avec certitude.
+  const autresLignes = lignes.filter(l =>
+    l !== mainLigne &&
+    !/^TRSP/.test(l.code) && !/^ENLEV/.test(l.code) &&
+    l.code !== 'ACESBAR' && l.code !== 'SEES' && l.code !== 'ACBACHAR' && !/^ENR/.test(l.code)
+  );
+  const options = autresLignes.map(l => l.design).join(' — ');
+
+  return {
+    ref, refCommande: ref, client, contact, tel, email, adresse, cp, ville, revendeur,
+    dateFrom, ht,
+    type: 'bache',
+    structure, bacheModele, bacheGamme,
+    bacheDecoupeEscalier, bacheBarreCharge, bacheEnrouleur, bacheTransportZone,
+    options,
+    transport: isEnlevement ? 'enlvt' : 'livraison',
+    isBache: isBache(text),
+  };
+}
+
 // ─── Upload PDF vers Firebase Storage ────────────────────────────────────────
 async function uploadPdfToStorage(pdfBuffer, dosId, originalFilename) {
   const ts       = Date.now();
@@ -276,6 +401,101 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
   }
 }
 
+// Doit rester aligné avec VERIF_ROWS_BACHE dans index.html (dupliqué ici — script Node
+// séparé, pas de module partagé avec le front).
+const VERIF_ROWS_BACHE = ['Dimensions bâche conformes bassin','Coloris conforme commande','Découpes (aspi/escalier) conformes','Enrouleur conforme','Œillets/finitions','Contrôle qualité soudures','Emballage complet'];
+
+// ─── Créer ou mettre à jour le dossier — bâches ──────────────────────────────
+// Fonction sœur de upsertDossier plutôt que branches conditionnelles dedans : champs et
+// page "verif" par défaut différents, et pas de logique liv_pose/needPose (jamais de pose
+// sur une bâche, cf. index.html isBacheDossier).
+async function upsertDossierBache(data, pdfBuffer = null, pdfFilename = '') {
+  if (!data.ref) { console.warn('Ref absente — dossier ignoré'); return; }
+
+  const nowDate  = new Date();
+  const now      = nowDate.toISOString();
+  const today    = now.split('T')[0];
+  const nowAt    = nowDate.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})
+                 + ' à ' + nowDate.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+
+  const dosId    = refToId(data.ref);
+  const docRef   = db.collection('dossiers').doc(dosId);
+  const existing = await docRef.get();
+
+  if (existing.exists) {
+    const doc    = { id: dosId, ref: docRef };
+    const prev   = existing.data();
+    const fields = ['client','tel','email','contact','adresse','cp','ville',
+                    'structure','bacheModele','bacheGamme','bacheDecoupeEscalier','bacheBarreCharge',
+                    'bacheEnrouleur','bacheTransportZone','options','transport','revendeur','refCommande'];
+    const update = {};
+    for (const f of fields) {
+      if (data[f]) update[f] = data[f];
+    }
+    if (data.ht > 0 && !prev.ht) update.ht = data.ht;
+    if (pdfBuffer && pdfFilename) {
+      const uploaded = await uploadPdfToStorage(pdfBuffer, dosId, pdfFilename);
+      update.documents  = admin.firestore.FieldValue.arrayUnion(buildDocEntry(uploaded, pdfFilename, nowAt));
+      update.docFolders = admin.firestore.FieldValue.arrayUnion(...PD_DEFAULT_FOLDERS);
+    }
+    update.history = [
+      ...(prev.history || []),
+      { id: Date.now(), type: 'megao', action: 'Mis à jour depuis Mégao', detail: '', user: 'megao-sync', at: nowAt }
+    ];
+    await docRef.update(update);
+    console.log(`✓ Mis à jour (bâche) : ${dosId} (ref: ${data.ref})`);
+  } else {
+    let initialDocs = [];
+    if (pdfBuffer && pdfFilename) {
+      const uploaded = await uploadPdfToStorage(pdfBuffer, dosId, pdfFilename);
+      initialDocs = [buildDocEntry(uploaded, pdfFilename, nowAt)];
+    }
+    await docRef.set({
+      type:        'bache',
+      client:      data.client     || '',
+      tel:         data.tel        || '',
+      email:       data.email      || '',
+      contact:     data.contact    || '',
+      adresse:     data.adresse    || '',
+      cp:          data.cp         || '',
+      ville:       data.ville      || '',
+      contraintes: '',
+      structure:   data.structure  || '',
+      bacheModele:          data.bacheModele          || '',
+      bacheGamme:           data.bacheGamme           || '',
+      bacheDecoupeEscalier: data.bacheDecoupeEscalier || '',
+      bacheBarreCharge:     data.bacheBarreCharge     || '',
+      bacheEnrouleur:       data.bacheEnrouleur       || '',
+      bacheTransportZone:   data.bacheTransportZone   || '',
+      options:     data.options    || '',
+      ht:          data.ht         || 0,
+      tva:         20,
+      ref:          data.ref,
+      refCommande:  data.ref,
+      devisStatut: 'accepte',
+      dateFrom:      data.dateFrom   || today,
+      dateTo:        '',
+      dateLivraison: data.dateFrom   || today,
+      transport:   data.transport  || 'livraison',
+      remarques:   '',
+      autres:      '',
+      revendeur:   data.revendeur  || '',
+      needPose:    false,
+      poseDate:    '',
+      statut:      'admin',
+      createdBy:   'megao-sync',
+      pages: [
+        { type: 'commande', label: 'Fiche commande', checks: {} },
+        { type: 'verif', label: 'Vérification atelier', checks: {}, rows: [...VERIF_ROWS_BACHE] }
+      ],
+      documents:   initialDocs,
+      docFolders:  PD_DEFAULT_FOLDERS,
+      history:     [{ id: Date.now(), type: 'création', action: 'Créé automatiquement depuis Mégao', detail: '', user: 'megao-sync', at: nowAt }]
+    });
+    console.log(`✓ Créé (bâche) : ${dosId} (ref: ${data.ref}, client: ${data.client})`);
+  }
+}
+
 // ─── Fusion paire Dercya (1 BDC livraison + 1 BDC pose → 1 dossier liv_pose) ──
 async function upsertDercyaPair(dercyaItem, poseItem) {
   const nowDate = new Date();
@@ -361,8 +581,9 @@ async function main() {
     console.log(`${uids.length} email(s) non lu(s) trouvé(s)`);
 
     // ── Phase 1 : parser tous les PDFs ────────────────────────────────────────
-    const items   = [];  // { uid, data, pdfBuffer, pdfFilename }
-    const skipUids = []; // emails sans PDF ou sans volet → marquer lu seulement
+    const items      = [];  // { uid, data, pdfBuffer, pdfFilename } — volets
+    const bacheItems = [];  // { uid, data, pdfBuffer, pdfFilename } — bâches
+    const skipUids   = []; // emails sans PDF ni commande reconnue → marquer lu seulement
 
     for (const uid of uids) {
       const msg    = await imap.fetchOne(uid, { source: true }, { uid: true });
@@ -384,18 +605,32 @@ async function main() {
       const data    = parseMegaoText(pdfData.text);
       console.log(`Ref: ${data.ref || '(non trouvée)'} | Client: ${data.client || '(non trouvé)'} | Revendeur: ${data.revendeur || '—'} | Volet: ${data.isVolet}`);
 
-      if (!data.isVolet) {
-        console.log(`→ Pas un volet — email ignoré`);
-        skipUids.push(uid);
+      if (data.isVolet) {
+        items.push({ uid, data, pdfBuffer: pdfAtt.content, pdfFilename: pdfAtt.filename || 'bon-de-commande.pdf' });
         continue;
       }
 
-      items.push({ uid, data, pdfBuffer: pdfAtt.content, pdfFilename: pdfAtt.filename || 'bon-de-commande.pdf' });
+      const bData = parseMegaoBacheText(pdfData.text);
+      if (bData.isBache) {
+        console.log(`→ Bâche détectée : ${bData.bacheModele || '(modèle non identifié)'} (${bData.bacheGamme || 'gamme inconnue'})`);
+        bacheItems.push({ uid, data: bData, pdfBuffer: pdfAtt.content, pdfFilename: pdfAtt.filename || 'bon-de-commande.pdf' });
+        continue;
+      }
+
+      console.log(`→ Ni volet ni bâche reconnue — email ignoré`);
+      skipUids.push(uid);
     }
 
-    // Marquer lu les emails sans volet
+    // Marquer lu les emails sans commande reconnue
     for (const uid of skipUids) {
       await imap.messageFlagsAdd([uid], ['\\Seen'], { uid: true });
+    }
+
+    // ── Phase bâches : upsert direct (pas de logique de paire Dercya/pose) ────
+    for (const { uid, data, pdfBuffer, pdfFilename } of bacheItems) {
+      await upsertDossierBache(data, pdfBuffer, pdfFilename);
+      await imap.messageDelete([uid], { uid: true });
+      console.log(`Email supprimé`);
     }
 
     // ── Phase 2 : détecter les paires Dercya dans ce batch ───────────────────
