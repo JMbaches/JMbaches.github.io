@@ -3236,6 +3236,7 @@ function renderPageCommandeBache(d, p) { p = p || {};
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Enrouleur</div><input value="${d.bacheEnrouleur||''}" onchange="setDosField('bacheEnrouleur',this.value)" placeholder="ex: RUPCDE, ENRHS..."></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Zone de transport</div><input value="${d.bacheTransportZone||''}" onchange="setDosField('bacheTransportZone',this.value)" placeholder="ex: France, Corse, Italie..."></div>
           <div style="grid-column:span 2"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Options</div><input value="${d.options||''}" onchange="setDosField('options',this.value)"></div>
+          ${d.bacheAccessoires?.length ? `<div style="grid-column:span 3"><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Accessoires détectés (Mégao)</div><div style="display:flex;flex-wrap:wrap;gap:6px">${d.bacheAccessoires.map(c=>`<span style="background:var(--accent-light);color:var(--accent-deep);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500">${escapeHtml(c)}</span>`).join('')}</div></div>` : ''}
         </div>
       </div>
     </div>

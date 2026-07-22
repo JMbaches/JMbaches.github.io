@@ -203,6 +203,33 @@ function isBache(text) {
   return /^(BA[A-Z]|BU[A-Z0-9]|SEES|SEECH|TRSPBA|TRSPBU|TRSPHI|ENLEVBA)/m.test(text);
 }
 
+// Catégories d'accessoires bâches confirmées par audit réel sur 63 735 commandes CMDCLIB
+// (2026-07-22, voir mémoire de session) : jusqu'ici, toute ligne non reconnue finissait telle
+// quelle (texte brut) dans le champ "options" — ce qui noyait des accessoires réels et
+// fréquents (pitons, cliquets, sandows d'enrouleur...) dans du texte non classé. Prefixes
+// vérifiés sur les vraies désignations Mégao, pas devinés.
+const BACHE_ACCESSORY_PREFIXES = {
+  'Pitons':                 ['ACPITBOIS', 'ACPITESC', 'ACPITGAZ'],
+  'Fixation':               ['ACCLIQINOX', 'ACKITPAT', 'ACKITSOUT'],
+  'Enrouleur (accessoire)': ['ACSANENR', 'ACBACARR', 'ACENRDEMUL', 'ACMANIV'],
+  'Protection':             ['ACANTIABRA', 'ACBOUFEUIL'],
+  'Entretien':              ['CHHJ', 'CHGAPPTRAIT'],
+  'Bulles (spécifique)':    ['ACBUBAV', 'ACBUROUL', 'ACBUSANGLET', 'ACBUBACHET'],
+};
+function classifyBacheAccessoire(code) {
+  for (const [label, prefixes] of Object.entries(BACHE_ACCESSORY_PREFIXES)) {
+    if (prefixes.some(p => code.startsWith(p))) return label;
+  }
+  return null;
+}
+// Financier/logistique — jamais des accessoires produit, retirés du texte libre "options"
+// (confirmé par le même audit) plutôt que mélangés à la fabrication.
+const BACHE_IGNORE_EXACT = new Set(['FRANCO', 'CR', 'NBDEVIS']);
+// SAV/reprise (texte libre sur un code générique "*T", ou ACNEGOCE) — vraie info utile pour
+// l'atelier, mais pas un accessoire produit : routé vers "remarques" plutôt que jeté ou noyé
+// dans "options".
+const BACHE_SAV_CODES = new Set(['*T', 'ACNEGOCE']);
+
 function parseMegaoBacheText(text) {
   // En-tête / client / revendeur / date / HT : identique à parseMegaoText (même mise en
   // page Mégao) — dupliqué ici plutôt que factorisé pour ne pas fragiliser le chemin volet
@@ -275,9 +302,23 @@ function parseMegaoBacheText(text) {
        || (/^BA/.test(mainLigne.code) ? 'Barres' : /^BU/.test(mainLigne.code) ? 'Bulles' : ''))
     : '';
 
-  const bacheDecoupeEscalier = lignes.some(l => l.code === 'ACESBAR' || l.code === 'SEES') ? 'Standard' : '';
+  // Escalier standard : ACESBAR (Barres/Bulles) + HIES (Hiver, même famille jamais captée
+  // avant — trouvée dans l'audit CMDCLIB réel). HIESHS (hors-standard) prioritaire si présent.
+  const hasEscalierStandard    = lignes.some(l => l.code === 'ACESBAR' || l.code === 'SEES' || l.code === 'HIES');
+  const hasEscalierHorsStandard = lignes.some(l => l.code === 'HIESHS');
+  const bacheDecoupeEscalier = hasEscalierHorsStandard ? 'Hors-standard' : (hasEscalierStandard ? 'Standard' : '');
   const bacheBarreCharge     = lignes.some(l => l.code === 'ACBACHAR') ? 'Oui' : '';
-  const enrouleurLigne       = lignes.find(l => /^ENR/.test(l.code));
+  // Découpe aspiration/échelle : champ existant côté UI (f-bacheDecoupeAspi), jamais alimenté
+  // par ce parseur jusqu'ici — ACDECASPI (Barres/Bulles) / HIDECASPI (Hiver).
+  const bacheDecoupeAspi = lignes.some(l => l.code === 'ACDECASPI' || l.code === 'HIDECASPI') ? 'Oui' : '';
+  // Œillets supplémentaires (bulles) : champ existant côté UI (f-bacheOeilletsSupp), jamais
+  // alimenté non plus — ACOEILPLAST/ACOEILMETAL/ACKITEMPOEIL vus dans l'audit réel.
+  const OEILLETS_CODES = ['ACOEILPLAST', 'ACOEILMETAL', 'ACKITEMPOEIL'];
+  const bacheOeilletsSupp = lignes.some(l => OEILLETS_CODES.includes(l.code)) ? 'Oui' : '';
+  // Enrouleur : le vrai code produit est "RUP*" (Rolling-Up), PAS "ENR*" comme supposé jusqu'ici
+  // (confirmé par audit réel : RUPCDE/RUPMANIV totalisent >1000 lignes jamais reconnues — le
+  // placeholder UI "ex: RUPCDE, ENRHS..." le savait déjà, juste jamais câblé côté parseur).
+  const enrouleurLigne       = lignes.find(l => /^(ENR|RUP)/.test(l.code));
   const bacheEnrouleur       = enrouleurLigne ? enrouleurLigne.code : '';
 
   const transportLigne = lignes.find(l => /^TRSP/.test(l.code));
@@ -286,22 +327,37 @@ function parseMegaoBacheText(text) {
     : '';
   const isEnlevement = lignes.some(l => /^ENLEV/.test(l.code));
 
-  // Lignes ni principale, ni transport/enlèvement, ni catégorisées dans un champ dédié
-  // (remises, kits, gestes commerciaux…) → conservées en texte libre dans "options" plutôt
-  // que devinées, faute d'exemples suffisants pour mapper chaque code avec certitude.
+  // Accessoires classés (voir BACHE_ACCESSORY_PREFIXES) — dédupliqués, affichés en plus du champ
+  // "options" plutôt que noyés dedans en texte brut.
+  const bacheAccessoires = [...new Set(lignes.map(l => classifyBacheAccessoire(l.code)).filter(Boolean))];
+  // Notes SAV/reprise (code générique "*T" ou ACNEGOCE) → remarques, pas "options" ni perdues.
+  const bacheSavNotes = lignes.filter(l => BACHE_SAV_CODES.has(l.code)).map(l => l.design);
+  const remarques = bacheSavNotes.join(' / ');
+
+  // Lignes ni principale, ni transport/enlèvement/enrouleur, ni catégorisées dans un champ
+  // dédié ou une catégorie d'accessoire connue, ni financier/logistique (FRANCO, contre-
+  // remboursement, geste commercial, disclaimer devis) ni SAV (routé vers remarques ci-dessus)
+  // → conservées en texte libre, seul filet de sécurité pour un code vraiment inconnu.
   const autresLignes = lignes.filter(l =>
     l !== mainLigne &&
-    !/^TRSP/.test(l.code) && !/^ENLEV/.test(l.code) &&
-    l.code !== 'ACESBAR' && l.code !== 'SEES' && l.code !== 'ACBACHAR' && !/^ENR/.test(l.code)
+    !/^TRSP/.test(l.code) && !/^ENLEV/.test(l.code) && !/^(ENR|RUP)/.test(l.code) &&
+    l.code !== 'ACESBAR' && l.code !== 'SEES' && l.code !== 'HIES' && l.code !== 'HIESHS' &&
+    l.code !== 'ACBACHAR' &&
+    l.code !== 'ACDECASPI' && l.code !== 'HIDECASPI' &&
+    !OEILLETS_CODES.includes(l.code) &&
+    !classifyBacheAccessoire(l.code) &&
+    !BACHE_IGNORE_EXACT.has(l.code) && !/^GESTECO/.test(l.code) &&
+    !BACHE_SAV_CODES.has(l.code)
   );
-  const options = autresLignes.map(l => l.design).join(' — ');
+  const options = [...bacheAccessoires, ...autresLignes.map(l => l.design)].join(' — ');
 
   return {
     ref, refCommande: ref, client, contact, tel, email, adresse, cp, ville, revendeur,
     dateFrom, ht,
     type: 'bache',
     structure, bacheModele, bacheGamme,
-    bacheDecoupeEscalier, bacheBarreCharge, bacheEnrouleur, bacheTransportZone,
+    bacheDecoupeEscalier, bacheBarreCharge, bacheDecoupeAspi, bacheOeilletsSupp,
+    bacheEnrouleur, bacheTransportZone, bacheAccessoires, remarques,
     options,
     transport: isEnlevement ? 'enlvt' : 'livraison',
     isBache: isBache(text),
@@ -471,6 +527,7 @@ async function upsertDossierBache(data, pdfBuffer = null, pdfFilename = '') {
     const prev   = existing.data();
     const fields = ['client','tel','email','contact','adresse','cp','ville',
                     'structure','bacheModele','bacheGamme','bacheDecoupeEscalier','bacheBarreCharge',
+                    'bacheDecoupeAspi','bacheOeilletsSupp','bacheAccessoires','remarques',
                     'bacheEnrouleur','bacheTransportZone','options','transport','revendeur','refCommande'];
     const update = {};
     for (const f of fields) {
@@ -509,6 +566,9 @@ async function upsertDossierBache(data, pdfBuffer = null, pdfFilename = '') {
       bacheGamme:           data.bacheGamme           || '',
       bacheDecoupeEscalier: data.bacheDecoupeEscalier || '',
       bacheBarreCharge:     data.bacheBarreCharge     || '',
+      bacheDecoupeAspi:     data.bacheDecoupeAspi     || '',
+      bacheOeilletsSupp:    data.bacheOeilletsSupp    || '',
+      bacheAccessoires:     data.bacheAccessoires     || [],
       bacheEnrouleur:       data.bacheEnrouleur       || '',
       bacheTransportZone:   data.bacheTransportZone   || '',
       options:     data.options    || '',
@@ -521,7 +581,7 @@ async function upsertDossierBache(data, pdfBuffer = null, pdfFilename = '') {
       dateTo:        '',
       dateLivraison: data.dateFrom   || today,
       transport:   data.transport  || 'livraison',
-      remarques:   '',
+      remarques:   data.remarques  || '',
       autres:      '',
       revendeur:   data.revendeur  || '',
       needPose:    false,
