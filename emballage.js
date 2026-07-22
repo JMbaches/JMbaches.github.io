@@ -46,15 +46,18 @@ function confirmerManquant(id) {
 }
 
 function renderEmballage() {
-  const aEmballer = dossiers.filter(d => d.statut === 'emballage');
-  const stockes   = dossiers.filter(d => d.statut === 'stocké');
+  const aEmballer = dossiers.filter(d => d.statut === 'emballage').filter(matchesTypeFilter);
+  const stockes   = dossiers.filter(d => d.statut === 'stocké').filter(matchesTypeFilter);
   const mc = document.getElementById('main-content');
 
   mc.innerHTML = `
   <div id="toast-msg" class="toast-msg"></div>
-  <div class="page-header">
-    <h1 style="font-size:20px;font-weight:700;letter-spacing:-.2px">Emballage</h1>
-    <p>${aEmballer.length} commande${aEmballer.length>1?'s':''} à emballer · ${stockes.length} en stock</p>
+  <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div>
+      <h1 style="font-size:20px;font-weight:700;letter-spacing:-.2px">Emballage</h1>
+      <p>${aEmballer.length} commande${aEmballer.length>1?'s':''} à emballer · ${stockes.length} en stock</p>
+    </div>
+    ${typeFilterSelectHtml('renderEmballage')}
   </div>
 
   ${aEmballer.length===0&&stockes.length===0 ? `<div class="empty-state"><i class="ti ti-package"></i>Aucune commande en attente d'emballage</div>` : ''}
@@ -114,7 +117,7 @@ function renderEmballage() {
 }
 
 function getSortedEmballage() {
-  const emb = dossiers.filter(d => d.statut === 'emballage');
+  const emb = dossiers.filter(d => d.statut === 'emballage').filter(matchesTypeFilter);
   const manualIds = emballageOrder.filter(id => emb.find(d => d.id === id));
   const unordered = emb.filter(d => !manualIds.includes(d.id));
   unordered.sort((a, b) => {
@@ -162,7 +165,7 @@ function renderEmballageGrand() {
   const sorted = getSortedEmballage();
 
   if (!sorted.length) {
-    mc.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:420px;gap:18px">
+    mc.innerHTML = `<div style="display:flex;justify-content:flex-end;margin-bottom:8px">${typeFilterSelectHtml('renderEmballageGrand')}</div><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:420px;gap:18px">
       <div style="width:88px;height:88px;border-radius:50%;background:#FEF3C7;display:flex;align-items:center;justify-content:center"><i class="ti ti-package" style="font-size:44px;color:#92400E"></i></div>
       <div style="font-size:22px;color:var(--ink-soft);font-weight:600">Rien à emballer pour le moment</div>
       <div style="font-size:14px;color:var(--ink-faint)">Les dossiers prêts à emballer apparaîtront ici</div>
@@ -178,6 +181,7 @@ function renderEmballageGrand() {
       ${sorted.length} commande${sorted.length>1?'s':''} à emballer
     </div>
     <div style="display:flex;align-items:center;gap:12px">
+      ${typeFilterSelectHtml('renderEmballageGrand')}
       <div style="font-size:14px;color:var(--ink-faint);text-transform:capitalize">${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</div>
       ${emballageOrder.length>0?`<button class="btn btn-ghost btn-sm" onclick="emballageOrder=[];renderEmballageGrand()" title="Remettre le tri automatique"><i class="ti ti-refresh"></i> Réinitialiser ordre</button>`:''}
     </div>

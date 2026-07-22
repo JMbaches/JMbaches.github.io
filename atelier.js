@@ -11,10 +11,11 @@
    let/window).
    ================================================================ */
 function renderAtelier() {
-  const prod=filteredDossiers(dossiers.filter(d=>d.statut==='production'));
+  const prod=filteredDossiers(dossiers.filter(d=>d.statut==='production')).filter(matchesTypeFilter);
   const mc=document.getElementById('main-content');
-  if(!prod.length){mc.innerHTML=`<div class="empty-state"><i class="ti ti-tools"></i>Aucune commande en production pour le moment</div>`;return;}
-  mc.innerHTML=`<div class="section-header"><div class="section-title">Commandes à fabriquer</div><span style="font-size:13px;color:var(--ink-faint)">${prod.length} en cours</span></div>
+  const header=`<div class="section-header"><div class="section-title">Commandes à fabriquer</div><div style="display:flex;align-items:center;gap:10px">${typeFilterSelectHtml('renderAtelier')}<span style="font-size:13px;color:var(--ink-faint)">${prod.length} en cours</span></div></div>`;
+  if(!prod.length){mc.innerHTML=header+`<div class="empty-state"><i class="ti ti-tools"></i>Aucune commande en production pour le moment</div>`;return;}
+  mc.innerHTML=`${header}
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">
     ${prod.map(d=>{
       const urg=isUrgent(d);
@@ -48,7 +49,7 @@ function renderAtelier() {
   </div>`;
 }
 function getSortedProd() {
-  const prod = filteredDossiers(dossiers.filter(d => d.statut === 'production'));
+  const prod = filteredDossiers(dossiers.filter(d => d.statut === 'production')).filter(matchesTypeFilter);
   // Appliquer l'ordre manuel si existant, sinon tri auto : URGENT > date livraison
   const manualIds = atelierOrder.filter(id => prod.find(d => d.id === id));
   const unordered = prod.filter(d => !manualIds.includes(d.id));
@@ -106,13 +107,14 @@ function renderAtelierGrand() {
   const sorted = getSortedProd();
   const mc = document.getElementById('main-content');
   if (!sorted.length) {
-    mc.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:420px;gap:18px"><div style="width:88px;height:88px;border-radius:50%;background:var(--green-light);display:flex;align-items:center;justify-content:center"><i class="ti ti-mood-happy" style="font-size:44px;color:var(--green)"></i></div><div style="font-size:22px;color:var(--ink-soft);font-weight:600">Rien à fabriquer pour le moment</div><div style="font-size:14px;color:var(--ink-faint)">Les commandes en production apparaîtront ici</div></div>`;
+    mc.innerHTML = `<div style="display:flex;justify-content:flex-end;margin-bottom:8px">${typeFilterSelectHtml('renderAtelierGrand')}</div><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:420px;gap:18px"><div style="width:88px;height:88px;border-radius:50%;background:var(--green-light);display:flex;align-items:center;justify-content:center"><i class="ti ti-mood-happy" style="font-size:44px;color:var(--green)"></i></div><div style="font-size:22px;color:var(--ink-soft);font-weight:600">Rien à fabriquer pour le moment</div><div style="font-size:14px;color:var(--ink-faint)">Les commandes en production apparaîtront ici</div></div>`;
     return;
   }
   mc.innerHTML = `
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <div style="font-size:21px;font-weight:700;color:var(--ink);letter-spacing:-.2px"><i class="ti ti-tool" style="vertical-align:-3px;margin-right:9px;color:var(--accent)"></i>${sorted.length} commande${sorted.length>1?'s':''} en production</div>
     <div style="display:flex;align-items:center;gap:12px">
+      ${typeFilterSelectHtml('renderAtelierGrand')}
       <div style="font-size:14px;color:var(--ink-faint);text-transform:capitalize">${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</div>
       ${atelierOrder.length>0?`<button class="btn btn-ghost btn-sm" onclick="atelierOrder=[];renderAtelierGrand()" title="Remettre le tri automatique"><i class="ti ti-refresh"></i> Réinitialiser ordre</button>`:''}
     </div>

@@ -1674,6 +1674,10 @@ let notifications = []; // Rempli par Firestore au chargement
 
 let currentUser = null;
 let currentTab = 'dos';
+// Onglet à retrouver en quittant la fiche dossier (bouton Retour / touche Échap) — mémorisé par
+// openFiche() au moment où on y entre, pour ne pas systématiquement retomber sur "Dossiers" si on
+// a ouvert le dossier depuis Atelier/Emballage/Planning/le tableau de bord/etc.
+let previousTab = 'dos';
 let currentDosId = null;
 let currentPageIdx = 0;
 let nextDosNum = 11;
@@ -1688,6 +1692,10 @@ let dosPeriodeFilter = '';    // Filtre par période (ce_mois, mois_dernier, cet
 let dosMontantMin    = '';    // Filtre montant min TTC
 let dosMontantMax    = '';    // Filtre montant max TTC
 let dosRevendeurFilter = '';  // Filtre par revendeur
+// Filtre type de dossier (volet/bâche), PARTAGÉ entre toutes les vues (Dossiers, Atelier,
+// Emballage, Suivi, Archives, Compta) plutôt qu'un filtre par vue — reflète le choix une fois
+// pour toutes en changeant d'onglet, cf. isBacheDossier(). '' = tous.
+let dosTypeFilter = '';
 // Filtre rapide de l'écran Admin fusionné (Saisie+Vérification+Prêt atelier, voir renderDos) —
 // mémorisé par utilisateur/poste (localStorage) pour que chacun retrouve sa vue par défaut.
 let adminQuickFilter = localStorage.getItem('jmb_adminQuickFilter') || 'saisie';
@@ -2099,7 +2107,10 @@ function filteredDossiers(liste) {
 // Applique TOUS les filtres avancés (statut, commercial, période, montant)
 function applyDosFilters(liste) {
   let r = filteredDossiers(liste);
-  
+
+  // Filtre type (volet/bâche)
+  if (dosTypeFilter) r = r.filter(matchesTypeFilter);
+
   // Filtre statut
   if (dosStatFilter) r = r.filter(d => d.statut === dosStatFilter);
   
@@ -2177,10 +2188,15 @@ function globalSearch(val) {
 
 // Navigue vers un dossier depuis la recherche
 function globalSearchGoTo(dosId) {
+  // On mémorise le VRAI onglet de départ avant le détour forcé par "dos" ci-dessous — sinon
+  // openFiche() croirait qu'on vient de "dos" (puisque currentTab y sera déjà) et le bouton
+  // Retour ramènerait toujours sur Dossiers, même si la recherche a été lancée depuis Atelier/
+  // Emballage/etc.
+  const fromTab = currentTab;
   document.getElementById('global-search-dropdown').classList.remove('open');
   goTab('dos');
   // Petit délai pour laisser renderDos() s'exécuter avant d'ouvrir la fiche
-  setTimeout(() => openFiche(dosId), 50);
+  setTimeout(() => { openFiche(dosId); previousTab = fromTab; }, 50);
 }
 
 // Navigation clavier dans le dropdown
@@ -2457,8 +2473,8 @@ function renderDos() {
           <option value="" ${!dosCommFilter?'selected':''}>Tous les commerciaux</option>
           ${users.filter(u=>u.active&&(u.role==='commercial'||u.role==='admin'||u.role==='direction')).map(u=>`<option value="${u.id}" ${dosCommFilter===u.id?'selected':''}>${u.name}</option>`).join('')}
         </select>` : ''}
-        <button class="btn btn-ghost btn-sm" onclick="toggleFiltresAvances()" id="btn-filtres-avances" style="${(dosPeriodeFilter||dosMontantMin||dosMontantMax||dosStatFilter||dosRevendeurFilter)?'color:var(--accent);border-color:var(--accent)':''}">
-          <i class="ti ti-adjustments-horizontal"></i> Filtres${(dosPeriodeFilter||dosMontantMin||dosMontantMax||dosStatFilter||dosRevendeurFilter)?' <span style="background:var(--accent);color:#fff;border-radius:8px;padding:0 5px;font-size:10px">actifs</span>':''}
+        <button class="btn btn-ghost btn-sm" onclick="toggleFiltresAvances()" id="btn-filtres-avances" style="${(dosPeriodeFilter||dosMontantMin||dosMontantMax||dosStatFilter||dosRevendeurFilter||dosTypeFilter)?'color:var(--accent);border-color:var(--accent)':''}">
+          <i class="ti ti-adjustments-horizontal"></i> Filtres${(dosPeriodeFilter||dosMontantMin||dosMontantMax||dosStatFilter||dosRevendeurFilter||dosTypeFilter)?' <span style="background:var(--accent);color:#fff;border-radius:8px;padding:0 5px;font-size:10px">actifs</span>':''}
         </button>
         ${(()=>{const n=dossiers.filter(d=>isArchivable(d)).length;return n>0?`<button class="btn btn-ghost btn-sm" onclick="showArchived=!showArchived;renderDos()" style="${showArchived?'color:var(--accent);border-color:var(--accent)':'color:var(--ink-faint)'}"><i class="ti ti-archive"></i> Archives${showArchived?' (visible)':' ('+n+')'}
         </button>`:'';})()}
@@ -2469,9 +2485,19 @@ function renderDos() {
     </div>
 
     <!-- Filtres avancés -->
-    <div id="filtres-avances-panel" style="display:${(dosCommFilter||dosPeriodeFilter||dosMontantMin||dosMontantMax||dosStatFilter||dosRevendeurFilter)?'block':'none'}">
+    <div id="filtres-avances-panel" style="display:${(dosCommFilter||dosPeriodeFilter||dosMontantMin||dosMontantMax||dosStatFilter||dosRevendeurFilter||dosTypeFilter)?'block':'none'}">
       <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
-        
+
+        <!-- Type -->
+        <div>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Type</div>
+          <select onchange="dosTypeFilter=this.value;applyFiltres()" style="width:130px;padding:6px 10px;font-size:13px">
+            <option value="" ${!dosTypeFilter?'selected':''}>Tous types</option>
+            <option value="volet" ${dosTypeFilter==='volet'?'selected':''}>Volets</option>
+            <option value="bache" ${dosTypeFilter==='bache'?'selected':''}>Bâches</option>
+          </select>
+        </div>
+
         <!-- Statut -->
         <div>
           <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Statut</div>
@@ -2624,6 +2650,9 @@ async function setPresence(dosId) {
 function clearPresence() { setPresence(null); }
 
 function openFiche(id) {
+  // Ne mémorise l'onglet de provenance que si on n'est pas déjà sur la fiche — sinon naviguer
+  // vers le dossier précédent/suivant (boutons ←/→) écraserait l'onglet d'origine par "fiche".
+  if (currentTab !== 'fiche') previousTab = currentTab;
   currentDosId=id; currentPageIdx=0;
   currentTab='fiche'; buildNav();
   setPresence(id);
@@ -2646,7 +2675,7 @@ function renderFiche() {
   <div id="toast-msg" class="toast-msg"></div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px" class="no-print">
     <div style="display:flex;align-items:center;gap:6px">
-      <button class="btn btn-secondary" onclick="goTab('dos')"><i class="ti ti-arrow-left"></i> Retour</button>
+      <button class="btn btn-secondary" onclick="goTab(previousTab)"><i class="ti ti-arrow-left"></i> Retour</button>
       <button class="btn btn-ghost btn-sm" title="Dossier précédent (←)" ${!prevId?'disabled':''} onclick="${prevId?`openFiche('${prevId}')`:''}" style="padding:4px 7px"><i class="ti ti-chevron-left"></i></button>
       <span style="font-size:11px;color:var(--ink-faint)">${curIdx+1}/${filteredList.length}</span>
       <button class="btn btn-ghost btn-sm" title="Dossier suivant (→)" ${!nextId?'disabled':''} onclick="${nextId?`openFiche('${nextId}')`:''}" style="padding:4px 7px"><i class="ti ti-chevron-right"></i></button>
@@ -4260,6 +4289,18 @@ function optionsSemainesFab(selected, nbSemaines = 26) {
 // migrer les dossiers Firestore existants : partout où c'est lu, passer par ce helper plutôt
 // que par d.type direct, pour que l'absence du champ retombe silencieusement sur 'volet'.
 function isBacheDossier(d) { return (d.type||'volet')==='bache'; }
+// Filtre type de dossier partagé (dosTypeFilter, '' = tous) — utilisé par toutes les vues qui
+// listent des dossiers (Dossiers, Atelier, Emballage, Suivi, Archives, Compta).
+function matchesTypeFilter(d) { return !dosTypeFilter || (isBacheDossier(d)?'bache':'volet')===dosTypeFilter; }
+// Petit <select> réutilisable pour le filtre type, même rendu partout — appelle renderFn (le nom
+// de la fonction de rendu de la vue courante) au changement pour rafraîchir immédiatement.
+function typeFilterSelectHtml(renderFn) {
+  return `<select onchange="dosTypeFilter=this.value;${renderFn}()" style="padding:6px 10px;font-size:13px;border-radius:var(--radius);border:1px solid var(--border);background:var(--paper);color:var(--ink)">
+    <option value=""${!dosTypeFilter?' selected':''}>Tous types</option>
+    <option value="volet"${dosTypeFilter==='volet'?' selected':''}>Volets</option>
+    <option value="bache"${dosTypeFilter==='bache'?' selected':''}>Bâches</option>
+  </select>`;
+}
 // Types de volet (legacyVoletType, stock.js) concernés par chaque champ "Accessoires" — reflète
 // exactement les conditions de type déjà codées dans les fonctions stockDecompterXxx (stock.js).
 // ⚠ À maintenir aligné si une de ces fonctions change son périmètre de types applicables.
@@ -4720,11 +4761,14 @@ function renderSuivi() {
   mc.innerHTML = `
   <div class="section-header">
     <div class="section-title">Pipeline global</div>
-    <span style="font-size:12px;color:var(--ink-faint)"><i class="ti ti-drag-drop" style="vertical-align:-1px;margin-right:4px"></i>Glisser-déposer pour changer de statut</span>
+    <div style="display:flex;align-items:center;gap:12px">
+      ${typeFilterSelectHtml('renderSuivi')}
+      <span style="font-size:12px;color:var(--ink-faint)"><i class="ti ti-drag-drop" style="vertical-align:-1px;margin-right:4px"></i>Glisser-déposer pour changer de statut</span>
+    </div>
   </div>
   <div style="display:grid;grid-template-columns:repeat(11,minmax(130px,1fr));gap:10px;overflow-x:auto;padding-bottom:8px" id="suivi-pipeline">
     ${cols.map(col=>{
-      const items=dossiers.filter(d=>d.statut===col.k);
+      const items=dossiers.filter(d=>d.statut===col.k).filter(matchesTypeFilter);
       return `<div class="pipe-col" id="col-${col.k}"
         style="border-top:3px solid ${col.c};min-height:200px;transition:background .15s"
         ondragover="onDragOver(event,'${col.k}')"
@@ -5572,7 +5616,8 @@ function renderCompta() {
   if (!comptaAnnee && allYears.includes(String(new Date().getFullYear()))) comptaAnnee = String(new Date().getFullYear());
   const byYear = comptaAnnee ? dossiers.filter(d=>((d.dateFrom||d.dateLivraison||'').startsWith(comptaAnnee))) : dossiers;
   const byDevis = comptaDevisFilter ? byYear.filter(d=>d.devisStatut===comptaDevisFilter) : byYear;
-  const filtered = comptaRevendeurFilter ? byDevis.filter(d=>(d.revendeur||'')===comptaRevendeurFilter) : byDevis;
+  const byRevendeur = comptaRevendeurFilter ? byDevis.filter(d=>(d.revendeur||'')===comptaRevendeurFilter) : byDevis;
+  const filtered = byRevendeur.filter(matchesTypeFilter);
   const total = filtered.reduce((s,d)=>s+(d.ht||0), 0);
   const totalTTC = filtered.reduce((s,d)=>s+ttc(d), 0);
   const paye = filtered.filter(d=>d.devisStatut==='paye').reduce((s,d)=>s+(d.ht||0), 0);
@@ -5593,6 +5638,7 @@ function renderCompta() {
       <select onchange="comptaDevisFilter=this.value;renderCompta()" style="${selStyle}">
         ${DEVIS_OPTS.map(o=>`<option value="${o.v}"${comptaDevisFilter===o.v?' selected':''}>${o.l}</option>`).join('')}
       </select>
+      ${typeFilterSelectHtml('renderCompta')}
     </div>
   </div>
 
@@ -6157,6 +6203,7 @@ function resetFiltres() {
   dosMontantMin = '';
   dosMontantMax = '';
   dosRevendeurFilter = '';
+  dosTypeFilter = '';
   renderDos();
 }
 
@@ -6262,7 +6309,7 @@ document.addEventListener('keydown', function(e) {
     if (openMod) { closeModal(openMod.id); return; }
     const resetMod = document.getElementById('modal-reset-pwd');
     if (resetMod && resetMod.style.display === 'flex') { hideResetPassword(); return; }
-    if (typeof currentTab !== 'undefined' && currentTab === 'fiche' && currentDosId) { goTab('dos'); return; }
+    if (typeof currentTab !== 'undefined' && currentTab === 'fiche' && currentDosId) { goTab(previousTab); return; }
     const chatPanel = document.getElementById('chat-panel');
     if (chatPanel && chatPanel.classList.contains('open')) { if (typeof toggleChat === 'function') toggleChat(); return; }
     const dd = document.getElementById('global-search-dropdown');
@@ -6335,12 +6382,15 @@ function isArchivable(d) {
 }
 
 function renderArchives() {
-  const archived = dossiers.filter(d => isArchivable(d))
+  const archived = dossiers.filter(d => isArchivable(d)).filter(matchesTypeFilter)
     .sort((a, b) => (b.dateLivraison||'') > (a.dateLivraison||'') ? 1 : -1);
   document.getElementById('main-content').innerHTML = `
   <div class="section-header">
     <div class="section-title"><i class="ti ti-archive" style="margin-right:6px"></i>Archives <span style="font-size:13px;font-weight:400;color:var(--ink-faint)">— dossiers clôturés il y a plus de 6 mois</span></div>
-    <button class="btn btn-ghost btn-sm" onclick="exportDossiersCSVArchives()"><i class="ti ti-table-export"></i> CSV</button>
+    <div style="display:flex;align-items:center;gap:10px">
+      ${typeFilterSelectHtml('renderArchives')}
+      <button class="btn btn-ghost btn-sm" onclick="exportDossiersCSVArchives()"><i class="ti ti-table-export"></i> CSV</button>
+    </div>
   </div>
   ${archived.length === 0 ? `<div class="empty-state"><i class="ti ti-archive"></i>Aucun dossier archivé pour l'instant</div>` : `
   <div class="card">
