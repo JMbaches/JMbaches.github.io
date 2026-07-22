@@ -62,18 +62,24 @@ async function enrichirDossier(numcmdc, payload, nowAt) {
   const megaoAccessoires = summarizeAccessoires(payload.accessoires);
   const megaoAccessoiresDetail = payload.accessoires || {};
   const megaoNotes = payload.notes || [];
+  // Couleur(s) de bouchon lue(s) sur une ligne Mégao dédiée (peut différer de la couleur des
+  // pieds — cf. megao_enrich_vm.py::parse_bouchon_couleur). Purement informatif pour l'instant :
+  // ne remplace PAS la déduction existante côté stock.js (BOUCHON_COULEUR_TABLE), qui reste le
+  // repli quand Mégao ne précise rien de plus fin.
+  const megaoBouchonCouleurs = payload.bouchonCouleurs || [];
 
   const inchange =
     JSON.stringify(prev.megaoAccessoires || {})       === JSON.stringify(megaoAccessoires) &&
     JSON.stringify(prev.megaoAccessoiresDetail || {}) === JSON.stringify(megaoAccessoiresDetail) &&
-    JSON.stringify(prev.megaoNotes || [])              === JSON.stringify(megaoNotes);
+    JSON.stringify(prev.megaoNotes || [])              === JSON.stringify(megaoNotes) &&
+    JSON.stringify(prev.megaoBouchonCouleurs || [])    === JSON.stringify(megaoBouchonCouleurs);
 
   if (inchange) {
     console.log(`  → dossier ${dosId} déjà à jour — rien à faire`);
     return 'inchange';
   }
 
-  const update = { megaoAccessoires, megaoAccessoiresDetail, megaoNotes };
+  const update = { megaoAccessoires, megaoAccessoiresDetail, megaoNotes, megaoBouchonCouleurs };
   update.history = [
     ...(prev.history || []),
     { id: Date.now(), type: 'megao', action: 'Enrichissement Mégao (accessoires/notes)', detail: '', user: 'megao-enrich-sync', at: nowAt },

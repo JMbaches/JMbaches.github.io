@@ -33,6 +33,7 @@ plus de 5 min (reseau lent sur le lecteur M: par exemple).
 """
 
 import os
+import re
 import struct
 import smtplib
 import json
@@ -92,6 +93,38 @@ def classify(codeart):
             if codeart.startswith(p):
                 return label
     return None
+
+
+# Couleur de bouchon : PAS un champ structure cote Mégao (le champ Coloris des lignes
+# ACVRBOUCH* vaut toujours "NA" — vérifié sur 601 commandes réelles) — la vraie couleur est
+# soit codée en dur dans la reference (ACVRBOUCHBL = blanc), soit en texte libre dans Design
+# ("...couleur GRIS", "...couleur POLY BLEU"). Confirme par l'utilisateur : ca peut differer
+# de la couleur des pieds (aujourd'hui deduite via BOUCHON_COULEUR_TABLE cote app, stock.js) —
+# cette extraction sert a fournir la vraie valeur quand Mégao la précise explicitement, sans
+# toucher a la deduction existante (qui reste le repli quand aucune ligne bouchon n'est trouvee).
+#
+# Recherche par mot-cle connu plutot que par position relative a "couleur" : la place du mot
+# couleur dans Design est incoherente selon les commandes reelles (parfois juste apres
+# "couleur", parfois en fin de ligne apres une repartition gauche/droite en nombre). Si
+# plusieurs couleurs distinctes apparaissent sur la MEME ligne (repartition multi-couleurs
+# rare vue en donnees reelles, ex. 5 couleurs sur une seule ligne), le cas est ambigu — on ne
+# devine pas, on laisse vide (mieux vaut aucune donnee qu'une donnee fausse pour du stock).
+BOUCHON_COLOR_WORDS = ['POLY BLEU', 'POLY NOIR', 'POLY GRIS', 'POLY TRSP', 'POLY TRANSPARENT',
+                       'TRANSPARENT', 'TRANSLUCIDE', 'ANTHRACITE', 'BLANC', 'GRIS', 'SABLE',
+                       'BEIGE', 'BLEU', 'NOIR']
+
+
+def parse_bouchon_couleur(codeart, design):
+    if codeart == 'ACVRBOUCHBL':
+        return 'Blanc'
+    upper = design.upper()
+    found = []
+    remaining = upper
+    for word in BOUCHON_COLOR_WORDS:
+        if word in remaining:
+            found.append(word)
+            remaining = remaining.replace(word, '')  # evite de recompter BLEU dans POLY BLEU
+    return found[0].title() if len(found) == 1 else None
 
 
 # ─── Lecture CMDCLI.mkd (en-tete commande, pour la date) ─────────────────────
@@ -180,13 +213,22 @@ def build_payload(window_days):
         is_note = (l['codeart'] == '' and l['design'])
         if not cat and not is_note:
             continue
-        entry = orders.setdefault(str(num), {'accessoires': {}, 'notes': []})
+        entry = orders.setdefault(str(num), {'accessoires': {}, 'notes': [], 'bouchonCouleurs': []})
         if cat:
             entry['accessoires'].setdefault(cat, []).append({
                 'codeart': l['codeart'], 'design': l['design'], 'qte': l['qte'],
             })
+            if cat == 'bouchons':
+                couleur = parse_bouchon_couleur(l['codeart'], l['design'])
+                if couleur and couleur not in entry['bouchonCouleurs']:
+                    entry['bouchonCouleurs'].append(couleur)
         elif is_note:
             entry['notes'].append({'numligne': l['numligne'], 'texte': l['design']})
+
+    # Champ vide retire (pas de bruit dans le payload pour les commandes sans bouchon coloré)
+    for entry in orders.values():
+        if not entry['bouchonCouleurs']:
+            del entry['bouchonCouleurs']
 
     return {
         'generatedAt': datetime.now().isoformat(),

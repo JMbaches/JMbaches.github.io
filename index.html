@@ -3073,14 +3073,28 @@ function renderPageCommande(d, p) { p = p || {};
       // saisis manuellement). N'affiche rien tant que le dossier n'a pas encore été enrichi.
       const accCats = Object.entries(d.megaoAccessoires || {}).filter(([,qte]) => qte > 0);
       const notes = d.megaoNotes || [];
-      if (!accCats.length && !notes.length) return '';
+      const bouchonCouleurs = d.megaoBouchonCouleurs || [];
+      if (!accCats.length && !notes.length && !bouchonCouleurs.length) return '';
       const detailFor = cat => (d.megaoAccessoiresDetail?.[cat] || [])
         .map(l => `${escapeHtml(l.codeart || '')} — ${escapeHtml(l.design || '')}${l.qte != null ? ` (×${l.qte})` : ''}`)
         .join('\n');
+      // Couleur bouchon lue explicitement sur une ligne Mégao dédiée — purement informatif,
+      // ne remplace pas la déduction depuis d.pieds utilisée par le décompte stock (stock.js).
+      // Signalée visuellement si elle diffère de d.pieds, pour que l'atelier la remarque.
+      const piedsCouleur = String(d.pieds || '').split('/')[0].trim().toLowerCase();
+      const bouchonDiffere = bouchonCouleurs.length && !bouchonCouleurs.some(c => c.toLowerCase() === piedsCouleur);
       return `
     <div class="fiche-section">
       <div class="fiche-section-title">Mégao — accessoires &amp; notes (lecture automatique)</div>
       <div class="fiche-section-body">
+        ${bouchonCouleurs.length ? `
+        <div style="margin-bottom:10px">
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Couleur bouchon (ligne Mégao dédiée)</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+            ${bouchonCouleurs.map(c => `<span style="background:var(--accent-light);color:var(--accent-deep);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500">${escapeHtml(c)}</span>`).join('')}
+            ${bouchonDiffere ? `<span style="color:var(--red);font-size:11px">⚠ diffère de la couleur des pieds (${escapeHtml(d.pieds||'')})</span>` : ''}
+          </div>
+        </div>` : ''}
         ${accCats.length ? `
         <div style="margin-bottom:${notes.length ? '10px' : '0'}">
           <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Accessoires détectés</div>
