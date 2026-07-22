@@ -203,18 +203,24 @@ function isBache(text) {
   return /^(BA[A-Z]|BU[A-Z0-9]|SEES|SEECH|TRSPBA|TRSPBU|TRSPHI|ENLEVBA)/m.test(text);
 }
 
-// Catégories d'accessoires bâches confirmées par audit réel sur 63 735 commandes CMDCLIB
-// (2026-07-22, voir mémoire de session) : jusqu'ici, toute ligne non reconnue finissait telle
-// quelle (texte brut) dans le champ "options" — ce qui noyait des accessoires réels et
-// fréquents (pitons, cliquets, sandows d'enrouleur...) dans du texte non classé. Prefixes
-// vérifiés sur les vraies désignations Mégao, pas devinés.
+// Catégories d'accessoires bâches — alignées sur les vraies sections de l'inventaire JM
+// (fichier Excel "INVENTAIRE 2025.xlsx", feuille "INVENTAIRE BACHES", remonté par l'utilisateur
+// le 2026-07-22 : "ACCESSOIRES BULLES", "ROLLING UP", "ACCESSOIRES BACHE SECU+", "ACCESSOIRES
+// BACHE BARRE/HIVER", "CHIMIE"), recoupées avec l'audit réel des 63 735 commandes CMDCLIB pour
+// ne garder que des codes effectivement vus. "Sécu+" et "Barre/Hiver" fusionnés en une seule
+// catégorie : plusieurs codes (ex. ACPITESC) apparaissent dans les DEUX sections de
+// l'inventaire, la frontière n'est pas nette. ACANTIABRA/ACCLIQINOX/ACKITSOUT (fréquents dans
+// l'historique de commandes réel mais absents de l'inventaire actuel — probablement
+// discontinués/renommés) rattachés à cette même catégorie par proximité de sens (accessoires
+// de fixation/protection barres). Codes déjà couverts par un champ dédié (bacheOeilletsSupp,
+// bacheDecoupeAspi/Escalier, bacheBarreCharge, bacheEnrouleur) volontairement PAS répétés ici
+// pour éviter un double affichage de la même info.
 const BACHE_ACCESSORY_PREFIXES = {
-  'Pitons':                 ['ACPITBOIS', 'ACPITESC', 'ACPITGAZ'],
-  'Fixation':               ['ACCLIQINOX', 'ACKITPAT', 'ACKITSOUT'],
-  'Enrouleur (accessoire)': ['ACSANENR', 'ACBACARR', 'ACENRDEMUL', 'ACMANIV'],
-  'Protection':             ['ACANTIABRA', 'ACBOUFEUIL'],
-  'Entretien':              ['CHHJ', 'CHGAPPTRAIT'],
-  'Bulles (spécifique)':    ['ACBUBAV', 'ACBUROUL', 'ACBUSANGLET', 'ACBUBACHET'],
+  'Bulles (accessoires)':               ['ACBOUFEUIL', 'ACSANENR', 'ACENRDEMUL', 'ACBUSANGLET', 'ACBUBACHET', 'ACBUROUL', 'ACBUBAV'],
+  'Enrouleur (accessoire)':             ['ACRUPRELAIS', 'ACRUPBOUT', 'ACRUPCHARG', 'ACBACARR'],
+  'Sécu+ / Barre / Hiver (accessoire)': ['ACBABOUCH', 'ACSANGCLIQ', 'ACPITESC', 'ACPITBOIS', 'ACBAALU', 'ACBAENR', 'ACROINOX', 'ACROPLAST', 'ACAB', 'ACPITCROS', 'ACPITGAZ', 'ACPLAQUET', 'ACMANIV', 'ACSANCROACIER', 'ACSANVECO', 'ACSANGLUX', 'ACSANGD', 'ACSANGRAP', 'ACSANGGAN', 'ACKITPAT', 'ACBAVOL', 'ACOL', 'ACANTIABRA', 'ACCLIQINOX', 'ACKITSOUT'],
+  'Entretien':                          ['CHHJ', 'CHGAPPTRAIT', 'BROME', 'CHEMOBROME', 'CHLORE', 'DIACLOR', 'CLEARPOOL'],
+  'Divers':                             ['ACBOUEAU'],
 };
 function classifyBacheAccessoire(code) {
   for (const [label, prefixes] of Object.entries(BACHE_ACCESSORY_PREFIXES)) {
