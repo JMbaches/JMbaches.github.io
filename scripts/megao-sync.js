@@ -26,6 +26,11 @@ const bucket = admin.storage().bucket();
 // 'Fiche de fabrication', renommé depuis 'Fiche produit' en 418b702).
 const PD_DEFAULT_FOLDERS = ['Bon de commande', 'Facture', 'Fiche de côte', 'Fiche de fabrication'];
 
+// Codes abrégés Mégao pour la couleur de bouchon (motif "B.<code>", ex. "B.TRSP" = Bouchon
+// Transparent), quand ce n'est pas déjà un nom de couleur en clair (ex. "B.Noir") — confirmé par
+// l'utilisateur (2026-07-22). Compléter si d'autres codes apparaissent.
+const BOUCHON_LABELS = { TRSP: 'Transparent' };
+
 // ─── Parser PDF Mégao ────────────────────────────────────────────────────────
 // Format réel : tableau de codes produits (VRSIL80S, LAM350, TRSPVR5…)
 // Infos client dans le bloc Contact (colonne gauche)
@@ -86,7 +91,15 @@ function parseMegaoText(text) {
                  || (/tablier\s+seul/i.test(text) ? 'Tablier seul' : '');
   const lameRaw   = lamM ? lamM[2].replace(/\s*(UN|ML|M2|PCS)\s+.*$/i, '').trim() : '';
   const lameParenIdx = lameRaw.lastIndexOf(')');
-  const lames     = lameParenIdx >= 0 ? lameRaw.slice(lameParenIdx + 1).trim() : lameRaw;
+  let lames       = lameParenIdx >= 0 ? lameRaw.slice(lameParenIdx + 1).trim() : lameRaw;
+  // Couleur du bouchon (embout de lame) : motif "B. <couleur>" dans le texte Mégao (ex: "B. Noir"
+  // = Bouchon noir), distinct de la couleur de la lame elle-même — confirmé par l'utilisateur
+  // (2026-07-22), corrige une hypothèse erronée précédente qui lisait "B." comme "Bicolore".
+  const bouchonM  = lames.match(/\bB\.\s*([A-Za-zÀ-ÿ]+)\b\s*/i);
+  const couleurBouchon = bouchonM
+    ? (BOUCHON_LABELS[bouchonM[1].toUpperCase()] || (bouchonM[1].charAt(0).toUpperCase() + bouchonM[1].slice(1).toLowerCase()))
+    : '';
+  if (bouchonM) lames = (lames.slice(0, bouchonM.index) + lames.slice(bouchonM.index + bouchonM[0].length)).trim();
 
   // Moteur : suffixe du code VR après le préfixe de structure (VRSIL80S → 80S)
   const moteurM = vrCode.match(/^VR(?:SUBT|SUB|MOUV|XTR|COF|SOL|SIL)([A-Z0-9]+)$/i);
@@ -168,7 +181,7 @@ function parseMegaoText(text) {
 
   return {
     ref, refCommande: ref, client, contact, tel, email, adresse, cp, ville,
-    structure, lames, pieds, alim, moteur, typeLame, escalier, decoupe,
+    structure, lames, couleurBouchon, pieds, alim, moteur, typeLame, escalier, decoupe,
     options: '', remarques: '', autres: '',
     largeur, longueur, revendeur,
     transport, ht, dateFrom, isVolet,
@@ -359,7 +372,7 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
     const doc    = { id: dosId, ref: docRef };
     const prev   = existing.data();
     const fields = ['client','tel','email','contact','adresse','cp','ville',
-                    'structure','lames','typeLame','pieds','alim','moteur','escalier','decoupe','options','remarques','autres','transport',
+                    'structure','lames','couleurBouchon','typeLame','pieds','alim','moteur','escalier','decoupe','options','remarques','autres','transport',
                     'largeur','longueur','revendeur','refCommande'];
     const update = {};
     for (const f of fields) {
@@ -397,6 +410,7 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
       decoupe:     data.decoupe    || '',
       options:     data.options    || '',
       lames:       data.lames      || '',
+      couleurBouchon: data.couleurBouchon || '',
       typeLame:    data.typeLame   || '',
       pieds:       data.pieds      || '',
       alim:        data.alim       || '',

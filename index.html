@@ -1115,6 +1115,7 @@ a:focus-visible, button:focus-visible,
             <option value="Polycarbonate">Polycarbonate</option>
           </select></div>
           <div class="form-group"><label class="form-label">Lames</label><input id="f-lames" placeholder="ex: Gris"></div>
+          <div class="form-group"><label class="form-label">Couleur bouchon</label><input id="f-couleurBouchon" placeholder="ex: Noir"></div>
           <div class="form-group"><label class="form-label">Pieds</label><input id="f-pieds" placeholder="ex: 7016/Gris"></div>
           <div class="form-group"><label class="form-label">Alimentation</label><input id="f-alim" placeholder="ex: 24V"></div>
           <div class="form-group"><label class="form-label">Type d'alimentation</label><select id="f-typeAlimentation">
@@ -2878,6 +2879,7 @@ ${d.contraintes?`<div class="box danger"><div class="box-label">⚠ Contraintes 
 <div class="grid-4" style="margin-top:10px">
   <div class="field"><label>Type de lame</label><div class="val">${d.typeLame||'—'}</div></div>
   <div class="field"><label>Coloris lames</label><div class="val">${d.lames||'—'}</div></div>
+  ${d.couleurBouchon?`<div class="field"><label>Couleur bouchon</label><div class="val">${d.couleurBouchon}</div></div>`:''}
   <div class="field"><label>Taille lame</label><div class="val">${d.tailleLame||'—'}</div></div>
   <div class="field"><label>Coloris pieds</label><div class="val">${d.pieds||'—'}</div></div>
   <div class="field"><label>Alimentation</label><div class="val">${d.alim||'—'}</div></div>
@@ -2976,6 +2978,7 @@ function renderPageCommande(d, p) { p = p || {};
             <option value="Polycarbonate"${d.typeLame==='Polycarbonate'?' selected':''}>Polycarbonate</option>
           </select></div>
           <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Coloris lames</div><input value="${d.lames||''}" onchange="setDosField('lames',this.value);setDosField('tailleLame','');renderFiche();" placeholder="ex: Gris"></div>
+          <div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Couleur bouchon</div><input value="${d.couleurBouchon||''}" onchange="setDosField('couleurBouchon',this.value)" placeholder="ex: Noir"></div>
           <div>${(() => {
             const label = '<div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Taille lame (= largeur bassin)</div>';
             // Le stock de lames est organisé par largeur de bassin (300-800cm, paliers de 50 —
@@ -3971,6 +3974,7 @@ function fillFormFromMegao(data) {
   set('f-ville',     data.ville);
   set('f-typeLame',  data.typeLame);
   set('f-lames',     data.lames);
+  set('f-couleurBouchon', data.couleurBouchon);
   set('f-pieds',     data.pieds);
   set('f-alim',      data.alim);
   set('f-moteur',    data.moteur);
@@ -4096,6 +4100,18 @@ async function parseMegaoPDFLocal(file) {
   let lames = lameParenIdx >= 0 ? lameDesig.slice(lameParenIdx + 1).trim() : lameDesig;
   // Nettoyage défensif : si la matière s'est retrouvée capturée dans le coloris, on la retire
   lames = lames.replace(/^(POLYCARBONATE|POLY|PVC)\s+/i, '').trim();
+  // Couleur du bouchon (embout de lame) : motif "B. <couleur>" dans le texte Mégao (ex: "B. Noir"
+  // = Bouchon noir), distinct de la couleur de la lame elle-même — confirmé par l'utilisateur
+  // (2026-07-22), corrige une hypothèse erronée précédente qui lisait "B." comme "Bicolore".
+  // Codes abrégés Mégao pour la couleur de bouchon (motif "B.<code>", ex. "B.TRSP" = Bouchon
+  // Transparent), quand ce n'est pas déjà un nom de couleur en clair (ex. "B.Noir") — confirmé
+  // par l'utilisateur (2026-07-22). Compléter si d'autres codes apparaissent.
+  const BOUCHON_LABELS = { TRSP: 'Transparent' };
+  const bouchonM = lames.match(/\bB\.\s*([A-Za-zÀ-ÿ]+)\b\s*/i);
+  const couleurBouchon = bouchonM
+    ? (BOUCHON_LABELS[bouchonM[1].toUpperCase()] || (bouchonM[1].charAt(0).toUpperCase() + bouchonM[1].slice(1).toLowerCase()))
+    : '';
+  if (bouchonM) lames = (lames.slice(0, bouchonM.index) + lames.slice(bouchonM.index + bouchonM[0].length)).trim();
 
   // Moteur : suffixe du code VR après le préfixe de structure (VRSIL80S → 80S)
   const moteurM = vrProd ? vrProd.code.match(/^VR(?:SUBT|SUB|MOUV|XTR|COF|SOL|SIL)([A-Z0-9]+)$/i) : null;
@@ -4161,7 +4177,7 @@ async function parseMegaoPDFLocal(file) {
   const ht     = ht1 || (htM2 ? parseFloat(htM2[1].replace(/\s/g,'').replace(',','.')) : 0);
 
   return { ref, client, contact, tel, email, adresse, cp, ville,
-           structure, typeLame, lames, pieds: '', alim, moteur,
+           structure, typeLame, lames, couleurBouchon, pieds: '', alim, moteur,
            options: '', remarques: '', autres: '',
            largeur, longueur, revendeur,
            transport, ht, dateFrom, isVolet };
@@ -4415,7 +4431,7 @@ function setBacheStructure(ref) {
   renderFiche();
 }
 function openNewDos() {
-  ['f-client','f-tel','f-email','f-contact','f-revendeur','f-adresse','f-cp','f-ville','f-contraintes','f-options','f-typeLame','f-lames','f-pieds','f-alim','f-typeAlimentation','f-moteur','f-ref','f-remarques','f-autres','f-largeur','f-longueur','f-surface','f-hauteur','f-profondeur','f-notes-dims','f-telecommande','f-gestionSel','f-passesSangles','f-flasqueMurale','f-murCouleur','f-murHauteur','f-caillebotisChoix','f-caillebotisLargeur','f-caillebotisProfondeur','f-fixation','f-equerresRenfort','f-corniere6060','f-poutreCouleur','f-nombrePoutres','f-options-bache','f-bacheGamme','f-bacheTypeBassin','f-bacheEpaisseur','f-bacheBullesType','f-bacheColoris','f-bacheDecoupeAspi','f-bacheDecoupeEscalier','f-bacheBarreCharge','f-bacheOeilletsSupp','f-bacheEnrouleur','f-bachePansCoupes','f-bacheTransportZone'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['f-client','f-tel','f-email','f-contact','f-revendeur','f-adresse','f-cp','f-ville','f-contraintes','f-options','f-typeLame','f-lames','f-couleurBouchon','f-pieds','f-alim','f-typeAlimentation','f-moteur','f-ref','f-remarques','f-autres','f-largeur','f-longueur','f-surface','f-hauteur','f-profondeur','f-notes-dims','f-telecommande','f-gestionSel','f-passesSangles','f-flasqueMurale','f-murCouleur','f-murHauteur','f-caillebotisChoix','f-caillebotisLargeur','f-caillebotisProfondeur','f-fixation','f-equerresRenfort','f-corniere6060','f-poutreCouleur','f-nombrePoutres','f-options-bache','f-bacheGamme','f-bacheTypeBassin','f-bacheEpaisseur','f-bacheBullesType','f-bacheColoris','f-bacheDecoupeAspi','f-bacheDecoupeEscalier','f-bacheBarreCharge','f-bacheOeilletsSupp','f-bacheEnrouleur','f-bachePansCoupes','f-bacheTransportZone'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const np=document.getElementById('f-need-pose');if(np)np.checked=false;;
   document.getElementById('f-structure').value='';
   document.getElementById('f-structure-bache').innerHTML = bacheStructureOptionsHtml('');
@@ -4475,7 +4491,7 @@ function saveDossier() {
     cp:document.getElementById('f-cp').value,ville:document.getElementById('f-ville').value,
     contraintes:document.getElementById('f-contraintes').value,
     structure,options:document.getElementById(isBache ? 'f-options-bache' : 'f-options').value,
-    lames:document.getElementById('f-lames').value,pieds:document.getElementById('f-pieds').value,
+    lames:document.getElementById('f-lames').value,couleurBouchon:document.getElementById('f-couleurBouchon')?.value||'',pieds:document.getElementById('f-pieds').value,
     typeLame:document.getElementById('f-typeLame')?.value||'',
     alim:document.getElementById('f-alim').value,typeAlimentation:document.getElementById('f-typeAlimentation')?.value||'',moteur:document.getElementById('f-moteur').value,
     telecommande:document.getElementById('f-telecommande')?.value||'',
@@ -4718,6 +4734,7 @@ body { font-family: 'DM Sans', sans-serif; color: #16181D; background: #fff; pad
   ${d.lames||d.pieds||d.alim||d.moteur ? `
   <div class="produit-details">
     ${d.lames ? `<div class="detail-item"><label>Lames</label><div class="val">${d.lames}</div></div>` : ''}
+    ${d.couleurBouchon ? `<div class="detail-item"><label>Couleur bouchon</label><div class="val">${d.couleurBouchon}</div></div>` : ''}
     ${d.pieds ? `<div class="detail-item"><label>Pieds</label><div class="val">${d.pieds}</div></div>` : ''}
     ${d.alim  ? `<div class="detail-item"><label>Alimentation</label><div class="val">${d.alim}</div></div>` : ''}
     ${d.moteur? `<div class="detail-item"><label>Moteur</label><div class="val">${d.moteur}</div></div>` : ''}
@@ -6169,6 +6186,7 @@ function exportDossierPDF() {
       ${d.hauteur ? `<div class="field"><label>Hauteur coffre</label><span>${d.hauteur} m</span></div>` : ''}
       ${d.surface ? `<div class="field"><label>Surface</label><span>${d.surface} m²</span></div>` : ''}
       ${d.lames ? `<div class="field"><label>Lames</label><span>${d.lames}</span></div>` : ''}
+      ${d.couleurBouchon ? `<div class="field"><label>Couleur bouchon</label><span>${d.couleurBouchon}</span></div>` : ''}
       ${d.moteur ? `<div class="field"><label>Moteur</label><span>${d.moteur}</span></div>` : ''}
     </div>
     ${d.notesMetreur ? `<div style="margin-top:8px;background:#f9f9f9;padding:8px 12px;border-radius:4px;font-size:12px">${d.notesMetreur}</div>` : ''}

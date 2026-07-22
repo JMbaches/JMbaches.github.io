@@ -56,9 +56,16 @@ function coloreurLameVersFinition(typeLame, couleur) {
   if (typeLame === 'Polycarbonate') {
     const map = { 'Bleu':'Poly Bleu', 'Nacré':'Poly Gris', 'Noir':'Poly Noir' };
     if (map[c]) return map[c];
-    // Bicolore (texte brut Mégao du type "B. BLEU Poly Bleu/Noir") — décision actée avec
-    // l'utilisateur (2026-07-16) : prendre la PREMIÈRE couleur mentionnée avant le "/".
-    const bicoloreM = c.match(/\b(Bleu|Noir|Nacré)\s*\/\s*(Bleu|Noir|Nacré)\b/i);
+    // Bicolore (texte brut Mégao du type "Poly Bleu/Noir" ou "Bleu fond Noir") — décision actée
+    // avec l'utilisateur (2026-07-16, complétée le 2026-07-22 pour la variante "fond") : prendre
+    // la PREMIÈRE couleur mentionnée (avant le "/" ou avant "fond"). Confirmé par l'utilisateur
+    // (2026-07-22) : le FOND est TOUJOURS Noir sur le Polycarbonate — donc la première couleur
+    // mentionnée est toujours la vraie teinte du produit (jamais l'inverse à gérer). Le préfixe
+    // "B. <couleur>" parfois présent dans le texte source (ex. "B. Bleu Poly Bleu/Noir") est une
+    // couleur de BOUCHON distincte, pas une marque de bicolore — extrait à part dans
+    // d.couleurBouchon en amont (megao-sync.js/parseMegaoPDFLocal), donc déjà retiré de `couleur`
+    // ici (confirmé par l'utilisateur le 2026-07-22, corrige l'hypothèse initiale du 2026-07-16).
+    const bicoloreM = c.match(/\b(Bleu|Noir|Nacré)\s*(?:\/|fond)\s*(Bleu|Noir|Nacré)\b/i);
     if (bicoloreM) {
       const premiere = Object.keys(map).find(k => k.toLowerCase() === bicoloreM[1].toLowerCase());
       if (premiere) return map[premiere];
