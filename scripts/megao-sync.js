@@ -102,7 +102,13 @@ function parseMegaoText(text) {
   const piedM   = vrBlock.match(new RegExp(`impult\\w*\\s+(\\d{4}|${COULEURS})\\b`, 'i'))
                || vrBlock.match(/\bRAL\s*[-:]?\s*(\d{4})\b/i);
   const piedRaw = piedM ? piedM[1] : '';
-  const pieds   = piedRaw ? ((/^\d{4}$/).test(piedRaw) ? `RAL ${piedRaw}` : piedRaw.charAt(0).toUpperCase() + piedRaw.slice(1).toLowerCase()) : '';
+  let pieds     = piedRaw ? ((/^\d{4}$/).test(piedRaw) ? `RAL ${piedRaw}` : piedRaw.charAt(0).toUpperCase() + piedRaw.slice(1).toLowerCase()) : '';
+  // Option couleur pieds sur ligne à part (ACVRPIEDANT/ACVRMOUVANT) — rare (~6 lignes sur tout
+  // l'historique Mégao) mais réelle, jamais captée par l'extraction ci-dessus (ligne séparée de
+  // la structure). Vue uniquement pour la finition "Anthracite Granulé/structurée" jusqu'ici —
+  // prioritaire sur la couleur pieds déduite de la ligne structure quand présente.
+  const piedOptionM = text.match(/^(ACVRPIEDANT|ACVRMOUVANT)\s*([A-Z][a-zÀ-ÿé].+)/m);
+  if (piedOptionM) pieds = 'Anthracite Granulé';
 
   // Largeur depuis le code LAM — chiffre(s) à la fin du code (LAM350→3.50m, LAM45→4.5m, LAM4→4m, LAMPOL4→4m)
   const lamCodeM = text.match(/^LAM[A-Z]*([0-9]+)/m);

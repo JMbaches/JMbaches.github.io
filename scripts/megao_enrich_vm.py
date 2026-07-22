@@ -91,6 +91,10 @@ ACCESSORY_PREFIXES = {
     # base, plus fiable que le texte du PDF glissé par pdf-parse).
     'escalier':                   ['VRES'],
     'decoupe':                    ['VRDEC'],
+    # Option couleur pieds sur ligne à part, distincte de la couleur pieds déduite de la ligne
+    # structure — rare (~6 lignes sur tout l'historique Mégao) mais réelle, jamais captée avant.
+    # Vue uniquement pour la finition Anthracite (Granulé/structurée) jusqu'ici.
+    'pieds_couleur':              ['ACVRPIEDANT', 'ACVRMOUVANT'],
 }
 
 
@@ -248,6 +252,11 @@ def build_payload(window_days):
                 couleur = parse_bouchon_couleur(l['codeart'], l['design'])
                 if couleur and couleur not in entry['bouchonCouleurs']:
                     entry['bouchonCouleurs'].append(couleur)
+            if cat == 'pieds_couleur':
+                # Vu uniquement pour la finition Anthracite jusqu'ici (voir ACCESSORY_PREFIXES) —
+                # normalisation directe plutôt qu'un mot-clé générique, faute d'autre variante
+                # observée sur l'historique complet pour cette ligne d'option spécifique.
+                entry['piedsCouleurOption'] = 'Anthracite Granulé'
         elif is_note:
             entry['notes'].append({'numligne': l['numligne'], 'texte': l['design']})
 

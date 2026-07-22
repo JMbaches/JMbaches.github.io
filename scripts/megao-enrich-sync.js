@@ -75,13 +75,19 @@ async function enrichirDossier(numcmdc, payload, nowAt) {
   const clientCorrigeDisponible = payload.clientCorrige || '';
   const clientActuelPlaceholder = /^enl[eè]vement\b/i.test(prev.client || '');
   const applyClientFix = clientCorrigeDisponible && clientActuelPlaceholder;
+  // Option couleur pieds sur ligne dédiée (rare — voir megao_enrich_vm.py::ACCESSORY_PREFIXES,
+  // 'pieds_couleur') : signal Mégao explicite et sans ambiguïté quand présent, prioritaire sur
+  // la couleur pieds déduite du texte de la ligne structure — appliqué seulement si différent
+  // pour ne pas spammer l'historique à chaque passage d'enrichissement.
+  const piedsCouleurOption = payload.piedsCouleurOption || '';
+  const applyPiedsFix = piedsCouleurOption && piedsCouleurOption !== prev.pieds;
 
   const inchange =
     JSON.stringify(prev.megaoAccessoires || {})       === JSON.stringify(megaoAccessoires) &&
     JSON.stringify(prev.megaoAccessoiresDetail || {}) === JSON.stringify(megaoAccessoiresDetail) &&
     JSON.stringify(prev.megaoNotes || [])              === JSON.stringify(megaoNotes) &&
     JSON.stringify(prev.megaoBouchonCouleurs || [])    === JSON.stringify(megaoBouchonCouleurs) &&
-    !applyClientFix;
+    !applyClientFix && !applyPiedsFix;
 
   if (inchange) {
     console.log(`  → dossier ${dosId} déjà à jour — rien à faire`);
@@ -94,9 +100,16 @@ async function enrichirDossier(numcmdc, payload, nowAt) {
     update.contact = clientCorrigeDisponible;
     console.log(`  → nom client corrigé : "${prev.client}" → "${clientCorrigeDisponible}"`);
   }
+  if (applyPiedsFix) {
+    update.pieds = piedsCouleurOption;
+    console.log(`  → couleur pieds corrigée : "${prev.pieds || ''}" → "${piedsCouleurOption}"`);
+  }
+  const actions = ['Enrichissement Mégao (accessoires/notes)'];
+  if (applyClientFix) actions.push(`nom client corrigé ("${prev.client}" → "${clientCorrigeDisponible}")`);
+  if (applyPiedsFix) actions.push(`couleur pieds corrigée ("${prev.pieds || ''}" → "${piedsCouleurOption}")`);
   update.history = [
     ...(prev.history || []),
-    { id: Date.now(), type: 'megao', action: applyClientFix ? 'Enrichissement Mégao (accessoires/notes) + correction nom client' : 'Enrichissement Mégao (accessoires/notes)', detail: applyClientFix ? `"${prev.client}" → "${clientCorrigeDisponible}"` : '', user: 'megao-enrich-sync', at: nowAt },
+    { id: Date.now(), type: 'megao', action: actions[0], detail: actions.slice(1).join(' | '), user: 'megao-enrich-sync', at: nowAt },
   ];
   await docRef.update(update);
   console.log(`  ✓ dossier ${dosId} enrichi`);
