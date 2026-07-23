@@ -133,7 +133,13 @@ function parseMegaoText(text) {
 
   // Longueur : somme des quantités ML de toutes les refs LAM
   // [\s\S]*? pour gérer le cas où ML est sur la ligne suivante (LAMPOL4, etc.)
-  const lamLines = [...text.matchAll(/^LAM[A-Z0-9]+[\s\S]*?\bML\s+([\d,]+)/gm)];
+  // PAS de \b avant ML (corrigé 2026-07-23) : la couleur de lame est collée directement devant
+  // "ML" par pdf-parse (ex. "...(le ml) BlancML  11,00..."), donc aucune frontière de mot entre
+  // "Blanc" et "ML" — \bML ne matchait jamais dans ce cas, laissant longueur vide alors que
+  // largeur (extrait séparément depuis le CODE, pas ce texte) restait correct. Vérifié sur 2
+  // vrais PDF téléchargés (dossiers 119164/119260/119516, "BlancML"/"AnthraciteML") — touchait
+  // 30/83 dossiers volets réels (36%, largeur présente mais longueur vide).
+  const lamLines = [...text.matchAll(/^LAM[A-Z0-9]+[\s\S]*?ML\s+([\d,]+)/gm)];
   const longueur = lamLines.length
     ? String(lamLines.reduce((sum, m) => sum + parseFloat(m[1].replace(',', '.')), 0))
     : '';
