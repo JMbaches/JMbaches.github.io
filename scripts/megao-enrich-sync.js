@@ -48,6 +48,82 @@ function summarizeAccessoires(accessoires) {
   return summary;
 }
 
+// Dérivation des champs précis lus par le décompte stock legacy (stock.js) — jusqu'ici
+// megaoAccessoires/megaoAccessoiresDetail étaient bien capturés et affichés dans la fiche, mais
+// AUCUN champ structuré (d.telecommande, d.gestionSel, d.murHauteur...) n'était jamais rempli
+// automatiquement (vérifié : 0/83 dossiers volets réels avaient un seul de ces champs renseigné,
+// ni auto ni à la main) — le décompte auto de ces pièces "quick win legacy" restait donc inerte
+// même si `decompteAutoActif` était réactivé. Codes vérifiés un par un sur CMDCLIB réel
+// (2026-07-23) avant d'écrire cette table — voir mémoire projet pour le détail des échantillons.
+// Reclasse ICI par préfixe de codeart plutôt que de se fier au bucket VM (megao_enrich_vm.py
+// range par erreur ACVRCOFASSER sous 'passes_sangles' — sans conséquence ici puisqu'on regarde
+// le codeart brut, peu importe sous quel bucket VM la ligne est arrivée).
+const COULEUR_STRUCTURE_RE = /\b(Blanc|Gris|Sable)\b/i;
+// Hauteur du mur immergé : code MU1<suffixe> → hauteur, vérifié sur les vrais codes CMDCLIB
+// (MU14/15/16 = 1m, MU1254/55/56 = 1,25m, MU1504/05/06 = 1,50m — clé courte '1,5m' pour matcher
+// exactement QUANTITES dans stock.js::stockDecompterMur, pas '1,50m'). Pas de code "2m" confirmé
+// dans l'échantillon réel — volontairement absent de la table plutôt que deviné.
+const MUR_HAUTEUR_PAR_CODE = {
+  MU14: '1m', MU15: '1m', MU16: '1m',
+  MU1254: '1,25m', MU1255: '1,25m', MU1256: '1,25m',
+  MU1504: '1,5m', MU1505: '1,5m', MU1506: '1,5m',
+};
+function deriveChampsAccessoiresVolet(accessoires) {
+  const lignes = Object.values(accessoires || {}).flat();
+  const update = {};
+
+  // Télécommande : ACVRTELECOMBL (bluetooth) vs ACVRTELECOM (classique) — un seul choix par
+  // dossier en pratique, bluetooth testé en premier car préfixe plus spécifique.
+  if (lignes.some(l => l.codeart.startsWith('ACVRTELECOMBL'))) update.telecommande = 'Bluetooth';
+  else if (lignes.some(l => l.codeart.startsWith('ACVRTELECOM'))) update.telecommande = 'Classique';
+
+  // Gestion sel : ACCOFASSEROXE = Oxeo, ACVRCOFASSER = Electrolyseur (confirmé par les vraies
+  // désignations : "gestion autonome OXEO" vs "Asservissement pour électrolyseur").
+  if (lignes.some(l => l.codeart.startsWith('ACCOFASSEROXE'))) update.gestionSel = 'Oxeo';
+  else if (lignes.some(l => l.codeart.startsWith('ACVRCOFASSER'))) update.gestionSel = 'Electrolyseur';
+
+  // Passes-sangles : somme des quantités ACVRPASSANG (champ numérique côté app).
+  const passesSanglesQte = lignes.filter(l => l.codeart.startsWith('ACVRPASSANG')).reduce((s, l) => s + (l.qte || 0), 0);
+  if (passesSanglesQte > 0) update.passesSangles = String(passesSanglesQte);
+
+  // Flasque murale (Oui/Non côté app) : présence de ACVREQUFLASQ.
+  if (lignes.some(l => l.codeart.startsWith('ACVREQUFLASQ'))) update.flasqueMurale = 'Oui';
+
+  // Cornière 60x60 (Oui/Non) : présence de ACVRCORN.
+  if (lignes.some(l => l.codeart.startsWith('ACVRCORN'))) update.corniere6060 = 'Oui';
+
+  // Équerres de renfort (immergé simple, 1 à 3) : somme des quantités ACVREQUTELESC/ACVREQUROUL —
+  // hors de la plage 1-3 (valeur legacy invalide), on ne force pas le champ, cf. stock.js.
+  const equerresQte = lignes.filter(l => /^ACVREQU(TELESC|ROUL)/.test(l.codeart)).reduce((s, l) => s + (l.qte || 0), 0);
+  if (equerresQte >= 1 && equerresQte <= 3) update.equerresRenfort = String(equerresQte);
+
+  // Mur immergé : hauteur via la table code→hauteur ci-dessus, couleur en cherchant
+  // Blanc/Gris/Sable dans la désignation (pas toujours présente sur le vrai texte Mégao — si
+  // absente, le champ n'est juste pas rempli, le décompte mur ne se déclenchera pas, jamais de
+  // valeur devinée à tort).
+  const murLigne = lignes.find(l => MUR_HAUTEUR_PAR_CODE[l.codeart]);
+  if (murLigne) {
+    update.murHauteur = MUR_HAUTEUR_PAR_CODE[murLigne.codeart];
+    const coul = murLigne.design.match(COULEUR_STRUCTURE_RE);
+    if (coul) update.murCouleur = coul[1].charAt(0).toUpperCase() + coul[1].slice(1).toLowerCase();
+  }
+
+  // Poutre (immergé simple, ACVRPOUTR* hors ACVRPOUTRIN — couleur dans la désignation) / poutre
+  // brute (immergé total, ACVRPOUTRIN — quantité 0/1/2, jamais un choix de couleur, cf. stock.js
+  // stockDecompterPoutreBrute).
+  const poutreLigne = lignes.find(l => l.codeart.startsWith('ACVRPOUTR') && !l.codeart.startsWith('ACVRPOUTRIN'));
+  if (poutreLigne) {
+    const coul = poutreLigne.design.match(COULEUR_STRUCTURE_RE);
+    if (coul) update.poutreCouleur = coul[1].charAt(0).toUpperCase() + coul[1].slice(1).toLowerCase();
+  }
+  if (lignes.some(l => l.codeart.startsWith('ACVRPOUTRIN'))) {
+    const poutreInQte = lignes.filter(l => l.codeart.startsWith('ACVRPOUTRIN')).reduce((s, l) => s + (l.qte || 0), 0);
+    if (poutreInQte <= 2) update.nombrePoutres = String(poutreInQte);
+  }
+
+  return update;
+}
+
 async function enrichirDossier(numcmdc, payload, nowAt) {
   const dosId  = refToId(String(numcmdc));
   const docRef = db.collection('dossiers').doc(dosId);
@@ -82,19 +158,34 @@ async function enrichirDossier(numcmdc, payload, nowAt) {
   const piedsCouleurOption = payload.piedsCouleurOption || '';
   const applyPiedsFix = piedsCouleurOption && piedsCouleurOption !== prev.pieds;
 
+  // Champs précis pour le décompte stock (voir deriveChampsAccessoiresVolet ci-dessus) —
+  // uniquement pour les dossiers volets (les bâches ont leur propre système d'accessoires,
+  // bacheAccessoiresDetail dans megao-sync.js) et UNIQUEMENT si le champ est encore vide, pour
+  // ne jamais écraser une valeur déjà saisie (auto une fois ici, ou manuellement par un admin).
+  const isBacheDossier = (prev.type || 'volet') === 'bache';
+  const champsDerives = isBacheDossier ? {} : deriveChampsAccessoiresVolet(payload.accessoires);
+  const nouveauxChamps = {};
+  for (const [k, v] of Object.entries(champsDerives)) {
+    if (!prev[k]) nouveauxChamps[k] = v;
+  }
+  const applyChampsDerives = Object.keys(nouveauxChamps).length > 0;
+
   const inchange =
     JSON.stringify(prev.megaoAccessoires || {})       === JSON.stringify(megaoAccessoires) &&
     JSON.stringify(prev.megaoAccessoiresDetail || {}) === JSON.stringify(megaoAccessoiresDetail) &&
     JSON.stringify(prev.megaoNotes || [])              === JSON.stringify(megaoNotes) &&
     JSON.stringify(prev.megaoBouchonCouleurs || [])    === JSON.stringify(megaoBouchonCouleurs) &&
-    !applyClientFix && !applyPiedsFix;
+    !applyClientFix && !applyPiedsFix && !applyChampsDerives;
 
   if (inchange) {
     console.log(`  → dossier ${dosId} déjà à jour — rien à faire`);
     return 'inchange';
   }
 
-  const update = { megaoAccessoires, megaoAccessoiresDetail, megaoNotes, megaoBouchonCouleurs };
+  const update = { megaoAccessoires, megaoAccessoiresDetail, megaoNotes, megaoBouchonCouleurs, ...nouveauxChamps };
+  if (applyChampsDerives) {
+    console.log(`  → champs stock dérivés : ${Object.entries(nouveauxChamps).map(([k,v])=>`${k}=${v}`).join(', ')}`);
+  }
   if (applyClientFix) {
     update.client = clientCorrigeDisponible;
     update.contact = clientCorrigeDisponible;
@@ -107,6 +198,7 @@ async function enrichirDossier(numcmdc, payload, nowAt) {
   const actions = ['Enrichissement Mégao (accessoires/notes)'];
   if (applyClientFix) actions.push(`nom client corrigé ("${prev.client}" → "${clientCorrigeDisponible}")`);
   if (applyPiedsFix) actions.push(`couleur pieds corrigée ("${prev.pieds || ''}" → "${piedsCouleurOption}")`);
+  if (applyChampsDerives) actions.push(`champs stock renseignés automatiquement : ${Object.entries(nouveauxChamps).map(([k,v])=>`${k}=${v}`).join(', ')}`);
   update.history = [
     ...(prev.history || []),
     { id: Date.now(), type: 'megao', action: actions[0], detail: actions.slice(1).join(' | '), user: 'megao-enrich-sync', at: nowAt },
