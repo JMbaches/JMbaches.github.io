@@ -242,14 +242,27 @@ function deriveChampsAccessoiresVoletDepuisPdf(text, structure) {
   const gestionSelLigne = lignes.find(l => l.code.startsWith('ACCOFAS') || l.code.startsWith('ACVRCOFAS'));
   if (gestionSelLigne) update.gestionSel = /OXEO/i.test(gestionSelLigne.design) ? 'Oxeo' : 'Electrolyseur';
 
-  const passesSanglesQte = lignes.filter(l => l.code.startsWith('ACVRPASSANG')).reduce((s, l) => s + (l.qte || 0), 0);
+  // ⚠ Préfixes raccourcis (ACVRPASSA pas ACVRPASSANG, ACVREQUFL pas ACVREQUFLASQ, ACVREQUTE pas
+  // ACVREQUTELESC) — trouvés en comparant les 78 vrais PDF stockés à la classification d'origine
+  // (basée sur le Codeart complet CMDCLIB) : le rendu PDF Mégao utilise des codes plus courts que
+  // ceux vus côté base historique pour plusieurs accessoires, pas seulement télécommande.
+  const passesSanglesQte = lignes.filter(l => l.code.startsWith('ACVRPASSA')).reduce((s, l) => s + (l.qte || 0), 0);
   if (passesSanglesQte > 0) update.passesSangles = String(passesSanglesQte);
 
-  if (lignes.some(l => l.code.startsWith('ACVREQUFLASQ'))) update.flasqueMurale = 'Oui';
+  if (lignes.some(l => l.code.startsWith('ACVREQUFL'))) update.flasqueMurale = 'Oui';
   if (lignes.some(l => l.code.startsWith('ACVRCORN'))) update.corniere6060 = 'Oui';
 
-  const equerresQte = lignes.filter(l => /^ACVREQU(TELESC|ROUL)/.test(l.code)).reduce((s, l) => s + (l.qte || 0), 0);
+  const equerresQte = lignes.filter(l => l.code.startsWith('ACVREQUTE') || l.code.startsWith('ACVREQUROU')).reduce((s, l) => s + (l.qte || 0), 0);
   if (equerresQte >= 1 && equerresQte <= 3) update.equerresRenfort = String(equerresQte);
+
+  // Alimentation (d.typeAlimentation, lu par stockDecompterAlimentation) — jamais dérivé avant
+  // ce jour : ACVRALIBAT ("kit chargeur + batteries...") vu sur 21/78 dossiers réels (27%, de
+  // loin le code le plus fréquent), distingue 6ah/3ah dans la désignation → 'Batterie 6ah' sinon
+  // 'Batterie' ; ACVRPLUG ("Easy Plug") → 'EasyPlug'. Electrique/Solaire/Solaire + Chargeur pas
+  // couverts : aucun code dédié rencontré dans l'échantillon réel disponible.
+  const alimBatLigne = lignes.find(l => l.code.startsWith('ACVRALIBAT'));
+  if (alimBatLigne) update.typeAlimentation = /6\s*ah/i.test(alimBatLigne.design) ? 'Batterie 6ah' : 'Batterie';
+  else if (lignes.some(l => l.code.startsWith('ACVRPLUG'))) update.typeAlimentation = 'EasyPlug';
 
   const murLigne = lignes.find(l => MUR_HAUTEUR_PAR_CODE_VOLET[l.code]);
   if (murLigne) {
@@ -603,7 +616,8 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
                     'largeur','longueur','revendeur','refCommande',
                     // Accessoires volet lus directement dans le PDF (cf. deriveChampsAccessoiresVoletDepuisPdf)
                     'telecommande','gestionSel','passesSangles','flasqueMurale','corniere6060','equerresRenfort',
-                    'murHauteur','murCouleur','poutreCouleur','nombrePoutres','caillebotisChoix','caillebotisProfondeur'];
+                    'murHauteur','murCouleur','poutreCouleur','nombrePoutres','caillebotisChoix','caillebotisProfondeur',
+                    'typeAlimentation'];
     const update = {};
     for (const f of fields) {
       if (data[f]) update[f] = data[f];
@@ -677,6 +691,7 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
       nombrePoutres: data.nombrePoutres || '',
       caillebotisChoix: data.caillebotisChoix || '',
       caillebotisProfondeur: data.caillebotisProfondeur || '',
+      typeAlimentation: data.typeAlimentation || '',
       needPose:    data.transport  === 'liv_pose',
       poseDate:    '',
       statut:      'admin',
