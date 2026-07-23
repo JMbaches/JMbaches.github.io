@@ -185,13 +185,107 @@ function parseMegaoText(text) {
            || text.match(/Total\s+HT\s*\n\s*([\d][\d\s]*,\d{2})/i);
   const ht  = htM ? parseFloat(htM[1].replace(/\s/g, '').replace(',', '.')) : 0;
 
+  const champsAccessoiresVolet = deriveChampsAccessoiresVoletDepuisPdf(text, structure);
+
   return {
     ref, refCommande: ref, client, contact, tel, email, adresse, cp, ville,
     structure, lames, couleurBouchon, pieds, alim, moteur, typeLame, escalier, decoupe,
     options: '', remarques: '', autres: '',
     largeur, longueur, revendeur,
     transport, ht, dateFrom, isVolet,
+    ...champsAccessoiresVolet,
   };
+}
+
+// Accessoires volet lus DIRECTEMENT dans le texte PDF (pas via l'enrichissement VM séparé,
+// megao-enrich-sync.js/megao_enrich_vm.py, qui s'est avéré manquer des lignes réelles — ex.
+// commande 120779 réelle : CAIBO905 absent de megaoAccessoiresDetail alors que la ligne existe
+// bel et bien dans le PDF). Régler la fiabilité à la source plutôt que côté enrichissement.
+// Même principe que BACHE_LIGNE_RE (code MAJUSCULES collé à une désignation Titlecase par
+// pdf-parse), élargi à "ML" en plus de "UN"/"M2" comme marqueur de fin (les lignes LAM/CAIBO
+// utilisent ML) et au charset "<>" (codes découpe VRDEC<20E).
+const VOLET_ACCESSOIRE_LIGNE_RE = /^([A-Z][A-Z0-9<>]{1,15})([A-ZÀ-Þ][a-zà-ÿ][\s\S]*?)(?:M2|UN|ML)(?:\s+([\d,]+))?/gm;
+const COULEUR_STRUCTURE_VOLET_RE = /\b(Blanc|Gris|Sable)\b/i;
+// Hauteur du mur immergé : code MU1<suffixe> → hauteur (vérifié sur CMDCLIB réel, voir
+// deriveChampsAccessoiresVolet dans megao-enrich-sync.js pour la même table/le même détail).
+const MUR_HAUTEUR_PAR_CODE_VOLET = {
+  MU14: '1m', MU15: '1m', MU16: '1m',
+  MU1254: '1,25m', MU1255: '1,25m', MU1256: '1,25m',
+  MU1504: '1,5m', MU1505: '1,5m', MU1506: '1,5m',
+};
+// Profondeur du caillebotis (cm) : code CAIBO/CAIPVC + 7 = 70cm, + 9 = 90cm (2e/3e chiffre du
+// code, vérifié sur CMDCLIB réel — CAIBO704/CAIPVC704="70 cm", CAIBO904/CAIPVC904="90 cm").
+// Largeur caillebotis PAS dérivée : le code n'encode qu'une fourchette de largeur bassin (ex.
+// "4 à 5m"), pas une valeur exacte — vérifié sur 19 commandes réelles : la fourchette correspond
+// à la largeur bassin (LAM) dans 18/19 cas mais PAS toujours (1 exception trouvée, largeur
+// bassin 3m vs fourchette caillebotis "4 à 5m", forme de bassin non standard probable) — trop
+// risqué pour une quantité calculée, laissé à la saisie admin (choix/profondeur, eux, fiables).
+function deriveChampsAccessoiresVoletDepuisPdf(text, structure) {
+  const lignes = [...text.matchAll(VOLET_ACCESSOIRE_LIGNE_RE)].map(m => ({
+    code: m[1],
+    design: m[2].replace(/\s*\n\s*/g, ' ').trim(),
+    qte: m[3] ? parseFloat(m[3].replace(',', '.')) : null,
+  }));
+  const update = {};
+
+  // ⚠ Le code est TRONQUÉ à "ACVRTELEC" par le rendu PDF Mégao pour les 2 variantes (vérifié sur
+  // 3 vrais PDF : "ACVRTELECTélécommande pour volet" ET "ACVRTELECTélécommande pour volet
+  // bluetooth" partagent EXACTEMENT le même code tronqué — contrairement au Codeart complet côté
+  // base Mégao, ACVRTELECOM/ACVRTELECOMBL, utilisable lui sans troncature côté enrichissement VM).
+  // Distinction uniquement possible via le mot "bluetooth" dans la désignation ici.
+  const telecommandeLigne = lignes.find(l => l.code.startsWith('ACVRTELEC'));
+  if (telecommandeLigne) update.telecommande = /bluetooth/i.test(telecommandeLigne.design) ? 'Bluetooth' : 'Classique';
+
+  // OXEO recherché aussi dans la désignation (pas seulement le code) par prudence : la
+  // troncature PDF de télécommande ci-dessus a montré que le code peut être raccourci d'une
+  // façon qui masque la vraie variante — la désignation reste le signal fiable dans ce cas.
+  const gestionSelLigne = lignes.find(l => l.code.startsWith('ACCOFAS') || l.code.startsWith('ACVRCOFAS'));
+  if (gestionSelLigne) update.gestionSel = /OXEO/i.test(gestionSelLigne.design) ? 'Oxeo' : 'Electrolyseur';
+
+  const passesSanglesQte = lignes.filter(l => l.code.startsWith('ACVRPASSANG')).reduce((s, l) => s + (l.qte || 0), 0);
+  if (passesSanglesQte > 0) update.passesSangles = String(passesSanglesQte);
+
+  if (lignes.some(l => l.code.startsWith('ACVREQUFLASQ'))) update.flasqueMurale = 'Oui';
+  if (lignes.some(l => l.code.startsWith('ACVRCORN'))) update.corniere6060 = 'Oui';
+
+  const equerresQte = lignes.filter(l => /^ACVREQU(TELESC|ROUL)/.test(l.code)).reduce((s, l) => s + (l.qte || 0), 0);
+  if (equerresQte >= 1 && equerresQte <= 3) update.equerresRenfort = String(equerresQte);
+
+  const murLigne = lignes.find(l => MUR_HAUTEUR_PAR_CODE_VOLET[l.code]);
+  if (murLigne) {
+    update.murHauteur = MUR_HAUTEUR_PAR_CODE_VOLET[murLigne.code];
+    const coul = murLigne.design.match(COULEUR_STRUCTURE_VOLET_RE);
+    if (coul) update.murCouleur = coul[1].charAt(0).toUpperCase() + coul[1].slice(1).toLowerCase();
+  }
+
+  // Poutre : le code catalogue Codeart ACVRPOUTR (immergé simple, couleur) et ACVRPOUTRIN
+  // (immergé total, quantité 0-2) tronquent TOUS LES DEUX vers "ACVRPOUT" dans le PDF rendu
+  // (vérifié sur la commande 120779 réelle : "ACVRPOUTPoutre aluminium...") — impossible de les
+  // distinguer par le code seul comme pour télécommande ci-dessus. On route donc sur le type de
+  // structure déjà extrait (fiable), pas sur le suffixe du code.
+  const poutreLigne = lignes.find(l => l.code.startsWith('ACVRPOUT'));
+  const isImmergeTotal = /immerg[ée].*total|subwater\s*total/i.test(structure);
+  if (poutreLigne && isImmergeTotal) {
+    const qte = lignes.filter(l => l.code.startsWith('ACVRPOUT')).reduce((s, l) => s + (l.qte || 0), 0);
+    if (qte <= 2) update.nombrePoutres = String(qte);
+  } else if (poutreLigne) {
+    const coul = poutreLigne.design.match(COULEUR_STRUCTURE_VOLET_RE);
+    if (coul) update.poutreCouleur = coul[1].charAt(0).toUpperCase() + coul[1].slice(1).toLowerCase();
+  }
+
+  // Caillebotis : choix (couleur peinte ou essence de bois) + profondeur exacte depuis le code.
+  // Largeur volontairement PAS renseignée (voir commentaire au-dessus de la fonction).
+  const caillebotisLigne = lignes.find(l => /^(CAIBO|CAIPVC)/.test(l.code));
+  if (caillebotisLigne) {
+    const profM = caillebotisLigne.code.match(/^CAI(?:BO|PVC)([79])/);
+    if (profM) update.caillebotisProfondeur = profM[1] === '7' ? '70' : '90';
+    const coul = caillebotisLigne.design.match(COULEUR_STRUCTURE_VOLET_RE);
+    if (coul) update.caillebotisChoix = coul[1].charAt(0).toUpperCase() + coul[1].slice(1).toLowerCase();
+    else if (/ROBINIER/i.test(caillebotisLigne.design)) update.caillebotisChoix = 'Robinier';
+    else if (/\bIPE\b/i.test(caillebotisLigne.design)) update.caillebotisChoix = 'IPE';
+  }
+
+  return update;
 }
 
 // ─── Parser PDF Mégao — bâches (barres/bulles/Sécuritis) ─────────────────────
@@ -506,7 +600,10 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
     const prev   = existing.data();
     const fields = ['client','tel','email','contact','adresse','cp','ville',
                     'structure','lames','couleurBouchon','typeLame','pieds','alim','moteur','escalier','decoupe','options','remarques','autres','transport',
-                    'largeur','longueur','revendeur','refCommande'];
+                    'largeur','longueur','revendeur','refCommande',
+                    // Accessoires volet lus directement dans le PDF (cf. deriveChampsAccessoiresVoletDepuisPdf)
+                    'telecommande','gestionSel','passesSangles','flasqueMurale','corniere6060','equerresRenfort',
+                    'murHauteur','murCouleur','poutreCouleur','nombrePoutres','caillebotisChoix','caillebotisProfondeur'];
     const update = {};
     for (const f of fields) {
       if (data[f]) update[f] = data[f];
@@ -567,6 +664,19 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
       largeur:     data.largeur    || '',
       longueur:    data.longueur   || '',
       revendeur:   data.revendeur  || '',
+      // Accessoires volet lus directement dans le PDF (cf. deriveChampsAccessoiresVoletDepuisPdf)
+      telecommande: data.telecommande || '',
+      gestionSel:   data.gestionSel   || '',
+      passesSangles: data.passesSangles || '',
+      flasqueMurale: data.flasqueMurale || '',
+      corniere6060:  data.corniere6060  || '',
+      equerresRenfort: data.equerresRenfort || '',
+      murHauteur:   data.murHauteur   || '',
+      murCouleur:   data.murCouleur   || '',
+      poutreCouleur: data.poutreCouleur || '',
+      nombrePoutres: data.nombrePoutres || '',
+      caillebotisChoix: data.caillebotisChoix || '',
+      caillebotisProfondeur: data.caillebotisProfondeur || '',
       needPose:    data.transport  === 'liv_pose',
       poseDate:    '',
       statut:      'admin',
