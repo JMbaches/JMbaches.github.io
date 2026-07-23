@@ -176,7 +176,7 @@ function renderPlanningAvance() {
     <div id="planning-sync-bar" style="display:flex;align-items:center;gap:8px;padding:6px 16px;background:var(--surface);border-bottom:1px solid var(--border);font-size:12px;color:var(--ink-soft)">
       <i class="ti ti-loader" style="animation:spin .8s linear infinite"></i> Connexion à l'app planning…
     </div>
-    <iframe id="planning-ia-frame" src="planning.html"
+    <iframe id="planning-ia-frame" src="planning.html?embedded=1"
       style="width:100%;height:calc(100vh - 140px);border:none;display:block"
       allow="clipboard-write; geolocation"></iframe>`;
 
