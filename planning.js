@@ -88,8 +88,16 @@ window.addEventListener('message', async (e) => {
       if (!d) continue;
       const newDate     = upd.scheduledDate  || '';
       const newPoseurId = upd.scheduledBinome || '';
-      if (d.poseDate  !== newDate)     { d.poseDate  = newDate;     changed = true; await _retourSaisieSiPlanifie(d); }
+      // "valide" côté Planning IA = date confirmée par téléphone avec le client (bouton "Valider
+      // avec le client (verrouiller)"), PAS juste une date proposée par l'optimiseur — jusqu'ici
+      // ce statut était envoyé par l'iframe mais jamais lu ici, donc _retourSaisieSiPlanifie()
+      // renvoyait le dossier à l'admin dès qu'une date était ne serait-ce que proposée. Corrigé :
+      // on ne renvoie à l'admin QUE si le client a réellement validé.
+      const newValideClient = upd.status === 'valide';
+      if (d.poseDate  !== newDate)     { d.poseDate  = newDate;     changed = true; }
       if (d.poseurId  !== newPoseurId) { d.poseurId  = newPoseurId; changed = true; }
+      if (d.poseValideClient !== newValideClient) { d.poseValideClient = newValideClient; changed = true; }
+      if (newValideClient) await _retourSaisieSiPlanifie(d);
     }
     if (changed) { saveData(); showToast('✓ Planning synchronisé avec Firebase'); }
   }
@@ -200,12 +208,16 @@ function renderPlanning() {
   const dossiersP = dossiersScope();
   const aPlaner = dossiersP.filter(d => (d.needPose || d.transport === 'liv_pose') && !d.poseDate);
   const planifies = dossiersP.filter(d => (d.needPose || d.transport === 'liv_pose') && d.poseDate);
+  // "Validé client" = date confirmée par téléphone dans Planning IA (bouton "Valider avec le
+  // client"), pas juste proposée — seuls ceux-là font revenir le dossier en Saisie admin (cf.
+  // JMBACH_UPDATE plus haut). Distingués ici pour que la personne au planning sache qui appeler.
+  const enAttenteValidation = planifies.filter(d => !d.poseValideClient);
 
   mc.innerHTML = `
   <div class="edt-toolbar">
     <div>
       <div class="section-title">Planning des poses</div>
-      <div style="font-size:12px;color:var(--ink-faint);margin-top:2px">${aPlaner.length} à planifier · ${planifies.length} planifié${planifies.length>1?'s':''}</div>
+      <div style="font-size:12px;color:var(--ink-faint);margin-top:2px">${aPlaner.length} à planifier · ${planifies.length} planifié${planifies.length>1?'s':''}${enAttenteValidation.length?` · <span style="color:var(--amber,#B45309);font-weight:600">${enAttenteValidation.length} en attente de validation client</span>`:''}</div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <div class="edt-views">
@@ -229,9 +241,14 @@ function renderPlanning() {
         <div class="edt-unplanned-title" style="color:var(--green)"><i class="ti ti-check"></i> Planifiés (${planifies.length})</div>
         ${planifies.length===0
           ? `<div style="font-size:12px;color:var(--ink-faint);text-align:center;padding:10px 0">Aucun</div>`
-          : planifies.map(d=>`<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-              <span style="font-weight:500;cursor:pointer" onclick="openFiche('${d.id}')">${d.client}</span>
-              <span style="color:var(--ink-faint)">${fmt(d.poseDate)}</span>
+          : planifies.map(d=>`<div style="font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="openFiche('${d.id}')">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-weight:500">${d.client}</span>
+                <span style="color:var(--ink-faint)">${fmt(d.poseDate)}</span>
+              </div>
+              <div style="margin-top:1px">${d.poseValideClient
+                ? `<span style="font-size:10px;color:var(--green);font-weight:600"><i class="ti ti-circle-check" style="font-size:10px"></i> Validé client</span>`
+                : `<span style="font-size:10px;color:var(--amber,#B45309);font-weight:600"><i class="ti ti-phone" style="font-size:10px"></i> En attente de validation client</span>`}</div>
             </div>`).join('')}
       </div>
     </div>
@@ -365,6 +382,10 @@ async function edtDrop(e, isoDate) {
   const d = dossiers.find(x=>x.id===edtDragDosId);
   if(!d) return;
   d.poseDate = isoDate;
+  // Assignation directe (glisser-déposer humain) = considérée confirmée d'emblée, pas une simple
+  // proposition en attente d'appel client — pas de statut "valide" séparé pour ce mécanisme,
+  // contrairement à Planning IA (JMBACH_UPDATE plus haut).
+  d.poseValideClient = true;
   logHistory(d.id,'modification','Date de pose planifiée','Pose le '+fmt(isoDate));
   await _retourSaisieSiPlanifie(d);
   saveData();
@@ -386,6 +407,7 @@ async function setPoseAndRefresh(dosId, val) {
   const d = dossiers.find(x=>x.id===dosId);
   if(!d) return;
   d.poseDate = val;
+  d.poseValideClient = true; // assignation directe = confirmée d'emblée, voir edtDrop() ci-dessus
   logHistory(dosId,'modification','Date de pose définie','Pose le '+fmt(val));
   await _retourSaisieSiPlanifie(d);
   saveData();
@@ -468,6 +490,7 @@ function importerPlanning() {
           if(d && !dossierDansPerimetre(d)) continue;
           if(d && item.poseDate) {
             d.poseDate = item.poseDate;
+            d.poseValideClient = true; // import manuel = confirmé d'emblée, voir edtDrop() plus haut
             logHistory(d.id, 'modification', 'Date de pose importée', 'Pose le ' + fmt(item.poseDate));
             await _retourSaisieSiPlanifie(d);
             updated++;
