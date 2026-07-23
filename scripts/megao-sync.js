@@ -206,8 +206,19 @@ function parseMegaoText(text) {
 // options qui existait déjà et fonctionne en prod.
 const BACHE_LIGNE_RE = /^([A-Z][A-Z0-9\/\+]{1,15})([A-ZÀ-Þ][a-zà-ÿ][\s\S]*?)(?:M2|UN)(?:\s+([\d,]+))?/gm;
 
+// Gamme "Cover"/"Poly Cover" (bâches hiver rigides, marques Cover et Ecolight - Poly Cover) —
+// jamais reconnue avant le 2026-07-23 : COV[1-4]/COVONE/COVPREST/COVPVCAUTRE + variantes à
+// forme catalogue (COV1HJ<ville>/COV1GAPP<code>), CIKP*/CIKB* (montage spécifique marque Gré,
+// ex. "Cover 1 - Gré"), POLYHJ<ville> (Ecolight - Poly Cover) + code générique ECOLIGHT — vu
+// sur 5337 commandes réelles distinctes dans CMDCLIB, jamais matché par cette regex ni par
+// mainLigne plus bas → email silencieusement ignoré ("Ni volet ni bâche reconnue") si aucun
+// code BA/BU compagnon n'était présent sur la même commande. GRVOL* ("Grille GR VOL", grille
+// de sécurité) et DFCI* (bâche réserve incendie) confirmés être des produits SANS RAPPORT
+// malgré le même préfixe famille Mégao "HI" dans megao-bache-familles.json — volontairement
+// PAS inclus ici (décision produit à prendre séparément si besoin).
+const BACHE_COVER_RE = /^(COV|CIK|POLYHJ)/;
 function isBache(text) {
-  return /^(BA[A-Z]|BU[A-Z0-9]|SEES|SEECH|TRSPBA|TRSPBU|TRSPHI|ENLEVBA)/m.test(text);
+  return /^(BA[A-Z]|BU[A-Z0-9]|SEES|SEECH|TRSPBA|TRSPBU|TRSPHI|ENLEVBA|COV|CIK|POLYHJ|ECOLIGHT)/m.test(text);
 }
 
 // Catégories d'accessoires bâches — alignées sur les vraies sections de l'inventaire JM
@@ -297,8 +308,12 @@ function parseMegaoBacheText(text) {
   // Ligne "principale" = le produit bâche lui-même, pas un accessoire/transport.
   // SEES (escalier standard Sécuritis) exclu explicitement : commence comme SE/SEEC mais
   // c'est un accessoire, pas le produit (vu sur la commande 120892 réelle, les deux
-  // apparaissent dans le même bon de commande).
-  const mainLigne = lignes.find(l => /^(BA|BU)/.test(l.code) || l.code === 'SE' || /^SEEC/.test(l.code)) || null;
+  // apparaissent dans le même bon de commande). COV/CIK/POLYHJ/ECOLIGHT (gamme Cover/Poly
+  // Cover, cf. BACHE_COVER_RE ci-dessus) ajoutés le 2026-07-23 — avant ça un Cover/Poly Cover
+  // vu sur une commande avec un code compagnon (ex. SEES) créait bien un dossier mais sa ligne
+  // produit retombait en texte libre dans "options" (structure/bacheGamme restaient vides,
+  // cf. dossier réel 120935 "Forestiers-Sapeurs de l'Ardèche").
+  const mainLigne = lignes.find(l => /^(BA|BU)/.test(l.code) || l.code === 'SE' || /^SEEC/.test(l.code) || BACHE_COVER_RE.test(l.code) || l.code === 'ECOLIGHT') || null;
   const structure = mainLigne ? mainLigne.design : '';
   const bacheModele = mainLigne ? mainLigne.code : '';
   // Gamme déduite en priorité du catalogue officiel Mégao (ARTICLE.mkd, code→famille
@@ -306,25 +321,35 @@ function parseMegaoBacheText(text) {
   // décodage), repli sur une heuristique de préfixe si le code n'y figure pas (ex. variante
   // pas encore au catalogue, commande multi-produits). "HIVER" (bâche dite "Sécuritis") est
   // une 3e famille Mégao officielle, confirmée via FAMART.mkd — l'app ne modélise aujourd'hui
-  // que Barres/Bulles pour bacheGamme, donc "Hiver" y est stocké tel quel (donnée honnête,
-  // n'importe quelle valeur hors Barres/Bulles affiche déjà les deux jeux de champs sans
-  // erreur côté fiche — décision produit actée avec l'utilisateur de ne pas retoucher la
-  // modale pour l'instant).
+  // que Barres/Bulles/Cover/Poly Cover pour bacheGamme, donc "Hiver" (Sécuritis) générique y
+  // est stocké tel quel (donnée honnête, n'importe quelle valeur hors Barres/Bulles affiche
+  // déjà les deux jeux de champs sans erreur côté fiche — décision produit actée avec
+  // l'utilisateur de ne pas retoucher la modale pour l'instant). Cover/Poly Cover distingués
+  // AVANT le lookup catalogue : megao-bache-familles.json (snapshot ARTICLE.mkd du 2026-07-15)
+  // ne connaît que COVONE/COVPREST/COVPVCAUTRE, pas les codes COV1/COV1HJ*/COV1GAPP* vus dans
+  // l'audit CMDCLIB réel (catalogue Mégao mis à jour depuis) — préfixe direct plus fiable ici.
   const FAMILLE_GAMME = { BA: 'Barres', BU: 'Bulles', HI: 'Hiver' };
+  // POLYHJ*/ECOLIGHT = marque Ecolight ("Poly Cover"), distingué de COV*/CIK* ("Cover") bien
+  // que les deux matchent BACHE_COVER_RE (qui sert aussi de détecteur générique dans
+  // isBache/mainLigne) — testé en premier pour ne pas tomber dans la branche Cover.
   const bacheGamme = mainLigne
-    ? (FAMILLE_GAMME[MEGAO_BACHE_FAMILLES[mainLigne.code]]
+    ? (/^POLYHJ/.test(mainLigne.code) || mainLigne.code === 'ECOLIGHT' ? 'Poly Cover'
+       : BACHE_COVER_RE.test(mainLigne.code) ? 'Cover'
+       : FAMILLE_GAMME[MEGAO_BACHE_FAMILLES[mainLigne.code]]
        || (/^BA/.test(mainLigne.code) ? 'Barres' : /^BU/.test(mainLigne.code) ? 'Bulles' : ''))
     : '';
 
   // Escalier standard : ACESBAR (Barres/Bulles) + HIES (Hiver, même famille jamais captée
-  // avant — trouvée dans l'audit CMDCLIB réel). HIESHS (hors-standard) prioritaire si présent.
-  const hasEscalierStandard    = lignes.some(l => l.code === 'ACESBAR' || l.code === 'SEES' || l.code === 'HIES');
-  const hasEscalierHorsStandard = lignes.some(l => l.code === 'HIESHS');
+  // avant — trouvée dans l'audit CMDCLIB réel) + ECOLES (Poly Cover). HIESHS/ECOLESHS
+  // (hors-standard) prioritaires si présents.
+  const hasEscalierStandard    = lignes.some(l => l.code === 'ACESBAR' || l.code === 'SEES' || l.code === 'HIES' || l.code === 'ECOLES');
+  const hasEscalierHorsStandard = lignes.some(l => l.code === 'HIESHS' || l.code === 'ECOLESHS');
   const bacheDecoupeEscalier = hasEscalierHorsStandard ? 'Hors-standard' : (hasEscalierStandard ? 'Standard' : '');
   const bacheBarreCharge     = lignes.some(l => l.code === 'ACBACHAR') ? 'Oui' : '';
   // Découpe aspiration/échelle : champ existant côté UI (f-bacheDecoupeAspi), jamais alimenté
-  // par ce parseur jusqu'ici — ACDECASPI (Barres/Bulles) / HIDECASPI (Hiver).
-  const bacheDecoupeAspi = lignes.some(l => l.code === 'ACDECASPI' || l.code === 'HIDECASPI') ? 'Oui' : '';
+  // par ce parseur jusqu'ici — ACDECASPI (Barres/Bulles) / HIDECASPI (Hiver) / ECOLDECASPI
+  // (Poly Cover).
+  const bacheDecoupeAspi = lignes.some(l => l.code === 'ACDECASPI' || l.code === 'HIDECASPI' || l.code === 'ECOLDECASPI') ? 'Oui' : '';
   // Œillets supplémentaires (bulles) : champ existant côté UI (f-bacheOeilletsSupp), jamais
   // alimenté non plus — ACOEILPLAST/ACOEILMETAL/ACKITEMPOEIL vus dans l'audit réel.
   const OEILLETS_CODES = ['ACOEILPLAST', 'ACOEILMETAL', 'ACKITEMPOEIL'];
@@ -362,8 +387,9 @@ function parseMegaoBacheText(text) {
     l !== mainLigne &&
     !/^TRSP/.test(l.code) && !/^ENLEV/.test(l.code) && !/^(ENR|RUP)/.test(l.code) &&
     l.code !== 'ACESBAR' && l.code !== 'SEES' && l.code !== 'HIES' && l.code !== 'HIESHS' &&
+    l.code !== 'ECOLES' && l.code !== 'ECOLESHS' &&
     l.code !== 'ACBACHAR' &&
-    l.code !== 'ACDECASPI' && l.code !== 'HIDECASPI' &&
+    l.code !== 'ACDECASPI' && l.code !== 'HIDECASPI' && l.code !== 'ECOLDECASPI' &&
     !OEILLETS_CODES.includes(l.code) &&
     !classifyBacheAccessoire(l.code) &&
     !BACHE_IGNORE_EXACT.has(l.code) && !/^GESTECO/.test(l.code) &&

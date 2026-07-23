@@ -1550,6 +1550,24 @@ const BACHE_MODELES = [
     {ref:'BASEC+',    label:'Sécu+'},
     {ref:'BAHS',      label:'Cover Wood (hors-sol uniquement)'},
   ]},
+  // Gamme "Cover" (bâches hiver rigides) — modélisée le 2026-07-23, cf. megao-sync.js pour la
+  // méthode de reconnaissance des vrais codes Mégao (COV1-4/COVONE/COVPREST/COVPVCAUTRE + CIKP*
+  // pour le montage marque Gré + variantes à forme catalogue COV1HJ<ville>/COV1GAPP<code>, >300
+  // au total). Ici juste les 4 niveaux génériques + "Cover One" pour la création manuelle — la
+  // forme/dimensions précises du bassin se saisissent via les champs dimensions existants, pas
+  // besoin de dupliquer les 300 variantes catalogue dans ce select.
+  { groupe:'Bâches Cover (rigide)', gamme:'Cover', modeles:[
+    {ref:'COV1',    label:'Cover 1 (Prémium)'},
+    {ref:'COV2',    label:'Cover 2 (Privilège)'},
+    {ref:'COV3',    label:'Cover 3'},
+    {ref:'COV4',    label:'Cover 4 (Luxe)'},
+    {ref:'COVONE',  label:'Cover One'},
+  ]},
+  // Gamme "Poly Cover" (marque Ecolight) — même famille Mégao officielle "Hiver"/HI que Cover,
+  // mais gamme commerciale distincte (un seul niveau, pas de tiers Prémium/Privilège/Luxe).
+  { groupe:'Bâches Poly Cover (Ecolight)', gamme:'Poly Cover', modeles:[
+    {ref:'POLYHJ',  label:'Ecolight — Poly Cover'},
+  ]},
   { groupe:'Bâches à bulles — 180µm (été légère)', gamme:'Bulles', epaisseur:'180', modeles:[
     {ref:'BU180NB', label:'Bleu — Non bordée'},
   ]},
