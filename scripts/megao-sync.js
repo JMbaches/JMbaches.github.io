@@ -212,13 +212,16 @@ const BACHE_LIGNE_RE = /^([A-Z][A-Z0-9\/\+]{1,15})([A-ZÀ-Þ][a-zà-ÿ][\s\S]*?)
 // ex. "Cover 1 - Gré"), POLYHJ<ville> (Ecolight - Poly Cover) + code générique ECOLIGHT — vu
 // sur 5337 commandes réelles distinctes dans CMDCLIB, jamais matché par cette regex ni par
 // mainLigne plus bas → email silencieusement ignoré ("Ni volet ni bâche reconnue") si aucun
-// code BA/BU compagnon n'était présent sur la même commande. GRVOL* ("Grille GR VOL", grille
-// de sécurité) et DFCI* (bâche réserve incendie) confirmés être des produits SANS RAPPORT
-// malgré le même préfixe famille Mégao "HI" dans megao-bache-familles.json — volontairement
-// PAS inclus ici (décision produit à prendre séparément si besoin).
+// code BA/BU compagnon n'était présent sur la même commande. DFCI* (bâche réserve incendie)
+// confirmé être un produit SANS RAPPORT (1 seule commande dans tout l'historique) — pas inclus.
 const BACHE_COVER_RE = /^(COV|CIK|POLYHJ)/;
+// Gamme "GR VOL" (grille de sécurité rigide, distincte d'une bâche — même famille Mégao "HI")
+// — même bug, ajouté le 2026-07-23 après Cover/Poly Cover : GRVOL (bare) + variantes à forme
+// catalogue GRVOLUW<lettre grecque>/GRVOLVI<ville> + GRVOLPROMOAZ (offre commerciale). 462
+// commandes CMDCLIB distinctes, produit actif (commandes récentes) — même correction que Cover.
+const BACHE_GRVOL_RE = /^GRVOL/;
 function isBache(text) {
-  return /^(BA[A-Z]|BU[A-Z0-9]|SEES|SEECH|TRSPBA|TRSPBU|TRSPHI|ENLEVBA|COV|CIK|POLYHJ|ECOLIGHT)/m.test(text);
+  return /^(BA[A-Z]|BU[A-Z0-9]|SEES|SEECH|TRSPBA|TRSPBU|TRSPHI|ENLEVBA|COV|CIK|POLYHJ|ECOLIGHT|GRVOL)/m.test(text);
 }
 
 // Catégories d'accessoires bâches — alignées sur les vraies sections de l'inventaire JM
@@ -312,8 +315,9 @@ function parseMegaoBacheText(text) {
   // Cover, cf. BACHE_COVER_RE ci-dessus) ajoutés le 2026-07-23 — avant ça un Cover/Poly Cover
   // vu sur une commande avec un code compagnon (ex. SEES) créait bien un dossier mais sa ligne
   // produit retombait en texte libre dans "options" (structure/bacheGamme restaient vides,
-  // cf. dossier réel 120935 "Forestiers-Sapeurs de l'Ardèche").
-  const mainLigne = lignes.find(l => /^(BA|BU)/.test(l.code) || l.code === 'SE' || /^SEEC/.test(l.code) || BACHE_COVER_RE.test(l.code) || l.code === 'ECOLIGHT') || null;
+  // cf. dossier réel 120935 "Forestiers-Sapeurs de l'Ardèche"). GRVOL (gamme GR VOL, cf.
+  // BACHE_GRVOL_RE) ajouté juste après, même bug/même méthode.
+  const mainLigne = lignes.find(l => /^(BA|BU)/.test(l.code) || l.code === 'SE' || /^SEEC/.test(l.code) || BACHE_COVER_RE.test(l.code) || l.code === 'ECOLIGHT' || BACHE_GRVOL_RE.test(l.code)) || null;
   const structure = mainLigne ? mainLigne.design : '';
   const bacheModele = mainLigne ? mainLigne.code : '';
   // Gamme déduite en priorité du catalogue officiel Mégao (ARTICLE.mkd, code→famille
@@ -335,6 +339,7 @@ function parseMegaoBacheText(text) {
   const bacheGamme = mainLigne
     ? (/^POLYHJ/.test(mainLigne.code) || mainLigne.code === 'ECOLIGHT' ? 'Poly Cover'
        : BACHE_COVER_RE.test(mainLigne.code) ? 'Cover'
+       : BACHE_GRVOL_RE.test(mainLigne.code) ? 'GR VOL'
        : FAMILLE_GAMME[MEGAO_BACHE_FAMILLES[mainLigne.code]]
        || (/^BA/.test(mainLigne.code) ? 'Barres' : /^BU/.test(mainLigne.code) ? 'Bulles' : ''))
     : '';
