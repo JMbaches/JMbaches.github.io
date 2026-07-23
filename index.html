@@ -1573,6 +1573,18 @@ const BACHE_MODELES = [
   { groupe:'Grille GR VOL (sécurité)', gamme:'GR VOL', modeles:[
     {ref:'GRVOL',   label:'Grille GR VOL'},
   ]},
+  // Gamme "Sécuritis" (bâche hiver "classique", 3e famille Mégao officielle) — modélisée le
+  // 2026-07-23, découverte en balayant TOUTES les commandes orphelines (ni volet ni bâche
+  // reconnue). Volume le plus important des 4 gammes ajoutées ce jour-là (bare SE seul : 1479
+  // lignes CMDCLIB). Niveaux génériques + variantes à forme catalogue (SESHHJ<ville>/SEECHJ
+  // <ville>/SEECUW<lettre grecque>/SEGP<ville>) laissées de côté ici, même logique que Cover.
+  { groupe:'Bâches Sécuritis', gamme:'Sécuritis', modeles:[
+    {ref:'SE',      label:'Sécuritis'},
+    {ref:'SEEC',    label:'Sécuritis Eco'},
+    {ref:'SEHS',    label:'Sécuritis Hors Sol'},
+    {ref:'SEEVOL',  label:'Sécuritis Évolution'},
+    {ref:'SEGOABA', label:'Sécuritis Gold'},
+  ]},
   { groupe:'Bâches à bulles — 180µm (été légère)', gamme:'Bulles', epaisseur:'180', modeles:[
     {ref:'BU180NB', label:'Bleu — Non bordée'},
   ]},

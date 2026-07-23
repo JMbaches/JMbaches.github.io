@@ -220,8 +220,20 @@ const BACHE_COVER_RE = /^(COV|CIK|POLYHJ)/;
 // catalogue GRVOLUW<lettre grecque>/GRVOLVI<ville> + GRVOLPROMOAZ (offre commerciale). 462
 // commandes CMDCLIB distinctes, produit actif (commandes récentes) — même correction que Cover.
 const BACHE_GRVOL_RE = /^GRVOL/;
+// Gamme "Sécuritis" (bâche hiver "classique", la 3e famille Mégao officielle déjà anticipée en
+// commentaire plus bas mais jamais câblée) — même bug, découvert le 2026-07-23 en balayant TOUS
+// les codes de commandes orphelines (ni volet ni bâche reconnue) : bare SE/SEEC (Eco)/SEHS (Hors
+// Sol)/SEEVOL (évolution)/SE1GOABA/SEGOABA (Gold) + variantes à forme catalogue SESHHJ<ville>/
+// SEECHJ<ville>/SEECUW<lettre grecque>/SEGP<ville>. 71 codes distincts vérifiés un par un dans
+// CMDCLIB — TOUS Sécuritis, aucun bruit. Volume largement supérieur à Cover (SE seul : 1479
+// lignes). L'ancien isBache() ne testait QUE 'SEES'/'SEECH' (accessoires escalier, pas le
+// produit) — et 'SEECH' s'avère être une coquille : n'existe dans AUCUNE commande réelle, le
+// vrai code hors-standard est 'SEESHS' (110 lignes, jamais reconnu non plus, ni ici ni dans
+// hasEscalierHorsStandard plus bas). mainLigne ne testait que le code bare 'SE' exact.
+// (?!ES|DECASPI) exclut les codes accessoires SEES/SEESHS/SEDECASPI (jamais le produit).
+const BACHE_SECURITIS_RE = /^SE(?!ES|DECASPI)/;
 function isBache(text) {
-  return /^(BA[A-Z]|BU[A-Z0-9]|SEES|SEECH|TRSPBA|TRSPBU|TRSPHI|ENLEVBA|COV|CIK|POLYHJ|ECOLIGHT|GRVOL)/m.test(text);
+  return /^(BA[A-Z]|BU[A-Z0-9]|SE|TRSPBA|TRSPBU|TRSPHI|ENLEVBA|COV|CIK|POLYHJ|ECOLIGHT|GRVOL)/m.test(text);
 }
 
 // Catégories d'accessoires bâches — alignées sur les vraies sections de l'inventaire JM
@@ -316,8 +328,10 @@ function parseMegaoBacheText(text) {
   // vu sur une commande avec un code compagnon (ex. SEES) créait bien un dossier mais sa ligne
   // produit retombait en texte libre dans "options" (structure/bacheGamme restaient vides,
   // cf. dossier réel 120935 "Forestiers-Sapeurs de l'Ardèche"). GRVOL (gamme GR VOL, cf.
-  // BACHE_GRVOL_RE) ajouté juste après, même bug/même méthode.
-  const mainLigne = lignes.find(l => /^(BA|BU)/.test(l.code) || l.code === 'SE' || /^SEEC/.test(l.code) || BACHE_COVER_RE.test(l.code) || l.code === 'ECOLIGHT' || BACHE_GRVOL_RE.test(l.code)) || null;
+  // BACHE_GRVOL_RE) ajouté juste après, même bug/même méthode. BACHE_SECURITIS_RE (gamme
+  // Sécuritis) remplace l'ancien test exact `l.code === 'SE' || /^SEEC/.test(l.code)`, trop
+  // étroit (ratait SEHS/SESHHJ*/SEECHJ*/SEECUW*/SEGP*/SEEVOL/SE1GOABA/SEGOABA).
+  const mainLigne = lignes.find(l => /^(BA|BU)/.test(l.code) || BACHE_SECURITIS_RE.test(l.code) || BACHE_COVER_RE.test(l.code) || l.code === 'ECOLIGHT' || BACHE_GRVOL_RE.test(l.code)) || null;
   const structure = mainLigne ? mainLigne.design : '';
   const bacheModele = mainLigne ? mainLigne.code : '';
   // Gamme déduite en priorité du catalogue officiel Mégao (ARTICLE.mkd, code→famille
@@ -335,26 +349,32 @@ function parseMegaoBacheText(text) {
   const FAMILLE_GAMME = { BA: 'Barres', BU: 'Bulles', HI: 'Hiver' };
   // POLYHJ*/ECOLIGHT = marque Ecolight ("Poly Cover"), distingué de COV*/CIK* ("Cover") bien
   // que les deux matchent BACHE_COVER_RE (qui sert aussi de détecteur générique dans
-  // isBache/mainLigne) — testé en premier pour ne pas tomber dans la branche Cover.
+  // isBache/mainLigne) — testé en premier pour ne pas tomber dans la branche Cover. "Hiver"
+  // générique (FAMILLE_GAMME.HI) reste le repli pour tout AUTRE code HI non couvert par une des
+  // 4 sous-gammes désormais distinguées (Cover/Poly Cover/GR VOL/Sécuritis).
   const bacheGamme = mainLigne
     ? (/^POLYHJ/.test(mainLigne.code) || mainLigne.code === 'ECOLIGHT' ? 'Poly Cover'
        : BACHE_COVER_RE.test(mainLigne.code) ? 'Cover'
        : BACHE_GRVOL_RE.test(mainLigne.code) ? 'GR VOL'
+       : BACHE_SECURITIS_RE.test(mainLigne.code) ? 'Sécuritis'
        : FAMILLE_GAMME[MEGAO_BACHE_FAMILLES[mainLigne.code]]
        || (/^BA/.test(mainLigne.code) ? 'Barres' : /^BU/.test(mainLigne.code) ? 'Bulles' : ''))
     : '';
 
   // Escalier standard : ACESBAR (Barres/Bulles) + HIES (Hiver, même famille jamais captée
-  // avant — trouvée dans l'audit CMDCLIB réel) + ECOLES (Poly Cover). HIESHS/ECOLESHS
-  // (hors-standard) prioritaires si présents.
+  // avant — trouvée dans l'audit CMDCLIB réel) + ECOLES (Poly Cover) + SEES (Sécuritis).
+  // HIESHS/ECOLESHS/SEESHS (hors-standard) prioritaires si présents — SEESHS (110 lignes
+  // réelles) ajouté le 2026-07-23 : l'ancien isBache() référençait un code "SEECH" qui
+  // n'existe dans AUCUNE commande réelle (coquille jamais détectée faute de test), le vrai
+  // code hors-standard Sécuritis est SEESHS et n'était câblé nulle part avant aujourd'hui.
   const hasEscalierStandard    = lignes.some(l => l.code === 'ACESBAR' || l.code === 'SEES' || l.code === 'HIES' || l.code === 'ECOLES');
-  const hasEscalierHorsStandard = lignes.some(l => l.code === 'HIESHS' || l.code === 'ECOLESHS');
+  const hasEscalierHorsStandard = lignes.some(l => l.code === 'HIESHS' || l.code === 'ECOLESHS' || l.code === 'SEESHS');
   const bacheDecoupeEscalier = hasEscalierHorsStandard ? 'Hors-standard' : (hasEscalierStandard ? 'Standard' : '');
   const bacheBarreCharge     = lignes.some(l => l.code === 'ACBACHAR') ? 'Oui' : '';
   // Découpe aspiration/échelle : champ existant côté UI (f-bacheDecoupeAspi), jamais alimenté
   // par ce parseur jusqu'ici — ACDECASPI (Barres/Bulles) / HIDECASPI (Hiver) / ECOLDECASPI
-  // (Poly Cover).
-  const bacheDecoupeAspi = lignes.some(l => l.code === 'ACDECASPI' || l.code === 'HIDECASPI' || l.code === 'ECOLDECASPI') ? 'Oui' : '';
+  // (Poly Cover) / SEDECASPI (Sécuritis).
+  const bacheDecoupeAspi = lignes.some(l => l.code === 'ACDECASPI' || l.code === 'HIDECASPI' || l.code === 'ECOLDECASPI' || l.code === 'SEDECASPI') ? 'Oui' : '';
   // Œillets supplémentaires (bulles) : champ existant côté UI (f-bacheOeilletsSupp), jamais
   // alimenté non plus — ACOEILPLAST/ACOEILMETAL/ACKITEMPOEIL vus dans l'audit réel.
   const OEILLETS_CODES = ['ACOEILPLAST', 'ACOEILMETAL', 'ACKITEMPOEIL'];
@@ -392,9 +412,9 @@ function parseMegaoBacheText(text) {
     l !== mainLigne &&
     !/^TRSP/.test(l.code) && !/^ENLEV/.test(l.code) && !/^(ENR|RUP)/.test(l.code) &&
     l.code !== 'ACESBAR' && l.code !== 'SEES' && l.code !== 'HIES' && l.code !== 'HIESHS' &&
-    l.code !== 'ECOLES' && l.code !== 'ECOLESHS' &&
+    l.code !== 'ECOLES' && l.code !== 'ECOLESHS' && l.code !== 'SEESHS' &&
     l.code !== 'ACBACHAR' &&
-    l.code !== 'ACDECASPI' && l.code !== 'HIDECASPI' && l.code !== 'ECOLDECASPI' &&
+    l.code !== 'ACDECASPI' && l.code !== 'HIDECASPI' && l.code !== 'ECOLDECASPI' && l.code !== 'SEDECASPI' &&
     !OEILLETS_CODES.includes(l.code) &&
     !classifyBacheAccessoire(l.code) &&
     !BACHE_IGNORE_EXACT.has(l.code) && !/^GESTECO/.test(l.code) &&
