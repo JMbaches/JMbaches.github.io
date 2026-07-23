@@ -182,10 +182,10 @@ async function stockDecompterAxe(d) {
 /* ================================================================
    STOCK (pièces "quick win" reprises du logiciel Stock.exe legacy)
    Décompilé faute de source disponible (pyinstxtractor-ng + pydisasm/xdis) — voir mémoire
-   projet pour la méthode. Ne couvre QUE ce qui est calculable avec les champs dossier actuels :
-   télécommande, gestion sel, passes-sangles, flasque murale, alimentation, mur/caillebotis
-   immergé, équerres/fixation/cornière 60x60/poutre/sabots (immergé) restent volontairement de
-   côté — champ dossier manquant dans la nouvelle app, décision produit à prendre avant de coder.
+   projet pour la méthode. Couvre télécommande, gestion sel, passes-sangles, flasque murale,
+   alimentation, mur/caillebotis immergé, contre-axe, bouchons, fixation, équerres/cornière
+   60x60/poutre/sabots (immergé) — tous les champs dossier nécessaires existent et chaque
+   fonction est appelée dans stockDecompterEntreeProduction() plus bas.
    ================================================================ */
 
 // Décompte générique d'une quantité fixe d'une référence catégorisée — reprend le pattern des
