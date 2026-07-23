@@ -1752,7 +1752,7 @@ function App() {
   return (
     <div style={{ minHeight: '100vh' }}>
       {!isEmbedded && <Header />}
-      {!isEmbedded && <Nav tab={tab} setTab={setTab} />}
+      <Nav tab={tab} setTab={setTab} />
       <main className="max-w-7xl mx-auto px-6 pb-24">
         {tab === 'dashboard' && <Dashboard chantiers={chantiers} binomes={binomes} setTab={setTab} />}
         {tab === 'chantiers' && <Chantiers {...{chantiers, binomes, poseTypes, apiKey, upsert: upsertChantier, del: deleteChantier, showToast, setTab, archiveMonths}} pendingEdit={pendingEdit} onClearPendingEdit={() => setPendingEdit(null)} />}

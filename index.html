@@ -2445,14 +2445,15 @@ function renderDashboard() {
    ================================================================ */
 function renderDos() {
   const mc=document.getElementById('main-content');
+  const dossiers_ = dossiersScope(); // périmètre du compte connecté — voir dossierDansPerimetre
   const unread=myNotifs().filter(n=>!n.read[currentUser.id]);
   const alert=unread.length>0?`<div class="alert-banner no-print" onclick="goTab('notifs')"><i class="ti ti-bell"></i> <strong>${unread.length} notification${unread.length>1?'s':''} non lue${unread.length>1?'s':''}</strong> — Cliquer pour voir <span style="margin-left:auto">→</span></div>`:'';
-  const total=dossiers.reduce((s,d)=>s+(d.ht||0),0);
-  const enProd=dossiers.filter(d=>d.statut==='production').length;
-  const enAdmin=dossiers.filter(d=>d.statut==='admin'||d.statut==='nouveau').length;
-  const enVerif=dossiers.filter(d=>d.statut==='verif').length;
-  const enPretAtelier=dossiers.filter(d=>d.statut==='pret_atelier').length;
-  const clotures=dossiers.filter(d=>['expédié','livré','posé','retiré'].includes(d.statut)).length;
+  const total=dossiers_.reduce((s,d)=>s+(d.ht||0),0);
+  const enProd=dossiers_.filter(d=>d.statut==='production').length;
+  const enAdmin=dossiers_.filter(d=>d.statut==='admin'||d.statut==='nouveau').length;
+  const enVerif=dossiers_.filter(d=>d.statut==='verif').length;
+  const enPretAtelier=dossiers_.filter(d=>d.statut==='pret_atelier').length;
+  const clotures=dossiers_.filter(d=>['expédié','livré','posé','retiré'].includes(d.statut)).length;
   mc.innerHTML=`
   <div id="toast-msg" class="toast-msg"></div>
   ${alert}
@@ -2506,7 +2507,7 @@ function renderDos() {
         <button class="btn btn-ghost btn-sm" onclick="toggleFiltresAvances()" id="btn-filtres-avances" style="${(dosPeriodeFilter||dosMontantMin||dosMontantMax||dosStatFilter||dosRevendeurFilter||dosTypeFilter)?'color:var(--accent);border-color:var(--accent)':''}">
           <i class="ti ti-adjustments-horizontal"></i> Filtres${(dosPeriodeFilter||dosMontantMin||dosMontantMax||dosStatFilter||dosRevendeurFilter||dosTypeFilter)?' <span style="background:var(--accent);color:#fff;border-radius:8px;padding:0 5px;font-size:10px">actifs</span>':''}
         </button>
-        ${(()=>{const n=dossiers.filter(d=>isArchivable(d)).length;return n>0?`<button class="btn btn-ghost btn-sm" onclick="showArchived=!showArchived;renderDos()" style="${showArchived?'color:var(--accent);border-color:var(--accent)':'color:var(--ink-faint)'}"><i class="ti ti-archive"></i> Archives${showArchived?' (visible)':' ('+n+')'}
+        ${(()=>{const n=dossiers_.filter(d=>isArchivable(d)).length;return n>0?`<button class="btn btn-ghost btn-sm" onclick="showArchived=!showArchived;renderDos()" style="${showArchived?'color:var(--accent);border-color:var(--accent)':'color:var(--ink-faint)'}"><i class="ti ti-archive"></i> Archives${showArchived?' (visible)':' ('+n+')'}
         </button>`:'';})()}
         <button class="btn btn-ghost btn-sm" onclick="openExportExcel()" title="Exporter en Excel"><i class="ti ti-file-spreadsheet"></i> Excel</button>
         <button class="btn btn-ghost btn-sm" onclick="exportDossiersCSV()" title="Exporter en CSV"><i class="ti ti-table-export"></i> CSV</button>
@@ -2551,7 +2552,7 @@ function renderDos() {
           <div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Revendeur</div>
           <select onchange="dosRevendeurFilter=this.value;applyFiltres()" style="width:150px;padding:6px 10px;font-size:13px">
             <option value="" ${!dosRevendeurFilter?'selected':''}>Tous</option>
-            ${[...new Set(dossiers.map(d=>d.revendeur||'').filter(Boolean))].sort().map(r=>`<option value="${r}" ${dosRevendeurFilter===r?'selected':''}>${r}</option>`).join('')}
+            ${[...new Set(dossiers_.map(d=>d.revendeur||'').filter(Boolean))].sort().map(r=>`<option value="${r}" ${dosRevendeurFilter===r?'selected':''}>${r}</option>`).join('')}
           </select>
         </div>
 
