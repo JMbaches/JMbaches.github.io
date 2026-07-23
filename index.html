@@ -6422,11 +6422,13 @@ function dosProgressBar(d) {
   const col = cols[d.statut] || 'var(--accent)';
   const bar = `<div title="Étape ${step}/9" style="height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:5px;width:100%"><div style="height:100%;width:${pct}%;background:${col};border-radius:2px;transition:width .4s"></div></div>`;
 
-  // Complétude — uniquement utile en saisie/vérif
+  // Complétude — uniquement utile en saisie/vérif. "Date livr." retirée du check (commit
+  // e9963fd du 2026-07-23) : dateLivraison démarre volontairement vide et n'est connue qu'après
+  // la fabrication (pas un champ à saisir en admin/vérif) — la signaler "manquante" ici induisait
+  // une pastille rouge permanente sans rapport avec une vraie incomplétude du dossier.
   if (!['admin','verif'].includes(d.statut)) return bar;
   const checks = [
     {k:'Transport',  ok: !!d.transport},
-    {k:'Date livr.', ok: !!d.dateLivraison},
     {k:'Structure',  ok: !!d.structure},
     {k:'Dimensions', ok: !!(d.largeur||d.longueur||d.surface)},
     {k:'Documents',  ok: (d.documents||[]).length > 0},
