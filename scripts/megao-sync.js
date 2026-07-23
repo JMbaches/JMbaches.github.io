@@ -498,7 +498,12 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
       devisStatut: 'accepte',
       dateFrom:      data.dateFrom   || today,
       dateTo:        '',
-      dateLivraison: data.dateFrom   || today,
+      // Volontairement vide à la création : "Date livraison prévue" est une date FUTURE décidée
+      // par l'atelier/admin (délai de fabrication), jamais dérivable de la date de commande —
+      // la remplir avec dateFrom faisait apparaître TOUT nouveau dossier comme "en retard" dès sa
+      // création (bug confirmé par l'utilisateur, 2026-07-22 : d.dateLivraison < today déclenche
+      // le badge retard, cf. index.html ligne ~2257). À définir manuellement (f-date-livraison).
+      dateLivraison: '',
       transport:   data.transport  || 'liv_pose',
       remarques:   data.remarques  || '',
       autres:      data.autres     || '',
@@ -600,7 +605,12 @@ async function upsertDossierBache(data, pdfBuffer = null, pdfFilename = '') {
       devisStatut: 'accepte',
       dateFrom:      data.dateFrom   || today,
       dateTo:        '',
-      dateLivraison: data.dateFrom   || today,
+      // Volontairement vide à la création : "Date livraison prévue" est une date FUTURE décidée
+      // par l'atelier/admin (délai de fabrication), jamais dérivable de la date de commande —
+      // la remplir avec dateFrom faisait apparaître TOUT nouveau dossier comme "en retard" dès sa
+      // création (bug confirmé par l'utilisateur, 2026-07-22 : d.dateLivraison < today déclenche
+      // le badge retard, cf. index.html ligne ~2257). À définir manuellement (f-date-livraison).
+      dateLivraison: '',
       transport:   data.transport  || 'livraison',
       remarques:   data.remarques  || '',
       autres:      '',
@@ -671,7 +681,9 @@ async function upsertDercyaPair(dercyaItem, poseItem) {
       options: data.options || '', lames: data.lames || '', typeLame: data.typeLame || '', pieds: data.pieds || '',
       alim: data.alim || '', moteur: data.moteur || '', ht: data.ht || 0, tva: 20,
       ref: data.ref, refCommande: data.ref, devisStatut: 'accepte',
-      dateFrom: data.dateFrom || today, dateTo: '', dateLivraison: data.dateFrom || today,
+      // dateLivraison volontairement vide — voir commentaire détaillé dans upsertDossier/
+      // upsertDossierBache ci-dessus (même bug, même fix).
+      dateFrom: data.dateFrom || today, dateTo: '', dateLivraison: '',
       transport: 'liv_pose', remarques: data.remarques || '', autres: data.autres || '',
       largeur: data.largeur || '', longueur: data.longueur || '',
       revendeur: data.revendeur || '', needPose: true, poseDate: '', statut: 'admin',
