@@ -35,6 +35,7 @@ function renderUsers() {
         </div>
         <div style="font-size:14px;font-weight:600;margin-bottom:2px">${u.name} ${isMe?'<span style="font-size:11px;color:var(--accent)">(vous)</span>':''}</div>
         <div style="font-size:12px;color:var(--ink-faint);margin-bottom:2px">${u.login} · ${ROLE_LABELS[u.role]}</div>
+        ${u.perimetre&&u.perimetre!=='tous'?`<div style="margin-bottom:4px"><span style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--accent-light);color:var(--accent-deep);font-weight:600">${u.perimetre==='volet'?'Volets uniquement':'Bâches uniquement'}</span></div>`:''}
         ${u.email?`<div style="font-size:11px;color:var(--ink-faint);margin-bottom:8px"><i class="ti ti-mail" style="font-size:11px;vertical-align:-1px"></i> ${u.email}</div>`:'<div style="margin-bottom:8px"></div>'}
         <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">${u.perms.map(p=>`<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--bg);border:1px solid var(--border);color:var(--ink-soft)">${permsLabel[p]||p}</span>`).join('')}</div>
         <div style="display:flex;gap:6px">
@@ -70,6 +71,7 @@ function openNewUser() {
   document.getElementById('u-login').value='';
   document.getElementById('u-email').value='';
   document.getElementById('u-role').value='commercial';
+  document.getElementById('u-perimetre').value='tous';
   document.getElementById('u-pwd').value='';
   document.getElementById('u-pwd2').value='';
   buildPermsGrid(ROLE_DEFAULT_PERMS.commercial);
@@ -83,6 +85,7 @@ function openEditUser(uid) {
   document.getElementById('u-login').value=u.login;
   document.getElementById('u-email').value=u.email||'';
   document.getElementById('u-role').value=u.role;
+  document.getElementById('u-perimetre').value=u.perimetre||'tous';
   document.getElementById('u-pwd').value='';
   document.getElementById('u-pwd2').value='';
   buildPermsGrid(u.perms);
@@ -100,14 +103,20 @@ async function saveUser() {
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){alert('Adresse email invalide');return;}
   if(pwd1 && pwd1!==pwd2){alert('Les mots de passe ne correspondent pas');return;}
   const role=document.getElementById('u-role').value;
+  const perimetre=document.getElementById('u-perimetre').value;
   const perms=[...document.querySelectorAll('#perms-grid input:checked')].map(cb=>cb.value);
 
   if(editingUserId) {
     // Modification d'un compte existant
     const u=users.find(x=>x.id===editingUserId);
-    u.name=name; u.login=login; u.email=email; u.role=role; u.perms=perms;
+    u.name=name; u.login=login; u.email=email; u.role=role; u.perms=perms; u.perimetre=perimetre;
     // Ne pas modifier le pwd — géré par Firebase Auth
-    if(u.id===currentUser.id) { currentUser=u; document.getElementById('top-name').textContent=u.name; document.getElementById('top-role').textContent=ROLE_LABELS[u.role]; buildNav(); }
+    if(u.id===currentUser.id) {
+      currentUser=u; document.getElementById('top-name').textContent=u.name; document.getElementById('top-role').textContent=ROLE_LABELS[u.role]; buildNav();
+      // Le périmètre de l'utilisateur connecté vient de changer — le tableau de dossiers affiché
+      // doit être ré-évalué immédiatement (voir dossiersScope()/refreshCurrentView()).
+      if (typeof refreshCurrentView === 'function') refreshCurrentView();
+    }
     saveData(); closeModal('modal-user'); buildLoginSelect(); renderUsers();
   } else {
     // Nouveau compte : créer dans Firebase Auth puis dans Firestore
@@ -127,7 +136,7 @@ async function saveUser() {
       }
 
       // Créer le profil Firestore avec l'UID comme ID (sans pwd)
-      const profileData = { name, login, email, role, perms, active: true };
+      const profileData = { name, login, email, role, perms, perimetre, active: true };
       await window._db.collection('users').doc(uid).set(profileData);
 
       // Envoyer l'email de définition de mot de passe

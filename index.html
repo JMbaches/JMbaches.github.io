@@ -1300,6 +1300,13 @@ a:focus-visible, button:focus-visible,
           </select>
         </div>
         <div class="form-group"><label class="form-label">Adresse email</label><input type="email" id="u-email" placeholder="ex: marie.dupont@jmbaches.fr"></div>
+        <div class="form-group"><label class="form-label">Périmètre dossiers</label>
+          <select id="u-perimetre">
+            <option value="tous">Tous les dossiers (volets + bâches)</option>
+            <option value="volet">Volets uniquement</option>
+            <option value="bache">Bâches uniquement</option>
+          </select>
+        </div>
         <div class="form-group"><label class="form-label">Droits d'accès</label>
           <div id="perms-grid" style="display:flex;flex-direction:column;gap:4px;margin-top:4px"></div>
         </div>
@@ -1763,6 +1770,13 @@ function myNotifs() {
   const role = currentUser.role;
   const isAdmin = currentUser.perms.includes('users');
   return notifications.filter(n => {
+    // Garde-fou périmètre : une notif liée à un dossier hors du périmètre du compte connecté ne
+    // doit jamais apparaître, même pour un compte admin/direction — cohérent avec le fait que
+    // pushNotif() ne la marque déjà pas "non lue" pour ce compte (voir plus haut).
+    if (n.dosId) {
+      const dn = dossiers.find(x => x.id === n.dosId);
+      if (dn && !dossierDansPerimetre(dn)) return false;
+    }
     if(isAdmin) return true;
     return n.targets.some(t => {
       if(t === role) return true;
@@ -1787,7 +1801,9 @@ function pushNotif(type, dosId, d, detail='') {
   rule.targets.forEach(t=>{
     users.forEach(u=>{
       const roleOk = (t==='admin'&&(u.role==='admin'||u.perms.includes('users')))||(t==='verif'&&u.role==='verif')||(t==='ouvrier'&&u.role==='ouvrier')||(t==='emballage'&&u.role==='emballage')||(t==='planning'&&u.role==='planning')||(t==='compta'&&(u.role==='compta'||u.perms.includes('users')))||(t==='direction'&&u.perms.includes('users'))||(t==='commercial'&&u.role==='commercial')||(t==='metreur'&&u.role==='metreur');
-      if(roleOk) n.read[u.id]=false;
+      // Le rôle ne suffit pas : un compte scopé sur un seul type de dossier (u.perimetre) ne doit
+      // jamais être notifié pour un dossier hors de son périmètre, même si son rôle matche la règle.
+      if(roleOk && d && dossierDansPerimetre(d, u)) n.read[u.id]=false;
     });
   });
   notifications.unshift(n);
@@ -1910,8 +1926,9 @@ function checkRetards() {
       at: now(),
       read: {},
     };
-    // Marquer comme lu pour tout le monde sauf les cibles
-    users.forEach(u => { if(!targets.includes(u.role)) notif.read[u.id] = true; });
+    // Marquer comme lu pour tout le monde sauf les cibles — et même pour une cible dont le rôle
+    // matche, si le dossier est hors de son périmètre de compte (u.perimetre).
+    users.forEach(u => { if(!targets.includes(u.role) || !dossierDansPerimetre(d, u)) notif.read[u.id] = true; });
     notifications.unshift(notif);
   });
   saveData();
@@ -1948,7 +1965,7 @@ function checkLivraisonsProches() {
       at: now(),
       read: {},
     };
-    users.forEach(u => { if (!['direction','admin','planning'].includes(u.role)) notif.read[u.id] = true; });
+    users.forEach(u => { if (!['direction','admin','planning'].includes(u.role) || !dossierDansPerimetre(d, u)) notif.read[u.id] = true; });
     notifications.unshift(notif);
   });
   saveData();
@@ -2116,7 +2133,11 @@ function filteredDossiers(liste) {
 function applyDosFilters(liste) {
   let r = filteredDossiers(liste);
 
-  // Filtre type (volet/bâche)
+  // Restriction de périmètre du compte — TOUJOURS appliquée, contrairement au filtre type
+  // manuel ci-dessous qui ne s'applique que si l'utilisateur l'a choisi explicitement.
+  r = r.filter(d => dossierDansPerimetre(d));
+
+  // Filtre type (volet/bâche) — restriction VOLONTAIRE en plus, choisie par l'utilisateur.
   if (dosTypeFilter) r = r.filter(matchesTypeFilter);
 
   // Filtre statut
@@ -2169,7 +2190,7 @@ function globalSearch(val) {
     refreshGlobalSearch();
     return;
   }
-  const results = filteredDossiers(dossiers).slice(0, 8);
+  const results = filteredDossiers(dossiersScope()).slice(0, 8);
   if (!results.length) {
     dd.innerHTML = '<div style="padding:14px;text-align:center;color:var(--ink-faint);font-size:13px">Aucun dossier trouvé</div>';
     dd.classList.add('open');
@@ -2186,7 +2207,7 @@ function globalSearch(val) {
       </div>
     </div>`;
   }).join('');
-  if (dossiers.filter(d => filteredDossiers([d]).length).length > 8) {
+  if (dossiersScope().filter(d => filteredDossiers([d]).length).length > 8) {
     dd.innerHTML += `<div style="padding:9px 14px;font-size:11px;color:var(--ink-faint);text-align:center;border-top:1px solid var(--border)">Et plus… naviguez dans les onglets pour tout voir</div>`;
   }
   dd.classList.add('open');
@@ -2216,7 +2237,7 @@ function globalSearchKey(e) {
     refreshGlobalSearch();
   }
   if (e.key === 'Enter') {
-    const results = filteredDossiers(dossiers);
+    const results = filteredDossiers(dossiersScope());
     if (results.length === 1) globalSearchGoTo(results[0].id);
     else if (results.length > 1) {
       document.getElementById('global-search-dropdown').classList.remove('open');
@@ -2251,14 +2272,15 @@ function renderDashboard() {
   const mc = document.getElementById('main-content');
   const u = currentUser;
   const rc = ROLE_COLORS[u.role]||{bg:'#EAF0F9',c:'#14479B'};
+  const dossiers_ = dossiersScope(); // périmètre du compte connecté — voir dossierDansPerimetre
   const unread = myNotifs().filter(n=>!n.read[u.id]);
-  const urgent = dossiers.filter(d=>isUrgent(d)&&!isCloture(d.statut));
+  const urgent = dossiers_.filter(d=>isUrgent(d)&&!isCloture(d.statut));
   const today = new Date().toISOString().split('T')[0];
-  const retard = dossiers.filter(d=>d.dateLivraison&&d.dateLivraison<today&&!isCloture(d.statut));
-  const prod = dossiers.filter(d=>d.statut==='production');
-  const total = dossiers.reduce((s,d)=>s+(d.ht||0),0);
+  const retard = dossiers_.filter(d=>d.dateLivraison&&d.dateLivraison<today&&!isCloture(d.statut));
+  const prod = dossiers_.filter(d=>d.statut==='production');
+  const total = dossiers_.reduce((s,d)=>s+(d.ht||0),0);
   const recentActivity = [];
-  dossiers.forEach(d=>d.history.forEach(h=>recentActivity.push({...h,dosId:d.id,dosClient:d.client})));
+  dossiers_.forEach(d=>d.history.forEach(h=>recentActivity.push({...h,dosId:d.id,dosClient:d.client})));
   recentActivity.sort((a,b)=>b.id-a.id);
   const top5 = recentActivity.slice(0,6);
   const hour = new Date().getHours();
@@ -2289,9 +2311,9 @@ function renderDashboard() {
     </div>
     <div class="dash-card" onclick="goTab('dos')">
       <div class="dash-card-icon" style="background:var(--green-light);color:var(--green)"><i class="ti ti-circle-check"></i></div>
-      <div class="dash-card-value">${dossiers.filter(d=>['expédié','livré','posé','retiré'].includes(d.statut)).length}</div>
+      <div class="dash-card-value">${dossiers_.filter(d=>['expédié','livré','posé','retiré'].includes(d.statut)).length}</div>
       <div class="dash-card-label">Clôturés</div>
-      <div class="dash-card-sub">${dossiers.length} dossiers au total</div>
+      <div class="dash-card-sub">${dossiers_.length} dossiers au total</div>
     </div>
     ${(()=>{const dm=calcDelaiMoyen();return dm!==null?`<div class="dash-card" onclick="goTab('archives')" title="Délai moyen création → clôture">
       <div class="dash-card-icon" style="background:#EDE9FE;color:#5B21B6"><i class="ti ti-clock-hour-4"></i></div>
@@ -2322,7 +2344,7 @@ function renderDashboard() {
       {k:'stocké',    label:'Stocké',       color:'#4338CA'},
       {k:'expédié',   label:'Expédié',      color:'#059669'},
     ];
-    const actifs=dossiers.filter(d=>!isCloture(d.statut));
+    const actifs=dossiers_.filter(d=>!isCloture(d.statut));
     const total=actifs.length||1;
     return `<div class="pipeline-bar">${stages.map(s=>{
       const n=actifs.filter(d=>d.statut===s.k).length;
@@ -2399,8 +2421,8 @@ function renderDashboard() {
             {k:'posé',l:'Posé',c:'var(--coral)',bg:'var(--coral-light)'},
             {k:'retiré',l:'Enlevé',c:'#374151',bg:'#F3F4F6'},
           ].map(s=>{
-            const cnt=dossiers.filter(d=>d.statut===s.k).length;
-            const pct=dossiers.length>0?Math.round(cnt/dossiers.length*100):0;
+            const cnt=dossiers_.filter(d=>d.statut===s.k).length;
+            const pct=dossiers_.length>0?Math.round(cnt/dossiers_.length*100):0;
             return `<div>
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
                 <span style="font-size:12px;color:var(--ink-soft)">${s.l}</span>
@@ -2658,6 +2680,16 @@ async function setPresence(dosId) {
 function clearPresence() { setPresence(null); }
 
 function openFiche(id) {
+  // Garde-fou périmètre : point d'entrée UNIQUE pour ouvrir une fiche (recherche globale,
+  // notifications, Kanban, import planning...) — certains de ces chemins (notifications ciblées
+  // par rôle, pas par compte ; JSON de planning importé) peuvent référencer un dossier hors du
+  // périmètre du compte connecté sans passer par une liste déjà filtrée. On bloque ici plutôt que
+  // de laisser la fiche s'ouvrir silencieusement sur un dossier qui ne devrait pas être visible.
+  const _d = dossiers.find(x => x.id === id);
+  if (_d && !dossierDansPerimetre(_d)) {
+    showToast('⚠ Ce dossier est en dehors de votre périmètre');
+    return;
+  }
   // Ne mémorise l'onglet de provenance que si on n'est pas déjà sur la fiche — sinon naviguer
   // vers le dossier précédent/suivant (boutons ←/→) écraserait l'onglet d'origine par "fiche".
   if (currentTab !== 'fiche') previousTab = currentTab;
@@ -4334,9 +4366,28 @@ function optionsSemainesFab(selected, nbSemaines = 26) {
 // migrer les dossiers Firestore existants : partout où c'est lu, passer par ce helper plutôt
 // que par d.type direct, pour que l'absence du champ retombe silencieusement sur 'volet'.
 function isBacheDossier(d) { return (d.type||'volet')==='bache'; }
+// Restriction de périmètre PAR COMPTE (u.perimetre: 'tous'|'volet'|'bache', 2026-07-23) —
+// indépendante du filtre manuel dosTypeFilter ci-dessous : celui-ci reste une restriction
+// VOLONTAIRE que l'utilisateur applique en plus sur SA propre vue, jamais un moyen de contourner
+// son périmètre de compte. Absence de champ (comptes existants) = 'tous', comme avant.
+// `u` par défaut = currentUser (cas d'usage le plus fréquent, un seul compte connecté à la fois) —
+// paramètre explicite utile pour pushNotif()/checkRetards() etc. qui évaluent le périmètre d'un
+// AUTRE utilisateur (le destinataire potentiel d'une notif), pas forcément celui connecté.
+function dossierDansPerimetre(d, u) {
+  u = u || currentUser;
+  const p = u && u.perimetre;
+  if (!p || p === 'tous') return true;
+  return (p === 'bache') === isBacheDossier(d);
+}
+// Vue scope-consciente de `dossiers` — à utiliser pour TOUTE liste affichée à l'utilisateur.
+// Fonction PURE qui retourne une copie filtrée : ne JAMAIS réassigner la variable globale
+// `dossiers` elle-même avec ce filtre (saveData()/dossiers.length ailleurs doivent continuer à
+// voir le total réel de la base, pas la vue restreinte d'un compte en particulier).
+function dossiersScope() { return dossiers.filter(d => dossierDansPerimetre(d)); }
 // Filtre type de dossier partagé (dosTypeFilter, '' = tous) — utilisé par toutes les vues qui
-// listent des dossiers (Dossiers, Atelier, Emballage, Suivi, Archives, Compta).
-function matchesTypeFilter(d) { return !dosTypeFilter || (isBacheDossier(d)?'bache':'volet')===dosTypeFilter; }
+// listent des dossiers (Dossiers, Atelier, Emballage, Suivi, Archives, Compta). Compose désormais
+// aussi la restriction de périmètre du compte : ces vues n'ont donc RIEN d'autre à changer.
+function matchesTypeFilter(d) { return (!dosTypeFilter || (isBacheDossier(d)?'bache':'volet')===dosTypeFilter) && dossierDansPerimetre(d); }
 // Petit <select> réutilisable pour le filtre type, même rendu partout — appelle renderFn (le nom
 // de la fonction de rendu de la vue courante) au changement pour rafraîchir immédiatement.
 function typeFilterSelectHtml(renderFn) {
@@ -5430,7 +5481,7 @@ function renderVuePoseur() {
   const dayKey = getDayKeyFr(dateObj);
   const weekKey = getWeekKeyForDate(dateObj);
 
-  const posesJour = dossiers.filter(d =>
+  const posesJour = dossiersScope().filter(d =>
     d.needPose &&
     d.poseDate === vuePoseurDateIso &&
     (!d.poseurId || d.poseurId === currentUser.id)
@@ -5662,9 +5713,10 @@ function renderVuePoseursAll() {
 }
 
 function renderCompta() {
-  const allYears = [...new Set(dossiers.map(d=>(d.dateFrom||d.dateLivraison||'').slice(0,4)).filter(Boolean))].sort().reverse();
+  const dossiersC = dossiersScope();
+  const allYears = [...new Set(dossiersC.map(d=>(d.dateFrom||d.dateLivraison||'').slice(0,4)).filter(Boolean))].sort().reverse();
   if (!comptaAnnee && allYears.includes(String(new Date().getFullYear()))) comptaAnnee = String(new Date().getFullYear());
-  const byYear = comptaAnnee ? dossiers.filter(d=>((d.dateFrom||d.dateLivraison||'').startsWith(comptaAnnee))) : dossiers;
+  const byYear = comptaAnnee ? dossiersC.filter(d=>((d.dateFrom||d.dateLivraison||'').startsWith(comptaAnnee))) : dossiersC;
   const byDevis = comptaDevisFilter ? byYear.filter(d=>d.devisStatut===comptaDevisFilter) : byYear;
   const byRevendeur = comptaRevendeurFilter ? byDevis.filter(d=>(d.revendeur||'')===comptaRevendeurFilter) : byDevis;
   const filtered = byRevendeur.filter(matchesTypeFilter);
@@ -5777,7 +5829,7 @@ function deleteJournalUser(userId) {
 
 function renderJournal() {
   const all=[];
-  dossiers.forEach(d=>d.history.forEach(h=>all.push({...h,dosId:d.id,dosClient:d.client})));
+  dossiersScope().forEach(d=>d.history.forEach(h=>all.push({...h,dosId:d.id,dosClient:d.client})));
   all.sort((a,b)=>b.id-a.id);
   const canDelete = currentUser.role === 'direction';
 
@@ -6469,7 +6521,7 @@ function renderArchives() {
 }
 
 function exportDossiersCSVArchives() {
-  const list = dossiers.filter(d => isArchivable(d));
+  const list = dossiersScope().filter(d => isArchivable(d));
   const headers = ['N°','Client','Structure','Statut','Date livraison','HT','TTC','Devis','Tél','Ville'];
   const rows = list.map(d => [d.id,d.client,d.structure||'',d.statut,d.dateLivraison||'',(d.ht||0).toFixed(2),ttc(d).toFixed(2),d.devisStatut||'',d.tel||'',d.ville||'']);
   const csv = [headers,...rows].map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\r\n');
@@ -6486,7 +6538,7 @@ function parseFrDate(at) {
 }
 
 function calcDelaiMoyen() {
-  const clos = dossiers.filter(d => isDossierCloture(d) && d.dateFrom);
+  const clos = dossiersScope().filter(d => isDossierCloture(d) && d.dateFrom);
   const delais = clos.map(d => {
     const creation = new Date(d.dateFrom);
     const closureEntry = [...(d.history||[])].reverse().find(h => (h.action||'').toLowerCase().includes('clôturé'));
@@ -6509,16 +6561,17 @@ function openExportExcel() {
 }
 
 function selectExportGroup(type) {
-  if (type === 'actifs')   _exportSelectedIds = new Set(dossiers.filter(d => !isDossierCloture(d)).map(d => d.id));
-  else if (type === 'archives') _exportSelectedIds = new Set(dossiers.filter(d => isDossierCloture(d)).map(d => d.id));
-  else if (type === 'tous') _exportSelectedIds = new Set(dossiers.map(d => d.id));
+  const scope = dossiersScope();
+  if (type === 'actifs')   _exportSelectedIds = new Set(scope.filter(d => !isDossierCloture(d)).map(d => d.id));
+  else if (type === 'archives') _exportSelectedIds = new Set(scope.filter(d => isDossierCloture(d)).map(d => d.id));
+  else if (type === 'tous') _exportSelectedIds = new Set(scope.map(d => d.id));
   else _exportSelectedIds = new Set();
   renderExportList();
 }
 
 function renderExportList() {
   const q = (document.getElementById('export-excel-search')?.value || '').toLowerCase();
-  const list = dossiers
+  const list = dossiersScope()
     .filter(d => !q || (d.client||'').toLowerCase().includes(q) || d.id.toLowerCase().includes(q))
     .sort((a, b) => b.id.localeCompare(a.id));
   const el = document.getElementById('export-excel-list');
@@ -6542,7 +6595,7 @@ function _exportToggle(id, checked) {
 
 function exportExcelDossiers() {
   if (!window.XLSX) { alert('Bibliothèque Excel non chargée — vérifiez votre connexion.'); return; }
-  const selected = dossiers.filter(d => _exportSelectedIds.has(d.id)).sort((a,b) => b.id.localeCompare(a.id));
+  const selected = dossiersScope().filter(d => _exportSelectedIds.has(d.id)).sort((a,b) => b.id.localeCompare(a.id));
   if (!selected.length) { alert('Sélectionnez au moins un dossier.'); return; }
 
   const TRANSPORT_LABEL = { enlvt:'Enlèvement', livraison:'Livraison', liv_pose:'Livraison + Pose' };
@@ -6653,6 +6706,7 @@ function renderComptaChart() {
   const now = new Date();
   const MOIS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
   const labels = [], dataPaye = [], dataReste = [];
+  const dossiersChart = dossiersScope();
 
   // Déterminer la plage de mois à afficher
   let startDate, stopDate;
@@ -6664,7 +6718,7 @@ function renderComptaChart() {
     startDate = new Date(now.getFullYear(), now.getMonth() - comptaChartPeriod + 1, 1);
     stopDate  = new Date(now.getFullYear(), now.getMonth(), 1);
   } else {
-    const earliest = dossiers.map(d=>(d.dateFrom||d.dateLivraison||'')).filter(Boolean).sort()[0];
+    const earliest = dossiersChart.map(d=>(d.dateFrom||d.dateLivraison||'')).filter(Boolean).sort()[0];
     startDate = earliest ? new Date(parseInt(earliest.slice(0,4)), parseInt(earliest.slice(5,7))-1, 1) : new Date(now.getFullYear()-1, 0, 1);
     stopDate  = new Date(now.getFullYear(), now.getMonth(), 1);
   }
@@ -6674,7 +6728,7 @@ function renderComptaChart() {
     const yy = cur.getFullYear(), mm = cur.getMonth();
     const prefix = yy+'-'+String(mm+1).padStart(2,'0');
     labels.push(MOIS[mm]+(yy!==now.getFullYear()?' '+String(yy).slice(2):''));
-    let monthDos = dossiers.filter(d=>(d.dateFrom||d.dateLivraison||'').startsWith(prefix));
+    let monthDos = dossiersChart.filter(d=>(d.dateFrom||d.dateLivraison||'').startsWith(prefix));
     if (comptaDevisFilter)     monthDos = monthDos.filter(d=>d.devisStatut===comptaDevisFilter);
     if (comptaRevendeurFilter) monthDos = monthDos.filter(d=>(d.revendeur||'')===comptaRevendeurFilter);
     const total = monthDos.reduce((s,d)=>s+(d.ht||0), 0);
@@ -6957,7 +7011,7 @@ function piloHBars(rows){
 
 function renderPilotage(){
   const mc = document.getElementById('main-content');
-  const D = dossiers || [];
+  const D = dossiersScope();
   const today = new Date(); today.setHours(0,0,0,0);
 
   const won        = D.filter(piloIsWon);
@@ -7103,7 +7157,7 @@ function piloExportCSV(){
   const devLbl = {en_attente:'En attente', accepte:'Accepté', refuse:'Refusé', facture:'Facturé', paye:'Payé'};
   const esc = v => { v = (v==null?'':String(v)); return /[";\n\r]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; };
   const head = ['N° dossier','Client','Téléphone','Email','CP','Ville','Produit','Statut','Statut devis','HT (€)','TVA %','TTC (€)','Date livraison','Commercial'];
-  const lines = (dossiers||[]).map(d => [
+  const lines = dossiersScope().map(d => [
     d.id, d.client, d.tel, d.email, d.cp, d.ville, d.structure,
     STATUT_LABEL[d.statut]||d.statut, devLbl[d.devisStatut]||'',
     (d.ht||0).toFixed(2).replace('.',','), (d.tva!=null?d.tva:20),

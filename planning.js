@@ -97,7 +97,7 @@ window.addEventListener('message', async (e) => {
 
 function _envoyerDossiersPlanning(frame) {
   if (!frame || !frame.contentWindow) return;
-  const liste = dossiers.filter(d => d.transport === 'liv_pose' || d.needPose);
+  const liste = dossiersScope().filter(d => d.transport === 'liv_pose' || d.needPose);
   const chantiers = liste.map(d => ({
     id:               d.id,
     externalId:       d.id,
@@ -171,7 +171,7 @@ function recupererPlanningIA() {
 function renderPlanningAvance() {
   const mc = document.getElementById('main-content');
   mc.style.padding = '0';
-  const liste = dossiers.filter(d => d.transport === 'liv_pose' || d.needPose);
+  const liste = dossiersScope().filter(d => d.transport === 'liv_pose' || d.needPose);
   mc.innerHTML = `
     <div id="planning-sync-bar" style="display:flex;align-items:center;gap:8px;padding:6px 16px;background:var(--surface);border-bottom:1px solid var(--border);font-size:12px;color:var(--ink-soft)">
       <i class="ti ti-loader" style="animation:spin .8s linear infinite"></i> Connexion à l'app planning…
@@ -197,8 +197,9 @@ function _planningAvanceAutoSync() {
 
 function renderPlanning() {
   const mc = document.getElementById('main-content');
-  const aPlaner = dossiers.filter(d => (d.needPose || d.transport === 'liv_pose') && !d.poseDate);
-  const planifies = dossiers.filter(d => (d.needPose || d.transport === 'liv_pose') && d.poseDate);
+  const dossiersP = dossiersScope();
+  const aPlaner = dossiersP.filter(d => (d.needPose || d.transport === 'liv_pose') && !d.poseDate);
+  const planifies = dossiersP.filter(d => (d.needPose || d.transport === 'liv_pose') && d.poseDate);
 
   mc.innerHTML = `
   <div class="edt-toolbar">
@@ -247,6 +248,7 @@ function renderEdtMain() {
 }
 
 function renderEdtWeek(container) {
+  const dossiersEdt = dossiersScope();
   const days = getWeekDates(edtWeekOffset);
   const JOURS = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
   const moisLabel = days[0].toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
@@ -255,7 +257,7 @@ function renderEdtWeek(container) {
 
   const cols = days.map((d,i) => {
     const iso = toISODate(d);
-    const dosJour = dossiers.filter(x => (x.needPose || x.transport === 'liv_pose') && x.poseDate === iso);
+    const dosJour = dossiersEdt.filter(x => (x.needPose || x.transport === 'liv_pose') && x.poseDate === iso);
     const todayCls = isToday(d) ? ' today' : '';
     return `
       <div class="edt-head-cell${todayCls}">
@@ -267,7 +269,7 @@ function renderEdtWeek(container) {
 
   const cells = days.map(d => {
     const iso = toISODate(d);
-    const dosJour = dossiers.filter(x => (x.needPose || x.transport === 'liv_pose') && x.poseDate === iso);
+    const dosJour = dossiersEdt.filter(x => (x.needPose || x.transport === 'liv_pose') && x.poseDate === iso);
     const todayCls = isToday(d) ? ' today' : '';
     return `
       <div class="edt-col${todayCls}" id="edtcol-${iso}"
@@ -300,6 +302,7 @@ function renderEdtWeek(container) {
 }
 
 function renderEdtMonth(container) {
+  const dossiersEdt = dossiersScope();
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + edtWeekOffset; // on réutilise edtWeekOffset pour le mois
@@ -323,7 +326,7 @@ function renderEdtMonth(container) {
   const heads = JOURS.map(j=>`<div class="edt-month-head">${j}</div>`).join('');
   const dayCells = cells.map(({date,other})=>{
     const iso = toISODate(date);
-    const dosJour = dossiers.filter(x=>x.needPose&&x.poseDate===iso);
+    const dosJour = dossiersEdt.filter(x=>x.needPose&&x.poseDate===iso);
     const todayCls = isToday(date)?' today':'';
     const otherCls = other?' other-month':'';
     return `<div class="edt-month-day${todayCls}${otherCls}"
@@ -415,7 +418,7 @@ function ouvrirAppPlanning() {
 }
 
 function exporterPourPlanning() {
-  const chantiers = dossiers.filter(d=>d.needPose).map(d=>({
+  const chantiers = dossiersScope().filter(d=>d.needPose).map(d=>({
     id: d.id,
     client: d.client,
     adresse: [d.adresse, d.cp, d.ville].filter(Boolean).join(', '),
@@ -459,6 +462,10 @@ function importerPlanning() {
         let updated = 0;
         for (const item of items) {
           const d = dossiers.find(x=>x.id===item.id);
+          // Le fichier importé peut référencer n'importe quel dossier (export fait par un autre
+          // compte) — on ignore silencieusement ceux hors du périmètre du compte qui importe,
+          // plutôt que de les appliquer sans que l'utilisateur les ait jamais vus.
+          if(d && !dossierDansPerimetre(d)) continue;
           if(d && item.poseDate) {
             d.poseDate = item.poseDate;
             logHistory(d.id, 'modification', 'Date de pose importée', 'Pose le ' + fmt(item.poseDate));
