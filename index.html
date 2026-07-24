@@ -3143,7 +3143,7 @@ function renderPageCommande(d, p) { p = p || {};
             <option value=""${!d.caillebotisChoix?' selected':''}>Non</option>
             ${['IPE','Robinier','Blanc','Gris','Sable'].map(t=>`<option${d.caillebotisChoix===t?' selected':''}>${t}</option>`).join('')}
           </select></div>`)}
-          ${champ('caillebotisLargeur', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Caillebotis — largeur (cm)</div><input type="number" min="0" value="${d.caillebotisLargeur||''}" onchange="setDosField('caillebotisLargeur',this.value)" placeholder="ex: 300"></div>`)}
+          ${champ('caillebotisLargeur', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Caillebotis — largeur (cm)${d.caillebotisLargeurEstimee?' <span style="color:var(--amber);text-transform:none;font-weight:500" title="Estimée depuis la largeur du bassin (précision non garantie) — à vérifier avec la fiche de fabrication/côte">⚠ estimée, à vérifier</span>':''}</div><input type="number" min="0" value="${d.caillebotisLargeur||''}" onchange="setDosField('caillebotisLargeur',this.value)" placeholder="ex: 300"></div>`)}
           ${champ('caillebotisProfondeur', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Caillebotis — profondeur (cm)</div><input type="number" min="0" value="${d.caillebotisProfondeur||''}" onchange="setDosField('caillebotisProfondeur',this.value)" placeholder="ex: 100"></div>`)}
           ${champ('fixation', `<div><div style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--ink-faint);margin-bottom:4px">Fixation (immergé)</div><select onchange="setDosField('fixation',this.value)">
             <option value=""${!d.fixation?' selected':''}>Sur Paroi</option>
@@ -3468,6 +3468,9 @@ function setDosField(k,v) {
   const old=d[k];
   d[k]=v;
   if(old!==v) logHistory(currentDosId,'modification',`Champ "${k}" modifié`,old?`Avant : ${old}`:'');
+  // Une correction manuelle de la largeur caillebotis (estimée depuis la largeur du bassin par
+  // megao-sync.js) vaut confirmation — elle n'est plus une simple estimation à vérifier.
+  if(k==='caillebotisLargeur' && old!==v) d.caillebotisLargeurEstimee=false;
   // Quand transport change
   if(k==='transport') {
     if(v==='liv_pose') {

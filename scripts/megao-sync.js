@@ -185,7 +185,7 @@ function parseMegaoText(text) {
            || text.match(/Total\s+HT\s*\n\s*([\d][\d\s]*,\d{2})/i);
   const ht  = htM ? parseFloat(htM[1].replace(/\s/g, '').replace(',', '.')) : 0;
 
-  const champsAccessoiresVolet = deriveChampsAccessoiresVoletDepuisPdf(text, structure);
+  const champsAccessoiresVolet = deriveChampsAccessoiresVoletDepuisPdf(text, structure, largeur);
 
   return {
     ref, refCommande: ref, client, contact, tel, email, adresse, cp, ville,
@@ -215,12 +215,15 @@ const MUR_HAUTEUR_PAR_CODE_VOLET = {
 };
 // Profondeur du caillebotis (cm) : code CAIBO/CAIPVC + 7 = 70cm, + 9 = 90cm (2e/3e chiffre du
 // code, vérifié sur CMDCLIB réel — CAIBO704/CAIPVC704="70 cm", CAIBO904/CAIPVC904="90 cm").
-// Largeur caillebotis PAS dérivée : le code n'encode qu'une fourchette de largeur bassin (ex.
-// "4 à 5m"), pas une valeur exacte — vérifié sur 19 commandes réelles : la fourchette correspond
-// à la largeur bassin (LAM) dans 18/19 cas mais PAS toujours (1 exception trouvée, largeur
-// bassin 3m vs fourchette caillebotis "4 à 5m", forme de bassin non standard probable) — trop
-// risqué pour une quantité calculée, laissé à la saisie admin (choix/profondeur, eux, fiables).
-function deriveChampsAccessoiresVoletDepuisPdf(text, structure) {
+// Largeur caillebotis ESTIMÉE depuis la largeur du bassin (code LAM, toujours fiable) : le code
+// caillebotis lui-même n'encode qu'une fourchette (ex. "4 à 5m"), pas une valeur exacte — vérifié
+// sur 19 commandes réelles, la fourchette correspond à la largeur bassin dans 18/19 cas (1
+// exception trouvée, bassin de forme non standard probable). Risque connu et accepté par
+// l'utilisateur (2026-07-24) : la fiche de fabrication / fiche de côte donnera de toute façon la
+// vraie valeur avant fabrication, cette estimation est juste un point de départ — marquée
+// `caillebotisLargeurEstimee` pour rester repérable tant qu'elle n'a pas été confirmée/corrigée
+// à la main (`setDosField` efface le flag dès qu'un humain édite le champ, cf. index.html).
+function deriveChampsAccessoiresVoletDepuisPdf(text, structure, largeurBassin) {
   const lignes = [...text.matchAll(VOLET_ACCESSOIRE_LIGNE_RE)].map(m => ({
     code: m[1],
     design: m[2].replace(/\s*\n\s*/g, ' ').trim(),
@@ -296,6 +299,12 @@ function deriveChampsAccessoiresVoletDepuisPdf(text, structure) {
     if (coul) update.caillebotisChoix = coul[1].charAt(0).toUpperCase() + coul[1].slice(1).toLowerCase();
     else if (/ROBINIER/i.test(caillebotisLigne.design)) update.caillebotisChoix = 'Robinier';
     else if (/\bIPE\b/i.test(caillebotisLigne.design)) update.caillebotisChoix = 'IPE';
+
+    const largeurBassinCm = Math.round(parseFloat(largeurBassin) * 100);
+    if (largeurBassinCm > 0) {
+      update.caillebotisLargeur = String(largeurBassinCm);
+      update.caillebotisLargeurEstimee = true;
+    }
   }
 
   return update;
@@ -617,11 +626,14 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
                     // Accessoires volet lus directement dans le PDF (cf. deriveChampsAccessoiresVoletDepuisPdf)
                     'telecommande','gestionSel','passesSangles','flasqueMurale','corniere6060','equerresRenfort',
                     'murHauteur','murCouleur','poutreCouleur','nombrePoutres','caillebotisChoix','caillebotisProfondeur',
-                    'typeAlimentation'];
+                    'caillebotisLargeur','typeAlimentation'];
     const update = {};
     for (const f of fields) {
       if (data[f]) update[f] = data[f];
     }
+    // Estimée uniquement quand la valeur qu'on vient d'écrire ci-dessus vient réellement de
+    // l'estimation (pas d'un champ déjà rempli à la main resté inchangé par le for ci-dessus).
+    if (data.caillebotisLargeur && data.caillebotisLargeurEstimee) update.caillebotisLargeurEstimee = true;
     if (data.ht > 0 && !prev.ht) update.ht = data.ht;
     if (pdfBuffer && pdfFilename && !hasSameDoc(prev.documents, 'Bon de commande', pdfFilename)) {
       const uploaded = await uploadPdfToStorage(pdfBuffer, dosId, pdfFilename);
@@ -691,6 +703,8 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
       nombrePoutres: data.nombrePoutres || '',
       caillebotisChoix: data.caillebotisChoix || '',
       caillebotisProfondeur: data.caillebotisProfondeur || '',
+      caillebotisLargeur: data.caillebotisLargeur || '',
+      caillebotisLargeurEstimee: !!(data.caillebotisLargeur && data.caillebotisLargeurEstimee),
       typeAlimentation: data.typeAlimentation || '',
       needPose:    data.transport  === 'liv_pose',
       poseDate:    '',
