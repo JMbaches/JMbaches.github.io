@@ -66,7 +66,13 @@ function parseMegaoText(text) {
   const cleanDesig = m => m[2].replace(/\s*(UN|ML|M2|PCS)\s+.*$/i, '').trim();
   const escalier  = [...new Set(vrAllM.filter(m => /^VRES/.test(m[1])).map(cleanDesig))].join(' ; ');
   const decoupe   = [...new Set(vrAllM.filter(m => /^VRDEC/.test(m[1])).map(cleanDesig))].join(' ; ');
-  const lamM      = text.match(/^(LAM[A-Z0-9]+)\s*([A-Z][a-zÀ-ÿé].+)/m);
+  // [\s\S]*? (pas .+) pour spanner un retour à la ligne PDF quand la couleur/finition est
+  // rejetée sur la ligne suivante par pdf-parse (ex. "...(le ml) Poly\nBleu/Noir" — vérifié sur
+  // le vrai PDF du dossier 120969, couleur "Bleu/Noir" perdue en silence, lames="Poly" seul) —
+  // même classe de bug que le fix longueur du 2026-07-23 (087d458), cette fois sur la couleur.
+  // S'arrête juste avant le marqueur de quantité (UN/ML/M2/PCS + chiffre), qu'il soit collé sans
+  // espace (BlancML, cas déjà géré) ou sur une ligne séparée (nouveau cas).
+  const lamM      = text.match(/^(LAM[A-Z0-9]+)\s*([A-Z][a-zÀ-ÿé][\s\S]*?)(?:UN|ML|M2|PCS)\s+[\d,]/im);
   // Type de lame : le code produit distingue PVC (LAM…) et Polycarbonate (LAMPOL…)
   const typeLame  = lamM ? (/POL/i.test(lamM[1]) ? 'Polycarbonate' : 'PVC') : '';
   const trspM     = text.match(/^(TRSP[A-Z0-9]+)\s*([A-Z][a-zÀ-ÿé].+)/m);
@@ -89,7 +95,9 @@ function parseMegaoText(text) {
   const structure = STRUCT_MAP.find(m => m.k.some(k => vrText.includes(k)))?.v
                  || vrDesig
                  || (/tablier\s+seul/i.test(text) ? 'Tablier seul' : '');
-  const lameRaw   = lamM ? lamM[2].replace(/\s*(UN|ML|M2|PCS)\s+.*$/i, '').trim() : '';
+  // Le marqueur de quantité n'est plus dans lamM[2] (exclu par la regex ci-dessus) — reste juste
+  // à recoller les lignes wrappées en un seul texte (même nettoyage que le design des accessoires).
+  const lameRaw   = lamM ? lamM[2].replace(/\s*\n\s*/g, ' ').trim() : '';
   const lameParenIdx = lameRaw.lastIndexOf(')');
   let lames       = lameParenIdx >= 0 ? lameRaw.slice(lameParenIdx + 1).trim() : lameRaw;
   // Couleur du bouchon (embout de lame) : motif "B. <couleur>" dans le texte Mégao (ex: "B. Noir"
