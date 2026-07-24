@@ -198,7 +198,7 @@ function parseMegaoText(text) {
   return {
     ref, refCommande: ref, client, contact, tel, email, adresse, cp, ville,
     structure, lames, couleurBouchon, pieds, alim, moteur, typeLame, escalier, decoupe,
-    options: '', remarques: '', autres: '',
+    options: '', remarques: '', autres: '', // options réellement alimenté via le spread ci-dessous
     largeur, longueur, revendeur,
     transport, ht, dateFrom, isVolet,
     ...champsAccessoiresVolet,
@@ -314,6 +314,28 @@ function deriveChampsAccessoiresVoletDepuisPdf(text, structure, largeurBassin) {
       update.caillebotisLargeurEstimee = true;
     }
   }
+
+  // Filet de sécurité (2026-07-24) : jusqu'ici tout code non explicitement traité ci-dessus était
+  // silencieusement perdu (parseMegaoText renvoyait options/remarques/autres vides EN DUR, sans
+  // aucun repli — contrairement au parseur bâches, qui garde toujours tout code non catégorisé en
+  // texte libre dans "options"). Trouvé en auditant les 67 vrais PDF volets déjà stockés : des
+  // accessoires réels jamais capturés (ACVREQUP, ACVRALISO, ACVRCHAR, ACVRPLATP, ACVRCOHS2...).
+  // Même principe que BACHE_LIGNE_RE/autresLignes : tout ce qui n'est ni la structure/l'escalier/
+  // la découpe (VR*), la lame (LAM*), le transport/enlèvement (TRSP*/ENLEV*), l'emballage (EMB*,
+  // jamais une info produit), le geste commercial (GESTECO*, financier) ni un accessoire déjà
+  // reconnu ci-dessus va dans `options` — jamais perdu, juste pas structuré.
+  const VOLET_DEJA_TRAITE_PREFIX = [
+    'VR', 'LAM', 'TRSP', 'ENLEV', 'EMB', 'GESTECO',
+    'ACVRTELEC', 'ACCOFAS', 'ACVRCOFAS', 'ACVRPASSA', 'ACVREQUFL', 'ACVRCORN',
+    'ACVREQUTE', 'ACVREQUROU', 'ACVRALIBAT', 'ACVRPLUG', 'ACVRPOUT', 'CAIBO', 'CAIPVC',
+    'ACVRPIEDANT', 'ACVRMOUVANT', // couleur pieds — traité dans parseMegaoText, pas ici
+  ];
+  const VOLET_DEJA_TRAITE_EXACT = new Set(Object.keys(MUR_HAUTEUR_PAR_CODE_VOLET));
+  const autresLignes = lignes.filter(l =>
+    !VOLET_DEJA_TRAITE_PREFIX.some(p => l.code.startsWith(p)) &&
+    !VOLET_DEJA_TRAITE_EXACT.has(l.code)
+  );
+  if (autresLignes.length) update.options = autresLignes.map(l => l.design).join(', ');
 
   return update;
 }
