@@ -3901,6 +3901,20 @@ async function changerStatutDossier(d, newStatut, logSuffix) {
       return false;
     }
   }
+  // Blocage pose non validée (décidé le 2026-07-23) : un dossier qui nécessite une pose
+  // (needPose ou transport liv_pose) ne peut pas quitter "pret_atelier" vers l'avant tant que le
+  // client n'a pas validé une date de pose (d.poseValideClient, cf. planning.js). Le dossier
+  // suit son cours normal jusqu'à pret_atelier — ce n'est qu'à CE stade que l'envoi à l'atelier
+  // est bloqué en l'absence de validation, pas avant (contrairement à l'ancien mécanisme
+  // attente_planif qui mettait en pause dès la Saisie — celui-ci reste utilisable en plus, pas
+  // remplacé, les deux peuvent coexister sans conflit).
+  const STATUTS_AMONT_PRET_ATELIER = ['nouveau', 'admin', 'verif', 'attente_planif'];
+  if (prev === 'pret_atelier' && newStatut !== 'pret_atelier' && !STATUTS_AMONT_PRET_ATELIER.includes(newStatut)) {
+    if ((d.needPose || d.transport === 'liv_pose') && !d.poseValideClient) {
+      showToast(`⚠ Impossible d'avancer : la pose n'a pas encore été validée avec le client`);
+      return false;
+    }
+  }
   // Le décompte auto de stock ne se déclenche qu'à l'ENTRÉE RÉELLE en production (dispatch
   // effectif à l'atelier) — pas au simple passage en "pret_atelier" (prêt, en attente d'envoi).
   // "stock déduit dès que le dossier part en fabrication" = entrée dans "production", pas avant.
