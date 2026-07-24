@@ -464,6 +464,7 @@ function refreshCurrentView() {
     atelier_grand:   () => typeof renderAtelierGrand   === 'function' && renderAtelierGrand(),
     emballage:       () => typeof renderEmballage      === 'function' && renderEmballage(),
     emballage_grand: () => typeof renderEmballageGrand === 'function' && renderEmballageGrand(),
+    stocke_liste:    () => typeof renderStockeListe    === 'function' && renderStockeListe(),
     planning:        () => typeof renderPlanning       === 'function' && renderPlanning(),
     users:           () => typeof renderUsers          === 'function' && renderUsers(),
     planning_avance: () => typeof _planningAvanceAutoSync === 'function' && _planningAvanceAutoSync(),

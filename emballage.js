@@ -116,6 +116,57 @@ function renderEmballage() {
   </div>` : ''}`;
 }
 
+// Onglet dédié "Stocké" (sous Emballage) — même liste que la section "En stock" de
+// renderEmballage() ci-dessus, mais en vue plein écran filtrable/triable, pour ne pas avoir à
+// dérouler l'onglet Emballage pour voir ce qui dort en entrepôt. Trié par ancienneté (le plus
+// vieux en stock en premier) — c'est l'info qui manque le plus dans la vue imbriquée.
+function renderStockeListe() {
+  const mc = document.getElementById('main-content');
+  const stockes = filteredDossiers(dossiers.filter(d => d.statut === 'stocké').filter(matchesTypeFilter))
+    .slice()
+    .sort((a,b) => (a.statutChangedAt||'') < (b.statutChangedAt||'') ? -1 : 1);
+
+  const joursEnStock = d => {
+    if (!d.statutChangedAt) return null;
+    const ms = Date.now() - new Date(d.statutChangedAt).getTime();
+    return Math.max(0, Math.floor(ms / 86400000));
+  };
+
+  mc.innerHTML = `
+  <div id="toast-msg" class="toast-msg"></div>
+  <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div>
+      <h1 style="font-size:20px;font-weight:700;letter-spacing:-.2px">Stocké</h1>
+      <p>${stockes.length} dossier${stockes.length>1?'s':''} en attente d'expédition/livraison</p>
+    </div>
+    ${typeFilterSelectHtml('renderStockeListe')}
+  </div>
+
+  ${stockes.length===0 ? `<div class="empty-state"><i class="ti ti-archive"></i>Aucun dossier en stock actuellement</div>` : `
+  <div class="table-wrap">
+    <table>
+      <colgroup><col style="width:85px"><col style="width:160px"><col style="width:160px"><col style="width:120px"><col style="width:90px"><col style="width:90px"><col style="width:120px"><col></colgroup>
+      <thead><tr><th>N°</th><th>Client</th><th>Produit</th><th>Transport</th><th>Livraison</th><th>En stock depuis</th><th>Action</th></tr></thead>
+      <tbody>${stockes.map(d=>{
+        const jours = joursEnStock(d);
+        const alerte = jours!=null && jours>=14;
+        return `<tr class="clickable" onclick="openFiche('${d.id}')">
+        <td style="font-size:11px;color:var(--ink-faint);font-family:'JetBrains Mono',monospace;font-weight:500">${highlight(d.id, globalSearchQuery)}</td>
+        <td><strong>${highlight(d.client, globalSearchQuery)}</strong></td>
+        <td style="color:var(--ink-soft)">${highlight(d.structure||'—', globalSearchQuery)}</td>
+        <td><span style="background:#E0E7FF;color:#3730A3;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600">${{enlvt:'Enlèvement',liv_pose:'Liv+Pose',livraison:'Livraison'}[d.transport]||'—'}</span></td>
+        <td style="font-size:12px;color:var(--ink-faint)">${fmt(d.dateLivraison)}</td>
+        <td onclick="event.stopPropagation()"><span style="font-size:12px;font-weight:600;${alerte?'color:var(--red)':'color:var(--ink-faint)'}">${jours!=null?jours+' j':'—'}</span></td>
+        <td onclick="event.stopPropagation()" style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" onclick="printFeuilLivraison('${d.id}')"><i class="ti ti-printer"></i> Imprimer</button>
+          <button class="btn btn-primary btn-sm" onclick="openModalCloture('${d.id}','dos')"><i class="ti ti-check"></i> Clôturer</button>
+        </td>
+      </tr>`;
+      }).join('')}</tbody>
+    </table>
+  </div>`}`;
+}
+
 function getSortedEmballage() {
   const emb = dossiers.filter(d => d.statut === 'emballage').filter(matchesTypeFilter);
   const manualIds = emballageOrder.filter(id => emb.find(d => d.id === id));

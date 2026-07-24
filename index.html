@@ -2038,7 +2038,7 @@ const TAB_GROUPS = {
   'atelier-g':  { icon:'ti-tool',            label:'Atelier',    show:()=>can('view_prod'),
     tabs:[{id:'atelier',icon:'ti-tool',label:'Atelier',show:()=>can('view_prod')},{id:'atelier_grand',icon:'ti-layout-grid',label:'Grand écran',show:()=>can('view_prod')&&can('atelier_grand')}]},
   'emballage-g':{ icon:'ti-package',         label:'Emballage',  show:()=>can('emballage'),
-    tabs:[{id:'emballage_view',icon:'ti-package',label:'Emballage'},{id:'emballage_grand',icon:'ti-layout-grid',label:'Grand écran',show:()=>can('emballage_grand')}]},
+    tabs:[{id:'emballage_view',icon:'ti-package',label:'Emballage'},{id:'emballage_grand',icon:'ti-layout-grid',label:'Grand écran',show:()=>can('emballage_grand')},{id:'stocke_liste',icon:'ti-archive',label:'Stocké'}]},
   'stock-g':    { icon:'ti-box-multiple',           label:'Stock',      show:()=>can('stock'),
     tabs:[{id:'stock_scan',icon:'ti-scan',label:'Scanner'},{id:'stock_liste',icon:'ti-list',label:'Références'},
       {id:'stock_pieces',icon:'ti-category',label:'Pièces détachées'}]},
@@ -2122,6 +2122,7 @@ function goTab(tab) {
   else if(tab==='atelier_grand') renderAtelierGrand();
   else if(tab==='emballage_view') renderEmballage();
   else if(tab==='emballage_grand') renderEmballageGrand();
+  else if(tab==='stocke_liste') renderStockeListe();
   else if(tab==='stock_scan') renderStockScan();
   else if(tab==='stock_liste') renderStockListe();
   else if(tab==='stock_pieces') renderStockPieces();
@@ -2296,6 +2297,7 @@ function refreshGlobalSearch() {
   else if (currentTab === 'atelier_grand') renderAtelierGrand();
   else if (currentTab === 'emballage_view') renderEmballage();
   else if (currentTab === 'emballage_grand') renderEmballageGrand();
+  else if (currentTab === 'stocke_liste') renderStockeListe();
 }
 
 
