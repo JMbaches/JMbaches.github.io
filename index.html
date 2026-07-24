@@ -1739,6 +1739,10 @@ let dosRevendeurFilter = '';  // Filtre par revendeur
 // Emballage, Suivi, Archives, Compta) plutôt qu'un filtre par vue — reflète le choix une fois
 // pour toutes en changeant d'onglet, cf. isBacheDossier(). '' = tous.
 let dosTypeFilter = '';
+// Filtre "avec pose uniquement", visible seulement sur le sous-filtre rapide "Prêt atelier" (voir
+// renderDos) — décidé le 2026-07-23 avec le blocage envoi atelier si pose non validée (commit
+// 1ff6755), pour repérer facilement lesquels sont concernés.
+let dosPoseOnlyFilter = false;
 // Filtre rapide de l'écran Admin fusionné (Saisie+Vérification+Prêt atelier, voir renderDos) —
 // mémorisé par utilisateur/poste (localStorage) pour que chacun retrouve sa vue par défaut.
 let adminQuickFilter = localStorage.getItem('jmb_adminQuickFilter') || 'saisie';
@@ -2524,6 +2528,11 @@ function renderDos() {
     <button class="btn btn-sm ${adminQuickFilter==='verif'?'btn-primary':'btn-ghost'}" onclick="setAdminQuickFilter('verif')"><i class="ti ti-check"></i> À vérifier (${enVerif})</button>
     <button class="btn btn-sm ${adminQuickFilter==='pret_atelier'?'btn-primary':'btn-ghost'}" onclick="setAdminQuickFilter('pret_atelier')"><i class="ti ti-truck-delivery"></i> Prêt pour l'atelier (${enPretAtelier})</button>
     <button class="btn btn-sm ${adminQuickFilter==='tous'?'btn-primary':'btn-ghost'}" onclick="setAdminQuickFilter('tous')"><i class="ti ti-list"></i> Tous (${enAdmin+enVerif+enPretAtelier})</button>
+    ${adminQuickFilter==='pret_atelier' ? `
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-soft);margin-left:6px;cursor:pointer;user-select:none">
+      <input type="checkbox" ${dosPoseOnlyFilter?'checked':''} onchange="dosPoseOnlyFilter=this.checked;renderDos()">
+      Avec pose uniquement
+    </label>` : ''}
   </div>` : ''}
 
   <div style="margin-bottom:14px">
@@ -2642,7 +2651,10 @@ function renderDos() {
         if(currentTab==='admin') {
           if(adminQuickFilter==='saisie') _l=_l.filter(d=>d.statut==='admin'||d.statut==='nouveau');
           else if(adminQuickFilter==='verif') _l=_l.filter(d=>d.statut==='verif');
-          else if(adminQuickFilter==='pret_atelier') _l=_l.filter(d=>d.statut==='pret_atelier');
+          else if(adminQuickFilter==='pret_atelier') {
+            _l=_l.filter(d=>d.statut==='pret_atelier');
+            if (dosPoseOnlyFilter) _l=_l.filter(d=>d.needPose||d.transport==='liv_pose');
+          }
           else _l=_l.filter(d=>['admin','nouveau','verif','pret_atelier'].includes(d.statut));
         }
         return _l;})().map(d=>{
@@ -2654,6 +2666,12 @@ function renderDos() {
               <span style="font-weight:600;font-size:13px">${highlight(d.client, globalSearchQuery)}</span>
               ${d.refCommande?`<span style="font-size:10px;font-family:'JetBrains Mono',monospace;background:var(--accent-light);color:var(--accent-deep);padding:1px 6px;border-radius:3px">${highlight(d.refCommande, globalSearchQuery)}</span>`:''}
               ${(()=>{const w=users.filter(u=>u.id!==currentUser.id&&u.presenceDos===d.id);return w.length?`<span title="${w.map(u=>u.prenom||u.name).join(', ')} sur ce dossier" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:1px 6px;border-radius:3px;background:#FEF3C7;color:#92400E"><i class="ti ti-eye" style="font-size:10px"></i>${w.map(u=>(u.prenom||u.name||'?')[0]).join('')}</span>`:''})()}
+              ${(()=>{
+                if (!(d.needPose||d.transport==='liv_pose')) return '';
+                if (d.poseValideClient) return `<span title="Pose validée avec le client" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:1px 6px;border-radius:3px;background:#D1FAE5;color:#065F46"><i class="ti ti-circle-check" style="font-size:10px"></i> Planifié</span>`;
+                if (d.poseDate) return `<span title="Date proposée, en attente de validation client" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:1px 6px;border-radius:3px;background:#FEF3C7;color:#92400E"><i class="ti ti-phone" style="font-size:10px"></i> En attente validation</span>`;
+                return `<span title="Aucune date de pose choisie" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:1px 6px;border-radius:3px;background:var(--red-light);color:var(--red)"><i class="ti ti-calendar-off" style="font-size:10px"></i> Pose à planifier</span>`;
+              })()}
             </div>
             <div style="font-size:11px;color:var(--ink-faint);margin-top:1px;display:flex;align-items:center;gap:4px">
               ${d.tel ? `<span>${d.tel}</span><button onclick="event.stopPropagation();copyPhone('${d.tel}',this)" class="btn btn-xs btn-ghost" style="padding:1px 4px;min-height:0;line-height:1" title="Copier le téléphone"><i class="ti ti-copy" style="font-size:10px"></i></button>` : ''}
