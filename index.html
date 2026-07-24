@@ -3717,6 +3717,7 @@ function isDossierCloture(d) {
   return isCloture(d.statut);
 }
 function getNextStatut(d) {
+  if (d.statut === 'stocké'  && d.transport === 'enlvt')     return 'retiré';
   if (d.statut === 'expédié' && (d.transport === 'livraison' || d.transport === 'liv_pose')) return 'livré';
   if (d.statut === 'livré'   && d.transport === 'liv_pose')  return 'posé';
   return STATUT_NEXT[d.statut] || d.statut;
