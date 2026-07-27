@@ -182,6 +182,11 @@ const STATUTS = {
   valide:      { label: 'Validé client', color: '#1E6B3A', bg: '#D7F0DE' },
 };
 
+// Plafond horaire de fin de journée de pose, en minutes depuis minuit.
+// On peut aller jusqu'à 18h30 max (auparavant 18h00). Source unique : toute la
+// logique de découpage/troncature et les repères d'affichage s'y réfèrent.
+const WORKDAY_END_MIN = 18 * 60 + 30;   // 1110 = 18h30
+
 // Couleur de fond d'un chantier selon sa DURÉE de pose (heures). Texte foncé associé pour lisibilité.
 // Paliers : ≤1h gris · ≤1h30 vert · ≤2h bleu élec · ≤2h30 jaune pâle · ≤3h30 jaune prononcé · ≤6h bleu ciel · immergé total → MARINE (forcé par type)
 // prennent le palier inférieur le plus proche.
@@ -661,7 +666,7 @@ async function planWeek(poolInput, depot, workday, days, poseDaysISO, closures =
   const poolGeoPts = geoResults.filter(Boolean); // même ordre que `pool`
 
   const dayStart   = parseHHMM(workday?.start, 480);
-  const DAY_END    = 18 * 60;   // plafond journée : 18h00
+  const DAY_END    = WORKDAY_END_MIN;   // plafond journée : 18h30
   const lunchStart = parseHHMM(workday?.lunchStart, 720);
   const lunchDur   = workday?.lunchDuration ?? 60;
   const hasDepot   = !!(depot && (depot.address || depot.city || depot.postalCode));
@@ -1227,7 +1232,7 @@ async function planWeek(poolInput, depot, workday, days, poseDaysISO, closures =
    soit { error: 'geocode' | 'no_fit' }. */
 async function planSingleDay(existingChantiers, newChantier, depot, workday, dayMeta = {}) {
   const dayStart   = parseHHMM(workday?.start, 480);
-  const DAY_END    = 18 * 60;
+  const DAY_END    = WORKDAY_END_MIN;
   const lunchStart = parseHHMM(workday?.lunchStart, 720);
   const lunchDur   = workday?.lunchDuration ?? 60;
   const hasDepot   = !!(depot && (depot.address || depot.city || depot.postalCode));
@@ -3247,7 +3252,7 @@ function TrajetsMap({ schedules, binomes, days }) {
    ========================================================================= */
 // Nettoie les schedules d'une semaine sauvegardée (purge vieilles sauvegardes corrompues)
 function cleanSavedSchedules(schedules) {
-  const DAY_END_MIN = 18 * 60;
+  const DAY_END_MIN = WORKDAY_END_MIN;
   const cleaned = {};
   Object.entries(schedules).forEach(([binId, res]) => {
     const cleanedDayPlans = {};
@@ -3792,8 +3797,8 @@ ${sign}`,
           pdf.text(h + 'h', gridLeft - 1.5, gy + 1.2, { align: 'right' });
         }
 
-        // Plafond 18h (tirets rouges)
-        const y18 = minToY(18 * 60);
+        // Plafond 18h30 (tirets rouges)
+        const y18 = minToY(WORKDAY_END_MIN);
         if (y18 >= gridTop && y18 <= gridBottom) {
           pdf.setDrawColor(190, 60, 60); pdf.setLineWidth(0.3);
           pdf.setLineDashPattern([1.2, 0.8], 0);
@@ -3984,7 +3989,7 @@ ${sign}`,
   const allEvents = Object.values(schedules).flatMap(r => Object.values(r.dayPlans).flatMap(d => d.events));
   const computedStart = parseHHMM(workday?.start, 480);
   const rawStart = Math.min(computedStart, ...(allEvents.length ? allEvents.map(e => e.start) : [computedStart]));
-  const rawEnd = Math.max(18 * 60, ...(allEvents.length ? allEvents.filter(e => e.type === 'pose' || e.type === 'lunch').map(e => e.end) : []));
+  const rawEnd = Math.max(WORKDAY_END_MIN, ...(allEvents.length ? allEvents.filter(e => e.type === 'pose' || e.type === 'lunch').map(e => e.end) : []));
   const axisStartH = Math.floor(rawStart / 60);
   const axisEndH = Math.ceil(rawEnd / 60);
   const axisStartMin = axisStartH * 60;
@@ -4001,7 +4006,7 @@ ${sign}`,
           <div className="label-cap mb-2">Optimisation hebdomadaire</div>
           <h1 className="font-display text-5xl leading-none tracking-tight">Planning</h1>
           <p className="mt-3 text-sm max-w-xl" style={{ color: 'var(--ink-soft)' }}>
-            Choisis une semaine : l'algo répartit les chantiers sur les jours au plus court en trajet, journées plafonnées à 8h–18h, déplacement la veille / nuit sur place pour les chantiers éloignés. En mode <strong>par zone</strong>, il attribue aussi chaque chantier au binôme le plus proche géographiquement. Tu peux aussi assigner un chantier à la main ci-dessous.
+            Choisis une semaine : l'algo répartit les chantiers sur les jours au plus court en trajet, journées plafonnées à 8h–18h30, déplacement la veille / nuit sur place pour les chantiers éloignés. En mode <strong>par zone</strong>, il attribue aussi chaque chantier au binôme le plus proche géographiquement. Tu peux aussi assigner un chantier à la main ci-dessous.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -4109,7 +4114,7 @@ ${sign}`,
           </div>
           {applied && <span className="text-xs" style={{ color: 'var(--teal-deep)' }}>✓ Emploi du temps enregistré — dates visibles dans Planning et Feuilles de route.</span>}
           <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
-            Journée {workday?.start || '08:00'}–18:00 · déjeuner {workday?.lunchStart || '12:00'} ({workday?.lunchDuration ?? 60} min).
+            Journée {workday?.start || '08:00'}–18:30 · déjeuner {workday?.lunchStart || '12:00'} ({workday?.lunchDuration ?? 60} min).
           </span>
           {error && <span className="text-xs" style={{ color: 'var(--accent)' }}>{error}</span>}
           <button onClick={clearAllSaved} className="text-xs flex items-center gap-1 ml-auto" style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', color: 'var(--accent)' }} title="Supprime tous les emplois du temps enregistrés (toutes les semaines). Les chantiers et binômes ne sont pas touchés.">
@@ -4247,8 +4252,8 @@ ${sign}`,
                             {hours.map(h => (
                               <div key={h} style={{ position: 'absolute', top: (h - axisStartH) * HOUR_PX, left: 0, right: 0, borderTop: '1px solid var(--border)', opacity: 0.45 }} />
                             ))}
-                            {/* repère 18h (plafond) */}
-                            <div style={{ position: 'absolute', top: (18 * 60 - axisStartMin) * PX, left: 0, right: 0, borderTop: '1px dashed var(--accent)', opacity: 0.5 }} />
+                            {/* repère 18h30 (plafond) */}
+                            <div style={{ position: 'absolute', top: (WORKDAY_END_MIN - axisStartMin) * PX, left: 0, right: 0, borderTop: '1px dashed var(--accent)', opacity: 0.5 }} />
                             {plan && plan.events.map((ev, i) => {
                               const top = (ev.start - axisStartMin) * PX;
                               const h = Math.max((ev.end - ev.start) * PX, 12);
@@ -4263,7 +4268,7 @@ ${sign}`,
                                 const label = ev.type === 'travelApproach' ? (ev.returnDepot ? `dépôt ${mins}` : `↧ ${mins}`)
                                   : ev.type === 'travelEvening' ? (ev.returnDepot ? `dépôt ${mins}` : `veille ${mins}`)
                                   : `${mins}`;
-                                const tip = ev.type === 'travelApproach' ? (ev.returnDepot ? `Retour au dépôt — vendredi matin (${mins})` : ev.fromDepot ? `Approche depuis le dépôt — tôt le matin (${mins})` : `Trajet vers le chantier du jour — reporté au matin car il finissait après 18h (${mins})`)
+                                const tip = ev.type === 'travelApproach' ? (ev.returnDepot ? `Retour au dépôt — vendredi matin (${mins})` : ev.fromDepot ? `Approche depuis le dépôt — tôt le matin (${mins})` : `Trajet vers le chantier du jour — reporté au matin car il finissait après 18h30 (${mins})`)
                                   : ev.type === 'travelEvening' ? (ev.returnDepot ? `Retour au dépôt en fin de semaine (${mins})` : `Trajet du soir vers le chantier du lendemain — nuit sur place (${mins})`)
                                   : ev.eveningLink ? `Trajet du soir vers le chantier du lendemain — nuit sur place (${mins})${destCity ? ' à ' + destCity : ''}` : `${mins} de route${destCity ? ' vers ' + destCity : ''}`;
                                 return <div key={i} title={tip} style={{ position: 'absolute', top, left: 2, right: 2, height: h, background: 'repeating-linear-gradient(45deg, rgba(0,0,0,0.06), rgba(0,0,0,0.06) 4px, transparent 4px, transparent 8px)', border: veille ? '1px dashed var(--border-strong)' : 'none', borderRadius: 2, overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 0 }}>
@@ -4289,14 +4294,20 @@ ${sign}`,
               const dc = dureeColor(c.estimatedDuration, c.type, pType?.color);
                               // Chercher le chantier complet dans la liste (pour avoir toutes ses données à jour)
                               const fullC = chantiers.find(x => x.id === c.id) || c;
+                              // Adresse + téléphone : toujours affichés dans le bloc ET dans l'info-bulle.
+                              const rue     = fullC.address || '';
+                              const cpVille = [fullC.postalCode, fullC.city].filter(Boolean).join(' ');
+                              const tel     = fullC.clientPhone || '';
+                              const adrTip  = [rue, cpVille].filter(Boolean).join(', ');
                               return <div key={i}
-                                title={`${minToHHMM(ev.start)}–${minToHHMM(ev.end)} · ${c.clientName} · ${c.type} · ${c.estimatedDuration}h${ev.fixed ? ' · heure fixée' : ''} — Cliquer pour ouvrir la fiche`}
+                                title={`${minToHHMM(ev.start)}–${minToHHMM(ev.end)} · ${c.clientName} · ${c.type} · ${c.estimatedDuration}h${ev.fixed ? ' · heure fixée' : ''}${adrTip ? '\n📍 ' + adrTip : ''}${tel ? '\n☎ ' + tel : ''}\n— Cliquer pour ouvrir la fiche`}
                                 onClick={() => { if (setPendingEdit && setTab) { setPendingEdit(fullC); setTab('chantiers'); } }}
                                 style={{ position: 'absolute', top, left: 2, right: 2, height: h, background: dc.bg, color: dc.ink, borderRadius: 3, borderLeft: `4px solid ${bin.color}`, padding: '3px 5px 3px 6px', overflow: 'hidden', boxShadow: 'var(--shadow-sm)', outline: ev.fixed ? '2px solid var(--accent)' : 'none', outlineOffset: ev.fixed ? '-2px' : 0, cursor: 'pointer' }}>
                                 <div style={{ fontSize: 10, fontWeight: 700, lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.fixed ? '📌 ' : ''}{minToHHMM(ev.start)} {c.clientName}{ev.contd ? ' (suite)' : ''}</div>
-                                {h > 28 && <div style={{ fontSize: 9, opacity: 0.9, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.type}</div>}
-                                {h > 38 && <div style={{ fontSize: 9, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{[c.postalCode, c.city].filter(Boolean).join(' ')}</div>}
-                                {h > 52 && <div style={{ fontSize: 8, opacity: 0.7, lineHeight: 1.1 }}>{c.estimatedDuration}h</div>}
+                                {rue && <div style={{ fontSize: 9, opacity: 0.9, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rue}</div>}
+                                {cpVille && <div style={{ fontSize: 9, fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cpVille}</div>}
+                                {tel && <div style={{ fontSize: 9, fontFamily: 'JetBrains Mono, monospace', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>☎ {tel}</div>}
+                                {h > 46 && <div style={{ fontSize: 8, opacity: 0.7, lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.type} · {c.estimatedDuration}h</div>}
                               </div>;
                             })}
                           </div>
@@ -4375,7 +4386,7 @@ ${sign}`,
             <span className="flex items-center gap-1"><span style={{ width: 12, height: 12, background: 'repeating-linear-gradient(45deg, rgba(0,0,0,0.2), rgba(0,0,0,0.2) 3px, transparent 3px, transparent 6px)', borderRadius: 2, display: 'inline-block' }} /> Trajet</span>
             <span className="flex items-center gap-1"><span style={{ width: 12, height: 12, background: 'repeating-linear-gradient(45deg, rgba(0,0,0,0.12), rgba(0,0,0,0.12) 3px, transparent 3px, transparent 6px)', border: '1px dashed var(--border-strong)', borderRadius: 2, display: 'inline-block' }} /> Trajet veille / soir (hors horaires)</span>
             <span className="flex items-center gap-1"><span style={{ width: 12, height: 12, background: 'var(--cream)', border: '1px dashed var(--border-strong)', borderRadius: 2, display: 'inline-block' }} /> Déjeuner</span>
-            <span className="flex items-center gap-1"><span style={{ width: 14, borderTop: '1px dashed var(--accent)', display: 'inline-block' }} /> Plafond 18h</span>
+            <span className="flex items-center gap-1"><span style={{ width: 14, borderTop: '1px dashed var(--accent)', display: 'inline-block' }} /> Plafond 18h30</span>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-xs no-print mt-1" style={{ color: 'var(--ink-soft)' }}>
             <span className="label-cap" style={{ letterSpacing: '0.12em' }}>Couleur = type</span>
