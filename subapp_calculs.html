@@ -958,6 +958,7 @@ function App(){
       if(!d||d.type!=='jmb:init') return;
       const p=d.payload||{};
       setDossierId(p.dossierId||null);
+      setFicheCote(p.ficheCoteUrl ? {url:p.ficheCoteUrl, name:p.ficheCoteName||'Fiche de côte'} : null);
       if(p.material) setMaterial(p.material);
       if(p.type) setType(p.type);
       if(p.fields&&p.material&&p.type){
@@ -988,22 +989,48 @@ function App(){
   const [pdfReading,setPdfReading]=useState(false);   // lecture PDF en cours
   const [pdfResult,setPdfResult]=useState(null);       // résultat Claude à confirmer
   const [pdfError,setPdfError]=useState('');           // erreur lisible
+  const [ficheCote,setFicheCote]=useState(null);       // {url,name} — fiche de côte du porte-document (jmb:init)
   const pdfInputRef=React.useRef(null);
   const saveApiKey=(k)=>{ setApiKey(k); localStorage.setItem('jmb_apikey',k); };
 
   // --- Lecture PDF via Claude Vision ---
+  // readPdfB64 fait l'appel Claude proprement dit (partagé par les deux sources ci-dessous).
+  // readPdf(file) : PDF choisi à la main (input file). readPdfFromDossier(url) : fiche de côte
+  // déjà présente dans le porte-document du dossier (déposée par jmb:init, cf. index.html) —
+  // évite un re-upload manuel d'un fichier que l'app a déjà.
   const readPdf=async(file)=>{
+    const b64=await new Promise((res,rej)=>{
+      const r=new FileReader();
+      r.onload=()=>res(r.result.split(',')[1]);
+      r.onerror=rej;
+      r.readAsDataURL(file);
+    });
+    await readPdfB64(b64);
+  };
+  const readPdfFromDossier=async(url)=>{
     if(!apiKey){ setPdfError("Clé API manquante — saisis ta clé API Anthropic dans le champ ci-dessous."); return; }
     setPdfReading(true); setPdfError(''); setPdfResult(null);
     try{
-      // Convertir le PDF en base64
+      const resp=await fetch(url);
+      if(!resp.ok) throw new Error('FICHIER_INTROUVABLE');
+      const blob=await resp.blob();
       const b64=await new Promise((res,rej)=>{
         const r=new FileReader();
         r.onload=()=>res(r.result.split(',')[1]);
         r.onerror=rej;
-        r.readAsDataURL(file);
+        r.readAsDataURL(blob);
       });
-
+      setPdfReading(false);
+      await readPdfB64(b64);
+    }catch(e){
+      setPdfReading(false);
+      setPdfError('📄 Impossible de récupérer la fiche de côte du porte-document — charge le PDF manuellement.');
+    }
+  };
+  const readPdfB64=async(b64)=>{
+    if(!apiKey){ setPdfError("Clé API manquante — saisis ta clé API Anthropic dans le champ ci-dessous."); return; }
+    setPdfReading(true); setPdfError(''); setPdfResult(null);
+    try{
       const PROMPT=`Tu es un expert en lecture de fiches de prise de côtes de volets de piscine. Tu dois extraire les valeurs écrites (manuscrites ou imprimées) avec la plus grande précision possible.
 
 ═══════════════════════════════════════════════
@@ -1770,12 +1797,23 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans texte avant o
               {/* Import PDF */}
               <div style={{marginBottom:18,paddingBottom:18,borderBottom:'1px solid var(--border)'}}>
                 <div className="label-cap" style={{marginBottom:9}}>Importer une fiche de côtes</div>
+                {ficheCote &&
+                  <div style={{marginBottom:10,padding:'10px 12px',background:'var(--ok-bg)',border:'1px solid #BBD9C8',borderRadius:6}}>
+                    <div style={{fontSize:11,fontWeight:700,color:'var(--ok)',marginBottom:6}}>✓ Fiche de côte trouvée dans le porte-document</div>
+                    <div style={{fontSize:12,color:'var(--ink-soft)',marginBottom:8,wordBreak:'break-all'}}>{ficheCote.name}</div>
+                    <button className="pdf-import-btn" style={{borderStyle:'solid',borderColor:'var(--ok)',color:'var(--ok)'}}
+                      onClick={()=>readPdfFromDossier(ficheCote.url)} disabled={pdfReading}>
+                      {pdfReading
+                        ? <><span style={{display:'inline-block',width:14,height:14,border:'2px solid var(--ok)',borderTopColor:'transparent',borderRadius:'50%',animation:'spin .7s linear infinite'}}></span>Lecture en cours…</>
+                        : <><span style={{fontSize:18}}>📄</span>Importer cette fiche</>}
+                    </button>
+                  </div>}
                 <input type="file" accept="application/pdf" ref={pdfInputRef} style={{display:'none'}}
                   onChange={e=>{ const f=e.target.files&&e.target.files[0]; if(f) readPdf(f); e.target.value=''; }}/>
                 <button className="pdf-import-btn" onClick={()=>pdfInputRef.current&&pdfInputRef.current.click()} disabled={pdfReading}>
                   {pdfReading
                     ? <><span style={{display:'inline-block',width:14,height:14,border:'2px solid var(--accent)',borderTopColor:'transparent',borderRadius:'50%',animation:'spin .7s linear infinite'}}></span>Lecture en cours…</>
-                    : <><span style={{fontSize:18}}>📄</span>Charger un PDF Aquamaster</>}
+                    : <><span style={{fontSize:18}}>📄</span>{ficheCote?'Ou charger un autre PDF':'Charger un PDF Aquamaster'}</>}
                 </button>
                 {pdfError && <div style={{marginTop:8,padding:'8px 12px',background:'var(--bad-bg)',border:'1px solid #E6BDB6',borderRadius:4,fontSize:12,color:'var(--bad)'}}>{pdfError}</div>}
                 {/* Clé API */}

@@ -1391,6 +1391,16 @@ a:focus-visible, button:focus-visible,
   </div>
 </div>
 
+<!-- MODAL FICHE ACCESSOIRE (poste Accessoires — voir atelier.js:openFicheAccessoire) -->
+<div class="modal-overlay" id="modal-fiche-accessoire">
+  <div class="modal" style="max-width:560px">
+    <div id="fa-content"></div>
+    <div class="modal-ft">
+      <button class="btn btn-secondary" onclick="closeModal('modal-fiche-accessoire')">Fermer</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL PORTE-DOCUMENT -->
 <div class="modal-overlay" id="modal-portedoc">
   <div class="modal" style="max-width:820px;height:80vh;display:flex;flex-direction:column">
@@ -3984,7 +3994,15 @@ window.addEventListener('message', (ev) => {
       longueur:   d.longueur ? String(Math.round(d.longueur*100)) : '',
       ref: d.ref || '', numero: d.id,
     };
-    iframe.contentWindow.postMessage({ type:'jmb:init', payload:{ dossierId:d.id, material, type, fields } }, '*');
+    // Fiche de côte déjà présente dans le porte-document (déposée par le métreur) — la plus
+    // récente si plusieurs (documents.push : ordre chronologique, la dernière est en fin de
+    // tableau). Permet à l'outil de calcul de proposer une lecture PDF directe sans re-upload.
+    const ficheCote = (d.documents || []).filter(x => x.folder === 'Fiche de côte').pop();
+    iframe.contentWindow.postMessage({ type:'jmb:init', payload:{
+      dossierId:d.id, material, type, fields,
+      ficheCoteUrl: ficheCote ? ficheCote.url : null,
+      ficheCoteName: ficheCote ? ficheCote.name : null,
+    } }, '*');
   }
 
   if (msg.type === 'jmb:export') {

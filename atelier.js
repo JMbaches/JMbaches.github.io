@@ -10,6 +10,57 @@
    scope lexical global du document (voir mémoire projet : piège
    let/window).
    ================================================================ */
+// Libellés d'affichage pour la "Fiche accessoire" (openFicheAccessoire ci-dessous) — mêmes champs
+// que la section "Accessoires (décompte stock)" de la fiche dossier (index.html), reformulés pour
+// une lecture rapide côté poste Accessoires plutôt que pour la saisie. Volets uniquement (les
+// bâches n'ont aucun de ces champs).
+const ACCESSOIRE_FIELD_LABELS = {
+  typeAlimentation: "Type d'alimentation",
+  couleurBouchon:   'Couleur bouchon',
+  telecommande:     'Télécommande',
+  gestionSel:       'Gestion sel',
+  passesSangles:    'Passes-sangles',
+  flasqueMurale:    'Flasque murale',
+  murCouleur:       'Mur — couleur',
+  murHauteur:       'Mur — hauteur',
+  caillebotisChoix: 'Caillebotis',
+  fixation:         'Fixation',
+  equerresRenfort:  'Équerres renfort',
+  corniere6060:     'Cornière 60x60',
+  poutreCouleur:    'Couleur poutre',
+  nombrePoutres:    'Nombre de poutres',
+};
+// Vue dédiée au poste Accessoires : liste uniquement les accessoires réellement présents sur le
+// dossier (valeur non vide et non "0" — un "0" saisi équivaut à "rien à préparer" pour ce champ),
+// pour que l'ouvrier sache quoi sortir/monter sans chercher dans toute la fiche dossier.
+function openFicheAccessoire(dosId) {
+  const d = dossiers.find(x => x.id === dosId); if (!d || isBacheDossier(d)) return;
+  const rows = Object.entries(ACCESSOIRE_FIELD_LABELS)
+    .filter(([field]) => { const v = d[field]; return v !== undefined && v !== null && v !== '' && v !== '0'; })
+    .map(([field, label]) => {
+      let val = String(d[field]);
+      if (field === 'caillebotisChoix' && d.caillebotisLargeur) {
+        val += ` — ${d.caillebotisLargeur} cm${d.caillebotisLargeurEstimee ? ' (largeur estimée)' : ''} × ${d.caillebotisProfondeur || '?'} cm prof.`;
+      }
+      if (field === 'passesSangles' || field === 'equerresRenfort') val = `× ${val}`;
+      return { label, val };
+    });
+  document.getElementById('fa-content').innerHTML = `
+    <div style="padding:20px 24px;border-bottom:1px solid var(--border)">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:6px"><i class="ti ti-puzzle"></i> Fiche accessoire</div>
+      <div style="font-size:20px;font-weight:700;color:var(--ink)">${d.client}</div>
+      <div style="font-size:13px;color:var(--ink-soft);margin-top:2px">${d.id} · ${d.structure || '—'}</div>
+    </div>
+    <div style="padding:6px 24px 18px">
+      ${rows.length ? rows.map(r => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+          <span style="font-size:13px;color:var(--ink-soft)">${r.label}</span>
+          <span style="font-size:14px;font-weight:600;color:var(--ink)">${r.val}</span>
+        </div>`).join('')
+      : `<div class="empty-state" style="padding:20px 0"><i class="ti ti-mood-empty"></i>Aucun accessoire particulier pour ce dossier</div>`}
+    </div>`;
+  openModal('modal-fiche-accessoire');
+}
 // Rafraîchit la vue Atelier actuellement affichée (liste ou grand écran) — à utiliser après une
 // action de poste plutôt que renderDos() (utilisé par avancerDos, qui replace la vue par l'onglet
 // "Dossiers" même quand l'action vient de l'Atelier — comportement existant qu'on ne reproduit
@@ -125,6 +176,7 @@ function renderAtelier() {
             <span style="font-size:12px;color:var(--ink-faint)"><i class="ti ti-calendar" style="font-size:12px;vertical-align:-1px"></i> ${fmt(d.dateLivraison)}${d.dateFab?` <span style="color:var(--teal);font-weight:600" title="Semaine de fabrication souhaitée">· Sem. ${numeroSemaineISO(new Date(d.dateFab+'T00:00:00'))}</span>`:''}</span>
             <div style="display:flex;gap:6px">
               <button class="btn btn-ghost btn-sm" onclick="openVueFab('${d.id}')"><i class="ti ti-eye"></i> Voir</button>
+              ${!isBacheDossier(d)?`<button class="btn btn-ghost btn-sm" onclick="openFicheAccessoire('${d.id}')" title="Fiche accessoire"><i class="ti ti-puzzle"></i></button>`:''}
               ${atelierPosteActionsHtml(d,'sm')}
             </div>
           </div>
@@ -292,6 +344,7 @@ function renderAtelierGrand() {
             </span>
             <div style="display:flex;gap:7px">
               <button class="btn btn-ghost" onclick="openVueFab('${d.id}')" style="font-size:12px;padding:7px 12px"><i class="ti ti-eye"></i> Vue fab.</button>
+              ${!isBacheDossier(d)?`<button class="btn btn-ghost" onclick="openFicheAccessoire('${d.id}')" style="font-size:12px;padding:7px 12px"><i class="ti ti-puzzle"></i> Fiche accessoire</button>`:''}
               <button class="btn btn-secondary" onclick="openChecklist('${d.id}')" style="font-size:12px;padding:7px 12px"><i class="ti ti-list-check"></i> Checklist</button>
               ${atelierPosteActionsHtml(d,'lg')}
             </div>
