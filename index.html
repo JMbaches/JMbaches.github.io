@@ -4149,6 +4149,7 @@ async function parseMegaoPDFLocal(file) {
 
   const allLines  = [];  // page entière (ref, date, produits, ht)
   const leftLines = [];  // colonne gauche x<320 seulement (bloc client)
+  const rightLines = []; // colonne(s) suivantes sur les mêmes lignes que le bloc client (bloc revendeur)
 
   for (let p = 1; p <= Math.min(pdf.numPages, 2); p++) {
     const page  = await pdf.getPage(p);
@@ -4163,14 +4164,44 @@ async function parseMegaoPDFLocal(file) {
       else rows.push({ y, items: [{ x, s }] });
     }
     rows.sort((a, b) => b.y - a.y);
-    allLines.push(...rows.map(r => r.items.sort((a,b)=>a.x-b.x).map(i=>i.s).join(' ')));
-    leftLines.push(...rows.map(r => {
-      return r.items.filter(i => i.x < 320).sort((a,b)=>a.x-b.x).map(i=>i.s).join(' ');
-    }).filter(l => l.trim()));
+    // Découpe chaque ligne en segments de colonnes dès qu'un grand espace horizontal apparaît
+    // entre deux items consécutifs. Sans ça, deux blocs distincts alignés sur la même hauteur
+    // (mise en page à deux colonnes — ex. bloc revendeur à droite ET bloc client à gauche, sur
+    // les mêmes lignes) se retrouvaient fusionnés en une seule ligne de texte (ex. "BOUCHERON
+    // DERCYA SAS" au lieu de deux lignes séparées) — ce que pdf-parse (utilisé côté serveur dans
+    // scripts/megao-sync.js, sur le même PDF) ne fait pas, d'où le bug client/revendeur/adresse
+    // mélangés propre à ce parseur navigateur. Seuil choisi bien au-dessus de l'espacement normal
+    // entre mots d'un même bloc (quelques points), bien en-dessous de l'écart entre deux colonnes
+    // (~200pt sur les PDF réels vérifiés).
+    const GAP_COLONNE = 40;
+    for (const r of rows) {
+      const sorted = r.items.slice().sort((a, b) => a.x - b.x);
+      const segments = [[sorted[0]]];
+      for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i].x - sorted[i - 1].x > GAP_COLONNE) segments.push([]);
+        segments[segments.length - 1].push(sorted[i]);
+      }
+      r.segments = segments.map(seg => ({ x: seg[0].x, text: seg.map(i => i.s).join(' ') }));
+    }
+    allLines.push(...rows.flatMap(r => r.segments.map(s => s.text)));
+    // Colonne gauche (bloc client/chantier) = uniquement le PREMIER segment de chaque ligne
+    // (le plus à gauche) ET seulement s'il démarre avant x=320 — les deux conditions sont
+    // nécessaires : le seuil x<320 seul laissait passer le bloc revendeur quand il se trouvait
+    // aussi sous ce seuil (ex. x=294 sur un PDF réel, fusionné avec le bloc client au lieu d'être
+    // exclu) ; ne garder QUE le 1er segment sans le seuil laissait passer un texte isolé loin à
+    // droite sur sa propre ligne (ex. "COMMANDE N° 117861" à x=349, seul sur sa ligne donc "1er
+    // segment" par défaut) qui n'a rien à voir avec le bloc client.
+    leftLines.push(...rows.map(r => r.segments[0].x < 320 ? r.segments[0].text : '').filter(l => l.trim()));
+    // Bloc revendeur = le DERNIER segment de chaque ligne qui a plus d'un segment — sur les PDF
+    // réels vérifiés, le bloc revendeur (nom + adresse) est affiché en colonne, aligné sur les
+    // mêmes hauteurs que le bloc client/chantier (colonne 1). Une ligne à un seul segment (pas de
+    // 2e colonne sur cette hauteur) ne fait pas partie de ce bloc, volontairement exclue.
+    rightLines.push(...rows.filter(r => r.segments.length > 1).map(r => r.segments[r.segments.length - 1].text).filter(l => l.trim()));
   }
 
-  const text     = allLines.join('\n');
-  const leftText = leftLines.join('\n');
+  const text      = allLines.join('\n');
+  const leftText  = leftLines.join('\n');
+  const rightText = rightLines.join('\n');
   console.log('[Mégao parser] Texte extrait :\n' + text);
 
   // Ref & date
@@ -4179,13 +4210,24 @@ async function parseMegaoPDFLocal(file) {
   const dateM    = text.match(/Date\s*:\s*(\d{2})\/(\d{2})\/(\d{4})/i);
   const dateFrom = dateM ? `${dateM[3]}-${dateM[2]}-${dateM[1]}` : '';
 
-  // Revendeur : bloc entre la Date et COMMANDE N° — première ligne tout-majuscules
-  const revBlockM = text.match(/Date\s*:[^\n]*\n([\s\S]*?)COMMANDE\s+N[°º]/i);
-  let revendeur = '';
-  if (revBlockM) {
-    const revLines = revBlockM[1].split('\n').map(l => l.trim()).filter(Boolean);
-    revendeur = revLines.find(l => /^[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜ][A-ZÀÂÄÉÈÊËÎÏÔÙÛÜ\s\-&\.]+$/.test(l) && !/^\d+$/.test(l)) || '';
+  // Revendeur : en priorité la 1re ligne tout-majuscules du bloc colonne revendeur (rightText,
+  // voir plus haut) — robuste à l'ordre Date/COMMANDE N°, qui varie selon la mise en page réelle
+  // (pdf.js peut reconstruire ces deux lignes dans l'ordre inverse de pdf-parse sur un même PDF,
+  // ce qui cassait le repli ci-dessous seul). Repli sur l'ancien motif texte (bloc entre Date et
+  // COMMANDE N°) si rightText n'a rien trouvé, pour les mises en page à une seule colonne.
+  const isCompanyLine = l => /^[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜ][A-ZÀÂÄÉÈÊËÎÏÔÙÛÜ\s\-&\.]+$/.test(l) && !/^\d+$/.test(l) && !/^france$/i.test(l);
+  let revendeur = rightLines.find(isCompanyLine) || '';
+  if (!revendeur) {
+    const revBlockM = text.match(/Date\s*:[^\n]*\n([\s\S]*?)COMMANDE\s+N[°º]/i);
+    if (revBlockM) {
+      const revLines = revBlockM[1].split('\n').map(l => l.trim()).filter(Boolean);
+      revendeur = revLines.find(isCompanyLine) || '';
+    }
   }
+  // Pas de revendeur détecté = vente en direct au client final, pas une valeur manquante —
+  // même règle que scripts/megao-sync.js. Affecté ICI (pas seulement dans le return plus bas)
+  // pour que le repli "ENLEVEMENT" → nom revendeur ci-dessous en bénéficie aussi.
+  revendeur = revendeur || 'Client particulier';
 
   // Produits : en PDF.js le code est séparé par un espace de la désignation
   // Regex : code  désignation  UNIT  quantité (UNIT suivi de chiffres pour éviter faux positifs)
@@ -4303,6 +4345,10 @@ async function parseMegaoPDFLocal(file) {
       if (!adresse)  { adresse = l; continue; }
     }
   }
+  // "ENLEVEMENT" en guise de nom client = simple mention du mode de transport, pas un vrai nom
+  // (cas des commandes en enlèvement direct par le revendeur) — même repli que megao-sync.js :
+  // reprendre le nom du revendeur plutôt que garder un nom manifestement faux.
+  if (/^enl[eè]vement\b/i.test(client) && revendeur) { client = revendeur; contact = revendeur; }
 
   // HT : PDF.js → valeur en fin de ligne "Total HT ... 1 823,84"
   //      fallback → "Net HT\n 1 823,84" si la valeur est sur la ligne suivante
@@ -4315,7 +4361,7 @@ async function parseMegaoPDFLocal(file) {
   return { ref, client, contact, tel, email, adresse, cp, ville,
            structure, typeLame, lames, couleurBouchon, pieds: '', alim, moteur,
            options: '', remarques: '', autres: '', escalier, decoupe,
-           largeur, longueur, revendeur: revendeur || 'Client particulier',
+           largeur, longueur, revendeur,
            transport, ht, dateFrom, isVolet };
 }
 
