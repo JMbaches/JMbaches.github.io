@@ -3622,15 +3622,21 @@ function renderPorteDoc(){
       :`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
         ${folderDocs.map(doc=>{
           const isImg=doc.type&&doc.type.startsWith('image/');
+          const isPdf=doc.type==='application/pdf';
+          // PDF : ouvert dans le lecteur intégré (verrouillage tablettes atelier — pas de nouvel
+          // onglet/viewer natif à contrôles externes). Autres types : comportement inchangé.
+          const openAttrs=isPdf
+            ? `href="javascript:void(0)" onclick="ouvrirPdfViewer('${_pdDosId}','${doc.id}')"`
+            : `href="${doc.url}" target="_blank"`;
           return `<div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column">
-            <a href="${doc.url}" target="_blank" style="display:flex;align-items:center;justify-content:center;height:88px;background:var(--bg);overflow:hidden;text-decoration:none;color:var(--ink-faint)">
+            <a ${openAttrs} style="display:flex;align-items:center;justify-content:center;height:88px;background:var(--bg);overflow:hidden;text-decoration:none;color:var(--ink-faint)">
               ${isImg?`<img src="${doc.url}" style="width:100%;height:100%;object-fit:cover" loading="lazy">`:`<i class="ti ${fileIcon(doc.type)}" style="font-size:32px"></i>`}
             </a>
             <div style="padding:6px 8px;display:flex;flex-direction:column;gap:3px">
               <div style="font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${doc.name}">${doc.name}</div>
               <div style="font-size:10px;color:var(--ink-faint)">${fileSize(doc.size)} · ${(doc.uploadedAt||'').split(' ')[0]||''}</div>
               <div style="display:flex;gap:4px;margin-top:4px">
-                <a href="${doc.url}" target="_blank" class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;padding:3px" title="Ouvrir"><i class="ti ti-external-link"></i></a>
+                <a ${openAttrs} class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;padding:3px" title="Ouvrir"><i class="ti ti-external-link"></i></a>
                 ${editable?`<button class="btn btn-ghost btn-sm" style="flex:1;justify-content:center;padding:3px;color:var(--red)" onclick="deleteDossierDoc('${_pdDosId}','${doc.id}')" title="Supprimer"><i class="ti ti-trash"></i></button>`:''}
               </div>
             </div>
@@ -3824,6 +3830,112 @@ function fermerFicheCalcul() {
   const overlay = document.getElementById('fiche-calcul-overlay');
   if (overlay) overlay.remove();
   ficheCalculOverlayDosId = null;
+}
+
+/* ================================================================
+   LECTEUR PDF INTÉGRÉ — tablettes atelier verrouillées sur l'app
+   ================================================================
+   Rendu via pdf.js dans un <canvas>, sans aucun contrôle natif du
+   navigateur (pas de bouton "partager"/"ouvrir dans" qui permettrait de
+   sortir de l'app verrouillée en mode kiosque) — contrairement à un
+   <iframe src="pdf">, qui affiche le lecteur PDF natif du navigateur. */
+let _pdfViewerState = null; // { pdfDoc, pageNum, numPages, scale }
+const PDF_VIEWER_BASE_SCALE = 1.5;
+
+// Ouvre un document du porte-document (recherché par dossier+id pour éviter d'injecter une
+// URL/un nom arbitraire dans un attribut onclick — même précaution que deleteDossierDoc).
+function ouvrirPdfViewer(dosId, docId) {
+  const d = dossiers.find(x => x.id === dosId); if (!d) return;
+  const doc = (d.documents || []).find(x => x.id === docId); if (!doc) return;
+  ouvrirPdfViewerUrl(doc.url, doc.name);
+}
+
+async function ouvrirPdfViewerUrl(url, name) {
+  if (typeof window.pdfjsLib === 'undefined') { showToast('⚠ PDF.js non chargé — rechargez la page'); return; }
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'pdf-viewer-overlay';
+  overlay.style = 'position:fixed;inset:0;background:#374151;z-index:9999;display:flex;flex-direction:column';
+  overlay.innerHTML = `
+    <div style="background:#1f2937;color:#fff;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-shrink:0">
+      <div style="font-size:14px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><i class="ti ti-file-type-pdf"></i> ${name || 'Document'}</div>
+      <button class="btn btn-ghost btn-sm" style="color:#fff" onclick="pdfViewerZoom(-1)" title="Zoom arrière"><i class="ti ti-zoom-out"></i></button>
+      <span id="pdf-viewer-zoom-label" style="font-size:12px;min-width:40px;text-align:center">100%</span>
+      <button class="btn btn-ghost btn-sm" style="color:#fff" onclick="pdfViewerZoom(1)" title="Zoom avant"><i class="ti ti-zoom-in"></i></button>
+      <button class="btn btn-ghost btn-sm" style="color:#fff" onclick="fermerPdfViewer()"><i class="ti ti-x"></i> Fermer</button>
+    </div>
+    <div id="pdf-viewer-canvas-wrap" style="flex:1;overflow:auto;display:flex;justify-content:center;padding:16px">
+      <div style="text-align:center;color:#fff;margin-top:60px"><i class="ti ti-loader" style="font-size:32px;animation:spin 1s linear infinite;display:inline-block"></i><div style="margin-top:10px">Chargement du PDF…</div></div>
+    </div>
+    <div style="background:#1f2937;padding:10px;display:flex;align-items:center;justify-content:center;gap:16px;flex-shrink:0">
+      <button class="btn btn-secondary" style="padding:12px 24px;font-size:15px" onclick="pdfViewerPage(-1)" id="pdf-viewer-prev"><i class="ti ti-chevron-left"></i> Précédent</button>
+      <span id="pdf-viewer-page-label" style="color:#fff;font-size:14px;min-width:90px;text-align:center">— / —</span>
+      <button class="btn btn-secondary" style="padding:12px 24px;font-size:15px" onclick="pdfViewerPage(1)" id="pdf-viewer-next">Suivant <i class="ti ti-chevron-right"></i></button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  try {
+    // data: URI (ancien format ficheTechniqueB64) : décodé en octets plutôt que passé tel quel à
+    // getDocument (le chargeur d'URL de pdf.js n'est prévu que pour http(s)://).
+    const source = url.startsWith('data:')
+      ? { data: Uint8Array.from(atob(url.split(',')[1]), c => c.charCodeAt(0)) }
+      : { url };
+    const pdfDoc = await window.pdfjsLib.getDocument(source).promise;
+    _pdfViewerState = { pdfDoc, pageNum: 1, numPages: pdfDoc.numPages, scale: PDF_VIEWER_BASE_SCALE };
+    await pdfViewerRenderPage();
+  } catch (e) {
+    console.error('[Lecteur PDF] erreur de chargement', e);
+    const wrap = document.getElementById('pdf-viewer-canvas-wrap');
+    if (wrap) wrap.innerHTML = `<div style="text-align:center;color:#fca5a5;margin-top:60px"><i class="ti ti-alert-triangle" style="font-size:32px"></i><div style="margin-top:10px">Impossible de charger le PDF<br><span style="font-size:12px;opacity:.7">${e.message || ''}</span></div></div>`;
+  }
+}
+
+async function pdfViewerRenderPage() {
+  const st = _pdfViewerState; if (!st) return;
+  const wrap = document.getElementById('pdf-viewer-canvas-wrap'); if (!wrap) return;
+  const page = await st.pdfDoc.getPage(st.pageNum);
+  const viewport = page.getViewport({ scale: st.scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  canvas.style = 'background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.5);max-width:100%;height:auto';
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  wrap.innerHTML = '';
+  wrap.appendChild(canvas);
+
+  const pageLabel = document.getElementById('pdf-viewer-page-label');
+  const zoomLabel = document.getElementById('pdf-viewer-zoom-label');
+  const prevBtn = document.getElementById('pdf-viewer-prev');
+  const nextBtn = document.getElementById('pdf-viewer-next');
+  if (pageLabel) pageLabel.textContent = `Page ${st.pageNum} / ${st.numPages}`;
+  if (zoomLabel) zoomLabel.textContent = Math.round(st.scale / PDF_VIEWER_BASE_SCALE * 100) + '%';
+  if (prevBtn) prevBtn.disabled = st.pageNum <= 1;
+  if (nextBtn) nextBtn.disabled = st.pageNum >= st.numPages;
+}
+
+function pdfViewerPage(delta) {
+  const st = _pdfViewerState; if (!st) return;
+  const next = st.pageNum + delta;
+  if (next < 1 || next > st.numPages) return;
+  st.pageNum = next;
+  pdfViewerRenderPage();
+}
+
+function pdfViewerZoom(delta) {
+  const st = _pdfViewerState; if (!st) return;
+  st.scale = Math.max(PDF_VIEWER_BASE_SCALE * 0.5, Math.min(PDF_VIEWER_BASE_SCALE * 2, st.scale + delta * (PDF_VIEWER_BASE_SCALE * 0.15)));
+  pdfViewerRenderPage();
+}
+
+function fermerPdfViewer() {
+  const overlay = document.getElementById('pdf-viewer-overlay');
+  if (overlay) overlay.remove();
+  if (_pdfViewerState && _pdfViewerState.pdfDoc) {
+    try { _pdfViewerState.pdfDoc.destroy(); } catch (e) {}
+  }
+  _pdfViewerState = null;
 }
 
 window.addEventListener('message', (ev) => {
@@ -4794,13 +4906,7 @@ function voirFicheTechnique(dosId) {
   const d = dossiers.find(x => x.id === dosId);
   const fiche = getFicheFabrication(d);
   if (!fiche) return;
-  if (String(fiche.url).startsWith('data:')) {
-    // Ancien format : PDF embarqué en base64 — un data: URI ne s'ouvre pas directement en onglet.
-    const win = window.open('', '_blank');
-    win.document.write(`<iframe src="${fiche.url}" style="width:100%;height:100vh;border:none"></iframe>`);
-  } else {
-    window.open(fiche.url, '_blank');
-  }
+  ouvrirPdfViewerUrl(fiche.url, fiche.name);
 }
 
 function supprimerFicheTechnique(dosId) {
