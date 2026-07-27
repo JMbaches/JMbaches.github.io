@@ -1091,20 +1091,20 @@ a:focus-visible, button:focus-visible,
             <select id="f-structure" onchange="updateAccessoiresVisibility()">
               <option value="">-- Choisir --</option>
               <optgroup label="Volets hors-sol">
-                <option>Volet hors-sol Silver Roll (2h30)</option>
-                <option>Volet hors-sol solaire Golden Roll (2h30)</option>
-                <option>Volet hors-sol avec coffre (2h30)</option>
-                <option>Volet hors-sol grand bassin X-Trem Roll (2h30)</option>
-                <option>Volet déplaçable Mouv&Roll (3h)</option>
+                <option>Volet hors-sol Silver Roll</option>
+                <option>Volet hors-sol solaire Golden Roll</option>
+                <option>Volet hors-sol avec coffre</option>
+                <option>Volet hors-sol grand bassin X-Trem Roll</option>
+                <option>Volet déplaçable Mouv&Roll</option>
               </optgroup>
               <optgroup label="Volets immergés">
-                <option>Volet immergé Subwater (5h)</option>
-                <option>Volet immergé Subwater Total (6h30)</option>
+                <option>Volet immergé Subwater</option>
+                <option>Volet immergé Subwater Total</option>
               </optgroup>
               <optgroup label="SAV">
-                <option>SAV / réglage volet (1h30)</option>
-                <option>Remplacement tablier / lames (2h)</option>
-                <option>Métrage / repérage (1h)</option>
+                <option>SAV / réglage volet</option>
+                <option>Remplacement tablier / lames</option>
+                <option>Métrage / repérage</option>
               </optgroup>
             </select>
           </div>
@@ -1117,6 +1117,8 @@ a:focus-visible, button:focus-visible,
           <div class="form-group"><label class="form-label">Lames</label><input id="f-lames" placeholder="ex: Gris"></div>
           <div class="form-group"><label class="form-label">Couleur bouchon</label><input id="f-couleurBouchon" placeholder="ex: Noir"></div>
           <div class="form-group"><label class="form-label">Pieds</label><input id="f-pieds" placeholder="ex: 7016/Gris"></div>
+          <div class="form-group"><label class="form-label">Escalier</label><input id="f-escalier" placeholder="ex: Escalier roman de 3 m Maxi - Equerre"></div>
+          <div class="form-group"><label class="form-label">Découpe</label><input id="f-decoupe" placeholder="ex: Découpe équerre rayon ou pan coupé de 1 à 20cm"></div>
           <div class="form-group"><label class="form-label">Alimentation</label><input id="f-alim" placeholder="ex: 24V"></div>
           <div class="form-group"><label class="form-label">Type d'alimentation</label><select id="f-typeAlimentation">
             <option value="">—</option>
@@ -1651,41 +1653,41 @@ const INITIAL_USERS = [
 ];
 let users = []; // Rempli par Firestore au chargement
 const INITIAL_DOSSIERS=[
-  {id:'D-2024-001',client:'M. Bertrand',tel:'06 12 34 56 78',email:'bertrand@mail.fr',contact:'M. Bertrand',adresse:'14 rue des Acacias',cp:'42000',ville:'Saint-Étienne',contraintes:'',structure:'Volet hors-sol Silver Roll (2h30)',options:'Motorisation, Télécommande',lames:'Gris',pieds:'7016/Gris',alim:'24V',moteur:'120BD newton',ht:2800,tva:20,ref:'DEV-2024-001',devisStatut:'accepte',dateFrom:'2024-06-01',dateTo:'2024-06-15',dateLivraison:'2024-06-10',transport:'liv_pose',remarques:'',autres:'',needPose:true,poseDate:'',statut:'nouveau',createdBy:'u3',
+  {id:'D-2024-001',client:'M. Bertrand',tel:'06 12 34 56 78',email:'bertrand@mail.fr',contact:'M. Bertrand',adresse:'14 rue des Acacias',cp:'42000',ville:'Saint-Étienne',contraintes:'',structure:'Volet hors-sol Silver Roll',options:'Motorisation, Télécommande',lames:'Gris',pieds:'7016/Gris',alim:'24V',moteur:'120BD newton',ht:2800,tva:20,ref:'DEV-2024-001',devisStatut:'accepte',dateFrom:'2024-06-01',dateTo:'2024-06-15',dateLivraison:'2024-06-10',transport:'liv_pose',remarques:'',autres:'',needPose:true,poseDate:'',statut:'nouveau',createdBy:'u3',
    history:[{id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'01/06/2024 à 09:00'}],
    pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
-  {id:'D-2024-002',client:'Mme Durand',tel:'04 77 00 11 22',email:'durand@mail.fr',contact:'Mme Durand',adresse:'8 allée des Roses',cp:'42100',ville:'Saint-Étienne',contraintes:'Portail code 4521',structure:'Volet hors-sol solaire Golden Roll (2h30)',options:'Motorisation solaire',lames:'Beige',pieds:'Beige',alim:'Solaire',moteur:'Moteur solaire',ht:3600,tva:20,ref:'DEV-2024-002',devisStatut:'accepte',dateFrom:'2024-06-02',dateTo:'2024-06-20',dateLivraison:'2024-06-12',transport:'liv_pose',remarques:'Piscine côté jardin, accès par portillon latéral',autres:'',needPose:true,poseDate:'',statut:'admin',createdBy:'u3',
+  {id:'D-2024-002',client:'Mme Durand',tel:'04 77 00 11 22',email:'durand@mail.fr',contact:'Mme Durand',adresse:'8 allée des Roses',cp:'42100',ville:'Saint-Étienne',contraintes:'Portail code 4521',structure:'Volet hors-sol solaire Golden Roll',options:'Motorisation solaire',lames:'Beige',pieds:'Beige',alim:'Solaire',moteur:'Moteur solaire',ht:3600,tva:20,ref:'DEV-2024-002',devisStatut:'accepte',dateFrom:'2024-06-02',dateTo:'2024-06-20',dateLivraison:'2024-06-12',transport:'liv_pose',remarques:'Piscine côté jardin, accès par portillon latéral',autres:'',needPose:true,poseDate:'',statut:'admin',createdBy:'u3',
    history:[
      {id:2,type:'statut',action:'Passé en traitement admin',detail:'',user:'u2',at:'02/06/2024 à 10:00'},
      {id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'01/06/2024 à 14:30'}],
    pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
-  {id:'D-2024-003',client:'SARL Piscines du Forez',tel:'04 77 55 66 77',email:'contact@piscinesforez.fr',contact:'M. Jacquet',adresse:'Zone Artisanale Nord',cp:'42160',ville:'Andrézieux-Bouthéon',contraintes:'',structure:'Volet immergé Subwater (5h)',options:'Motorisation, Niche de logement',lames:'Blanc',pieds:'Blanc',alim:'12V',moteur:'80BD newton',ht:5200,tva:20,ref:'DEV-2024-003',devisStatut:'accepte',dateFrom:'2024-06-03',dateTo:'2024-06-25',dateLivraison:'2024-06-14',transport:'liv_pose',remarques:'Bassin en L — mesures sur plan fourni',autres:'Prévenir le client 48h avant la pose',statut:'production',createdBy:'u3',
+  {id:'D-2024-003',client:'SARL Piscines du Forez',tel:'04 77 55 66 77',email:'contact@piscinesforez.fr',contact:'M. Jacquet',adresse:'Zone Artisanale Nord',cp:'42160',ville:'Andrézieux-Bouthéon',contraintes:'',structure:'Volet immergé Subwater',options:'Motorisation, Niche de logement',lames:'Blanc',pieds:'Blanc',alim:'12V',moteur:'80BD newton',ht:5200,tva:20,ref:'DEV-2024-003',devisStatut:'accepte',dateFrom:'2024-06-03',dateTo:'2024-06-25',dateLivraison:'2024-06-14',transport:'liv_pose',remarques:'Bassin en L — mesures sur plan fourni',autres:'Prévenir le client 48h avant la pose',statut:'production',createdBy:'u3',
    history:[
      {id:3,type:'statut',action:'Passé en production',detail:'',user:'u2',at:'03/06/2024 à 11:00'},
      {id:2,type:'statut',action:'Passé en traitement admin',detail:'',user:'u2',at:'02/06/2024 à 09:00'},
      {id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'01/06/2024 à 11:00'}],
    pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
-  {id:'D-2024-004',client:'M. Renaud',tel:'06 11 22 33 44',email:'renaud@mail.fr',contact:'M. Renaud',adresse:'45 rue des Lilas',cp:'42100',ville:'Saint-Étienne',contraintes:'Prévenir 48h avant',structure:'Volet immergé Subwater Total (6h30)',options:'Motorisation, Éclairage intégré, Niche de logement',lames:'Bleu',pieds:'Blanc',alim:'12V',moteur:'80BD newton',ht:6800,tva:20,ref:'DEV-2024-004',devisStatut:'accepte',dateFrom:'2024-06-04',dateTo:'2024-06-30',dateLivraison:'2024-06-18',transport:'liv_pose',remarques:'Fabrication tablier sur gabarit — bassin atypique',autres:'URGENT — client prioritaire',statut:'production',createdBy:'u3',
+  {id:'D-2024-004',client:'M. Renaud',tel:'06 11 22 33 44',email:'renaud@mail.fr',contact:'M. Renaud',adresse:'45 rue des Lilas',cp:'42100',ville:'Saint-Étienne',contraintes:'Prévenir 48h avant',structure:'Volet immergé Subwater Total',options:'Motorisation, Éclairage intégré, Niche de logement',lames:'Bleu',pieds:'Blanc',alim:'12V',moteur:'80BD newton',ht:6800,tva:20,ref:'DEV-2024-004',devisStatut:'accepte',dateFrom:'2024-06-04',dateTo:'2024-06-30',dateLivraison:'2024-06-18',transport:'liv_pose',remarques:'Fabrication tablier sur gabarit — bassin atypique',autres:'URGENT — client prioritaire',statut:'production',createdBy:'u3',
    history:[
      {id:3,type:'statut',action:'Passé en production',detail:'',user:'u2',at:'04/06/2024 à 08:00'},
      {id:2,type:'commentaire',action:'Note ajoutée',detail:'Client prioritaire — délai serré',user:'u3',at:'03/06/2024 à 16:00'},
      {id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'02/06/2024 à 10:00'}],
    pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
-  {id:'D-2024-005',client:'Mme Perrin',tel:'06 98 76 54 32',email:'perrin@mail.fr',contact:'Mme Perrin',adresse:'12 chemin du Moulin',cp:'42170',ville:'Saint-Just-Saint-Rambert',contraintes:'',structure:'Volet hors-sol avec coffre (2h30)',options:'Motorisation, Habillage coffre',lames:'Anthracite',pieds:'Anthracite',alim:'220V',moteur:'100BD newton',ht:3200,tva:20,ref:'DEV-2024-005',devisStatut:'accepte',dateFrom:'2024-06-05',dateTo:'2024-06-20',dateLivraison:'2024-06-15',transport:'liv_pose',remarques:'',autres:'',needPose:true,poseDate:'',statut:'emballage',createdBy:'u3',
+  {id:'D-2024-005',client:'Mme Perrin',tel:'06 98 76 54 32',email:'perrin@mail.fr',contact:'Mme Perrin',adresse:'12 chemin du Moulin',cp:'42170',ville:'Saint-Just-Saint-Rambert',contraintes:'',structure:'Volet hors-sol avec coffre',options:'Motorisation, Habillage coffre',lames:'Anthracite',pieds:'Anthracite',alim:'220V',moteur:'100BD newton',ht:3200,tva:20,ref:'DEV-2024-005',devisStatut:'accepte',dateFrom:'2024-06-05',dateTo:'2024-06-20',dateLivraison:'2024-06-15',transport:'liv_pose',remarques:'',autres:'',needPose:true,poseDate:'',statut:'emballage',createdBy:'u3',
    history:[
      {id:4,type:'statut',action:'Passé en emballage',detail:'',user:'u5',at:'05/06/2024 à 15:00'},
      {id:3,type:'vérification',action:'Grille vérification complétée',detail:'Tous les éléments validés',user:'u5',at:'05/06/2024 à 14:00'},
      {id:2,type:'statut',action:'Passé en production',detail:'',user:'u2',at:'03/06/2024 à 09:00'},
      {id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'02/06/2024 à 11:00'}],
    pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
-  {id:'D-2024-006',client:'M. Faure',tel:'04 77 33 44 55',email:'faure@mail.fr',contact:'M. Faure',adresse:'3 impasse du Château',cp:'42270',ville:'Saint-Priest-en-Jarez',contraintes:'Sonnette portail',structure:'Volet déplaçable Mouv&Roll (3h)',options:'Télécommande',lames:'Blanc',pieds:'Blanc',alim:'24V',moteur:'80BD newton',ht:2400,tva:20,ref:'DEV-2024-006',devisStatut:'accepte',dateFrom:'2024-06-03',dateTo:'2024-06-18',dateLivraison:'2024-06-13',transport:'enlvt',remarques:'',autres:'',statut:'stocké',createdBy:'u3',
+  {id:'D-2024-006',client:'M. Faure',tel:'04 77 33 44 55',email:'faure@mail.fr',contact:'M. Faure',adresse:'3 impasse du Château',cp:'42270',ville:'Saint-Priest-en-Jarez',contraintes:'Sonnette portail',structure:'Volet déplaçable Mouv&Roll',options:'Télécommande',lames:'Blanc',pieds:'Blanc',alim:'24V',moteur:'80BD newton',ht:2400,tva:20,ref:'DEV-2024-006',devisStatut:'accepte',dateFrom:'2024-06-03',dateTo:'2024-06-18',dateLivraison:'2024-06-13',transport:'enlvt',remarques:'',autres:'',statut:'stocké',createdBy:'u3',
    history:[
      {id:4,type:'statut',action:'Stocké — prêt à expédier',detail:'',user:'u9',at:'05/06/2024 à 17:00'},
      {id:3,type:'statut',action:'Passé en emballage',detail:'',user:'u5',at:'04/06/2024 à 16:00'},
      {id:2,type:'statut',action:'Passé en production',detail:'',user:'u2',at:'02/06/2024 à 14:00'},
      {id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'01/06/2024 à 15:00'}],
    pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
-  {id:'D-2024-007',client:'SCI Les Platanes',tel:'04 77 88 99 00',email:'contact@sciplatanes.fr',contact:'M. Monnier',adresse:'Route de Firminy',cp:'42700',ville:'Firminy',contraintes:'',structure:'Volet hors-sol Silver Roll (2h30)',options:'Motorisation, Télécommande, Habillage coffre',lames:'Gris anthracite',pieds:'Gris anthracite',alim:'24V',moteur:'120BD newton',ht:3100,tva:20,ref:'DEV-2024-007',devisStatut:'paye',dateFrom:'2024-05-20',dateTo:'2024-06-05',dateLivraison:'2024-06-03',transport:'liv_pose',remarques:'',autres:'',needPose:true,poseDate:'2024-06-03',statut:'posé',createdBy:'u3',
+  {id:'D-2024-007',client:'SCI Les Platanes',tel:'04 77 88 99 00',email:'contact@sciplatanes.fr',contact:'M. Monnier',adresse:'Route de Firminy',cp:'42700',ville:'Firminy',contraintes:'',structure:'Volet hors-sol Silver Roll',options:'Motorisation, Télécommande, Habillage coffre',lames:'Gris anthracite',pieds:'Gris anthracite',alim:'24V',moteur:'120BD newton',ht:3100,tva:20,ref:'DEV-2024-007',devisStatut:'paye',dateFrom:'2024-05-20',dateTo:'2024-06-05',dateLivraison:'2024-06-03',transport:'liv_pose',remarques:'',autres:'',needPose:true,poseDate:'2024-06-03',statut:'posé',createdBy:'u3',
    history:[
      {id:5,type:'statut',action:'Dossier clôturé — Posé',detail:'',user:'u2',at:'03/06/2024 à 18:00'},
      {id:4,type:'statut',action:'Stocké',detail:'',user:'u9',at:'01/06/2024 à 17:00'},
@@ -1693,15 +1695,15 @@ const INITIAL_DOSSIERS=[
      {id:2,type:'statut',action:'Passé en production',detail:'',user:'u2',at:'28/05/2024 à 09:00'},
      {id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'20/05/2024 à 10:00'}],
    pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
-  {id:'D-2024-008',client:'M. Aubert',tel:'06 44 55 66 77',email:'aubert@mail.fr',contact:'M. Aubert',adresse:'27 boulevard Carnot',cp:'42000',ville:'Saint-Étienne',contraintes:'',structure:'SAV / réglage volet (1h30)',options:'',lames:'',pieds:'',alim:'',moteur:'',ht:280,tva:20,ref:'DEV-2024-008',devisStatut:'accepte',dateFrom:'2024-06-06',dateTo:'2024-06-10',dateLivraison:'2024-06-08',transport:'liv_pose',remarques:'Volet Silver Roll posé il y a 2 ans — problème de fin de course',autres:'',statut:'admin',createdBy:'u6',
+  {id:'D-2024-008',client:'M. Aubert',tel:'06 44 55 66 77',email:'aubert@mail.fr',contact:'M. Aubert',adresse:'27 boulevard Carnot',cp:'42000',ville:'Saint-Étienne',contraintes:'',structure:'SAV / réglage volet',options:'',lames:'',pieds:'',alim:'',moteur:'',ht:280,tva:20,ref:'DEV-2024-008',devisStatut:'accepte',dateFrom:'2024-06-06',dateTo:'2024-06-10',dateLivraison:'2024-06-08',transport:'liv_pose',remarques:'Volet Silver Roll posé il y a 2 ans — problème de fin de course',autres:'',statut:'admin',createdBy:'u6',
    history:[
      {id:2,type:'statut',action:'Passé en traitement admin',detail:'',user:'u2',at:'06/06/2024 à 09:00'},
      {id:1,type:'création',action:'Dossier créé — SAV',detail:'',user:'u6',at:'05/06/2024 à 16:30'}],
    pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
-  {id:'D-2024-009',client:'M. Girard',tel:'06 77 88 99 00',email:'girard@mail.fr',contact:'M. Girard',adresse:'5 rue du Parc',cp:'42300',ville:'Roanne',contraintes:'Chien dans la propriété',structure:'Volet hors-sol grand bassin X-Trem Roll (2h30)',options:'Motorisation, Télécommande',lames:'Blanc',pieds:'Blanc',alim:'24V',moteur:'150BD newton',ht:3400,tva:20,ref:'DEV-2024-009',devisStatut:'en_attente',dateFrom:'2024-06-10',dateTo:'2024-06-30',dateLivraison:'2024-06-20',transport:'liv_pose',remarques:'Grand bassin 12m — X-Trem Roll obligatoire',autres:'Prévenir pour le chien',needPose:true,poseDate:'',statut:'nouveau',createdBy:'u3',
+  {id:'D-2024-009',client:'M. Girard',tel:'06 77 88 99 00',email:'girard@mail.fr',contact:'M. Girard',adresse:'5 rue du Parc',cp:'42300',ville:'Roanne',contraintes:'Chien dans la propriété',structure:'Volet hors-sol grand bassin X-Trem Roll',options:'Motorisation, Télécommande',lames:'Blanc',pieds:'Blanc',alim:'24V',moteur:'150BD newton',ht:3400,tva:20,ref:'DEV-2024-009',devisStatut:'en_attente',dateFrom:'2024-06-10',dateTo:'2024-06-30',dateLivraison:'2024-06-20',transport:'liv_pose',remarques:'Grand bassin 12m — X-Trem Roll obligatoire',autres:'Prévenir pour le chien',needPose:true,poseDate:'',statut:'nouveau',createdBy:'u3',
    history:[{id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'05/06/2024 à 11:00'}],
    pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
-  {id:'D-2024-010',client:'Camping Le Soleil',tel:'04 77 11 22 33',email:'contact@campingsoleil.fr',contact:'Mme Rousseau',adresse:'Route des Gorges',cp:'43300',ville:'Langeac',contraintes:'Accès par chemin — véhicule utilitaire nécessaire',structure:'Volet immergé Subwater (5h)',options:'Motorisation',lames:'Gris',pieds:'Gris',alim:'220V',moteur:'80BD newton',ht:4900,tva:20,ref:'DEV-2024-010',devisStatut:'accepte',dateFrom:'2024-06-15',dateTo:'2024-07-15',dateLivraison:'2024-07-01',transport:'liv_pose',remarques:'Piscine extérieure camping — 8x4m',autres:'Accès par chemin étroit — prévoir véhicule adapté',needPose:true,poseDate:'',statut:'nouveau',createdBy:'u3',
+  {id:'D-2024-010',client:'Camping Le Soleil',tel:'04 77 11 22 33',email:'contact@campingsoleil.fr',contact:'Mme Rousseau',adresse:'Route des Gorges',cp:'43300',ville:'Langeac',contraintes:'Accès par chemin — véhicule utilitaire nécessaire',structure:'Volet immergé Subwater',options:'Motorisation',lames:'Gris',pieds:'Gris',alim:'220V',moteur:'80BD newton',ht:4900,tva:20,ref:'DEV-2024-010',devisStatut:'accepte',dateFrom:'2024-06-15',dateTo:'2024-07-15',dateLivraison:'2024-07-01',transport:'liv_pose',remarques:'Piscine extérieure camping — 8x4m',autres:'Accès par chemin étroit — prévoir véhicule adapté',needPose:true,poseDate:'',statut:'nouveau',createdBy:'u3',
    history:[{id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'05/06/2024 à 14:00'}],
    pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
 ];
@@ -3018,7 +3020,7 @@ ${d.autres?`<div class="box danger" style="margin-top:8px"><div class="box-label
 
 function renderPageCommande(d, p) { p = p || {};
   const tr=d.transport||'';
-  const STRUCTS=['Volet hors-sol Silver Roll (2h30)','Volet hors-sol solaire Golden Roll (2h30)','Volet hors-sol avec coffre (2h30)','Volet hors-sol grand bassin X-Trem Roll (2h30)','Volet déplaçable Mouv&Roll (3h)','Volet immergé Subwater (5h)','Volet immergé Subwater Total (6h30)','SAV / réglage volet (1h30)','Remplacement tablier / lames (2h)','Métrage / repérage (1h)'];
+  const STRUCTS=['Volet hors-sol Silver Roll','Volet hors-sol solaire Golden Roll','Volet hors-sol avec coffre','Volet hors-sol grand bassin X-Trem Roll','Volet déplaçable Mouv&Roll','Volet immergé Subwater','Volet immergé Subwater Total','SAV / réglage volet','Remplacement tablier / lames','Métrage / repérage'];
   return `<div class="card" style="margin-bottom:12px">
     <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
       <div>
@@ -4102,6 +4104,8 @@ function fillFormFromMegao(data) {
   set('f-autres',    data.autres);
   set('f-ref',       data.ref);
   set('f-revendeur', data.revendeur);
+  set('f-escalier',  data.escalier);
+  set('f-decoupe',   data.decoupe);
   set('f-largeur',   data.largeur);
   set('f-longueur',  data.longueur);
   if (data.largeur || data.longueur) calcSurface();
@@ -4191,6 +4195,15 @@ async function parseMegaoPDFLocal(file) {
   while ((pm = productRe.exec(text)) !== null) products.push({ code: pm[1], desig: pm[2].trim() });
   console.log('[Mégao parser] Produits détectés :', products.map(p => p.code).join(', '));
 
+  // Escalier / découpe : lignes VRES*/VRDEC*, jamais captées par productRe ci-dessus (désignation
+  // sur plusieurs lignes avant "UN", parfois collée au code sans espace) — même regex dédiée que
+  // scripts/megao-sync.js (matchAll sur le code VR au lieu du bloc générique produit), portée ici
+  // pour que l'upload manuel de PDF capture aussi ces lignes (elles ne l'étaient pas du tout).
+  const vrAllM = [...text.matchAll(/^(VR[A-Z0-9<>]+)\s*([A-Z][a-zÀ-ÿé].+)/gm)];
+  const cleanVrDesig = m => m[2].replace(/\s*(UN|ML|M2|PCS)\s+.*$/i, '').trim();
+  const escalier = [...new Set(vrAllM.filter(m => /^VRES/.test(m[1])).map(cleanVrDesig))].join(' ; ');
+  const decoupe  = [...new Set(vrAllM.filter(m => /^VRDEC/.test(m[1])).map(cleanVrDesig))].join(' ; ');
+
   const isVolet   = products.some(p => /^(LAM|VR)/.test(p.code));
   const vrProd    = products.find(p => /^VR/.test(p.code));
   const lamProd   = products.find(p => /^LAM/.test(p.code));
@@ -4202,13 +4215,13 @@ async function parseMegaoPDFLocal(file) {
   // Structure : correspondance avec les options du select
   const vrText = ((vrProd ? vrProd.code : '') + ' ' + (vrProd ? vrProd.desig : '')).toLowerCase();
   const STRUCT_MAP = [
-    { k: ['silver roll','vrsil'],           v: 'Volet hors-sol Silver Roll (2h30)' },
-    { k: ['golden roll','solaire','vrsol'],  v: 'Volet hors-sol solaire Golden Roll (2h30)' },
-    { k: ['coffre','vrcof'],                v: 'Volet hors-sol avec coffre (2h30)' },
-    { k: ['x-trem','xtrem','vrxtr','grand bassin'], v: 'Volet hors-sol grand bassin X-Trem Roll (2h30)' },
-    { k: ['mouv','mouv&roll','vrmouv'],     v: 'Volet déplaçable Mouv&Roll (3h)' },
-    { k: ['subwater total','vrsubt'],       v: 'Volet immergé Subwater Total (6h30)' },
-    { k: ['subwater','vrsub'],              v: 'Volet immergé Subwater (5h)' },
+    { k: ['silver roll','vrsil'],           v: 'Volet hors-sol Silver Roll' },
+    { k: ['golden roll','solaire','vrsol'],  v: 'Volet hors-sol solaire Golden Roll' },
+    { k: ['coffre','vrcof'],                v: 'Volet hors-sol avec coffre' },
+    { k: ['x-trem','xtrem','vrxtr','grand bassin'], v: 'Volet hors-sol grand bassin X-Trem Roll' },
+    { k: ['mouv','mouv&roll','vrmouv'],     v: 'Volet déplaçable Mouv&Roll' },
+    { k: ['subwater total','vrsubt'],       v: 'Volet immergé Subwater Total' },
+    { k: ['subwater','vrsub'],              v: 'Volet immergé Subwater' },
   ];
   const structure = STRUCT_MAP.find(m => m.k.some(k => vrText.includes(k)))?.v || (vrProd ? vrProd.desig : '');
   const lameDesig = lamProd ? lamProd.desig : '';
@@ -4227,10 +4240,14 @@ async function parseMegaoPDFLocal(file) {
   // par l'utilisateur (2026-07-22). Compléter si d'autres codes apparaissent.
   const BOUCHON_LABELS = { TRSP: 'Transparent' };
   const bouchonM = lames.match(/\bB\.\s*([A-Za-zÀ-ÿ]+)\b\s*/i);
-  const couleurBouchon = bouchonM
+  let couleurBouchon = bouchonM
     ? (BOUCHON_LABELS[bouchonM[1].toUpperCase()] || (bouchonM[1].charAt(0).toUpperCase() + bouchonM[1].slice(1).toLowerCase()))
     : '';
   if (bouchonM) lames = (lames.slice(0, bouchonM.index) + lames.slice(bouchonM.index + bouchonM[0].length)).trim();
+  // PVC : le bouchon est TOUJOURS de la même couleur que la lame (confirmé par l'utilisateur
+  // 2026-07-27) — jamais de ligne "B.<couleur>" séparée dans le PDF pour du PVC en pratique. Le
+  // Polycarbonate peut différer (ligne dédiée gérée ci-dessus quand présente).
+  if (!couleurBouchon && typeLame === 'PVC' && lames) couleurBouchon = lames;
 
   // Moteur : suffixe du code VR après le préfixe de structure (VRSIL80S → 80S)
   const moteurM = vrProd ? vrProd.code.match(/^VR(?:SUBT|SUB|MOUV|XTR|COF|SOL|SIL)([A-Z0-9]+)$/i) : null;
@@ -4297,8 +4314,8 @@ async function parseMegaoPDFLocal(file) {
 
   return { ref, client, contact, tel, email, adresse, cp, ville,
            structure, typeLame, lames, couleurBouchon, pieds: '', alim, moteur,
-           options: '', remarques: '', autres: '',
-           largeur, longueur, revendeur,
+           options: '', remarques: '', autres: '', escalier, decoupe,
+           largeur, longueur, revendeur: revendeur || 'Client particulier',
            transport, ht, dateFrom, isVolet };
 }
 
@@ -4626,11 +4643,12 @@ function saveDossier() {
   const ht=parseFloat(document.getElementById('f-ht').value)||0;
   const d={id,type,
     client,tel:document.getElementById('f-tel').value,email:document.getElementById('f-email').value,
-    contact:document.getElementById('f-contact').value,revendeur:document.getElementById('f-revendeur')?.value||'',adresse:document.getElementById('f-adresse').value,
+    contact:document.getElementById('f-contact').value,revendeur:document.getElementById('f-revendeur')?.value||'Client particulier',adresse:document.getElementById('f-adresse').value,
     cp:document.getElementById('f-cp').value,ville:document.getElementById('f-ville').value,
     contraintes:document.getElementById('f-contraintes').value,
     structure,options:document.getElementById(isBache ? 'f-options-bache' : 'f-options').value,
     lames:document.getElementById('f-lames').value,couleurBouchon:document.getElementById('f-couleurBouchon')?.value||'',pieds:document.getElementById('f-pieds').value,
+    escalier:document.getElementById('f-escalier')?.value||'',decoupe:document.getElementById('f-decoupe')?.value||'',
     typeLame:document.getElementById('f-typeLame')?.value||'',
     alim:document.getElementById('f-alim').value,typeAlimentation:document.getElementById('f-typeAlimentation')?.value||'',moteur:document.getElementById('f-moteur').value,
     telecommande:document.getElementById('f-telecommande')?.value||'',

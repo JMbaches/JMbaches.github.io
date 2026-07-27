@@ -84,13 +84,13 @@ function parseMegaoText(text) {
   const vrCode  = vrM ? vrM[1] : '';
   const vrText  = (vrCode + ' ' + vrDesig).toLowerCase();
   const STRUCT_MAP = [
-    { k: ['silver roll','vrsil'],           v: 'Volet hors-sol Silver Roll (2h30)' },
-    { k: ['golden roll','solaire','vrsol'],  v: 'Volet hors-sol solaire Golden Roll (2h30)' },
-    { k: ['coffre','vrcof'],                v: 'Volet hors-sol avec coffre (2h30)' },
-    { k: ['x-trem','xtrem','vrxtr','grand bassin'], v: 'Volet hors-sol grand bassin X-Trem Roll (2h30)' },
-    { k: ['mouv','mouv&roll','vrmouv'],     v: 'Volet déplaçable Mouv&Roll (3h)' },
-    { k: ['subwater total','vrsubt'],       v: 'Volet immergé Subwater Total (6h30)' },
-    { k: ['subwater','vrsub'],              v: 'Volet immergé Subwater (5h)' },
+    { k: ['silver roll','vrsil'],           v: 'Volet hors-sol Silver Roll' },
+    { k: ['golden roll','solaire','vrsol'],  v: 'Volet hors-sol solaire Golden Roll' },
+    { k: ['coffre','vrcof'],                v: 'Volet hors-sol avec coffre' },
+    { k: ['x-trem','xtrem','vrxtr','grand bassin'], v: 'Volet hors-sol grand bassin X-Trem Roll' },
+    { k: ['mouv','mouv&roll','vrmouv'],     v: 'Volet déplaçable Mouv&Roll' },
+    { k: ['subwater total','vrsubt'],       v: 'Volet immergé Subwater Total' },
+    { k: ['subwater','vrsub'],              v: 'Volet immergé Subwater' },
   ];
   const structure = STRUCT_MAP.find(m => m.k.some(k => vrText.includes(k)))?.v
                  || vrDesig
@@ -104,10 +104,15 @@ function parseMegaoText(text) {
   // = Bouchon noir), distinct de la couleur de la lame elle-même — confirmé par l'utilisateur
   // (2026-07-22), corrige une hypothèse erronée précédente qui lisait "B." comme "Bicolore".
   const bouchonM  = lames.match(/\bB\.\s*([A-Za-zÀ-ÿ]+)\b\s*/i);
-  const couleurBouchon = bouchonM
+  let couleurBouchon = bouchonM
     ? (BOUCHON_LABELS[bouchonM[1].toUpperCase()] || (bouchonM[1].charAt(0).toUpperCase() + bouchonM[1].slice(1).toLowerCase()))
     : '';
   if (bouchonM) lames = (lames.slice(0, bouchonM.index) + lames.slice(bouchonM.index + bouchonM[0].length)).trim();
+  // PVC : le bouchon est TOUJOURS de la même couleur que la lame (confirmé par l'utilisateur
+  // 2026-07-27) — jamais de ligne "B.<couleur>" séparée dans le PDF pour du PVC en pratique, donc
+  // couleurBouchon reste vide sans ce repli. Le Polycarbonate peut différer (ligne dédiée gérée
+  // ci-dessus quand présente) — pas de valeur par défaut à inventer pour le Poly.
+  if (!couleurBouchon && typeLame === 'PVC' && lames) couleurBouchon = lames;
 
   // Moteur : suffixe du code VR après le préfixe de structure (VRSIL80S → 80S)
   const moteurM = vrCode.match(/^VR(?:SUBT|SUB|MOUV|XTR|COF|SOL|SIL)([A-Z0-9]+)$/i);
@@ -118,9 +123,14 @@ function parseMegaoText(text) {
   const vrBlock = vrIdx >= 0 ? text.slice(vrIdx, vrIdx + 400) : text;
   const alimM   = vrBlock.match(/\b(\d{2,3})\s*V\b/i);
   const alim    = alimM ? alimM[1] + 'V' : '';
-  // Couleur pieds : code RAL 4 chiffres ou nom de couleur après "impultionnelle" ou "RAL"
+  // Couleur pieds : code RAL 4 chiffres ou nom de couleur après "clé impultionnelle" (moteur
+  // électronique) OU "clé maintenue" (moteur mécanique) — les deux mécanismes existent selon le
+  // moteur choisi ("réglage de fin de course électronique/mécanique"). Le motif "maintenue"
+  // manquait entièrement (regex initiale ne testait qu'"impult\w*") : vérifié sur un échantillon
+  // réel de 30 dossiers volets au champ pieds vide, 20/30 avaient "clé maintenue <couleur>" dans
+  // le PDF, jamais capté — cause principale du champ vide sur ~90% des dossiers volets réels.
   const COULEURS = 'blanc|noir|gris|anthracite|beige|marron|brun|ivoire|argent|bronze|bleu|vert|rouge';
-  const piedM   = vrBlock.match(new RegExp(`impult\\w*\\s+(\\d{4}|${COULEURS})\\b`, 'i'))
+  const piedM   = vrBlock.match(new RegExp(`(?:impult\\w*|maintenue)\\s+(\\d{4}|${COULEURS})\\b`, 'i'))
                || vrBlock.match(/\bRAL\s*[-:]?\s*(\d{4})\b/i);
   const piedRaw = piedM ? piedM[1] : '';
   let pieds     = piedRaw ? ((/^\d{4}$/).test(piedRaw) ? `RAL ${piedRaw}` : piedRaw.charAt(0).toUpperCase() + piedRaw.slice(1).toLowerCase()) : '';
@@ -719,7 +729,11 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
       autres:      data.autres     || '',
       largeur:     data.largeur    || '',
       longueur:    data.longueur   || '',
-      revendeur:   data.revendeur  || '',
+      // Pas de revendeur détecté dans le bloc en-tête du PDF = vente en direct au client final,
+      // pas une valeur manquante — confirmé par l'utilisateur (2026-07-27). "Client particulier"
+      // reste compatible avec isParticulier() (substring "particulier"), sans modifier la valeur
+      // brute utilisée par la réconciliation Dercya/pose (qui lit `data.revendeur` avant cet appel).
+      revendeur:   data.revendeur  || 'Client particulier',
       // Accessoires volet lus directement dans le PDF (cf. deriveChampsAccessoiresVoletDepuisPdf)
       telecommande: data.telecommande || '',
       gestionSel:   data.gestionSel   || '',
@@ -840,7 +854,7 @@ async function upsertDossierBache(data, pdfBuffer = null, pdfFilename = '') {
       transport:   data.transport  || 'livraison',
       remarques:   data.remarques  || '',
       autres:      '',
-      revendeur:   data.revendeur  || '',
+      revendeur:   data.revendeur  || 'Client particulier',
       needPose:    false,
       poseDate:    '',
       statut:      'admin',
@@ -912,7 +926,7 @@ async function upsertDercyaPair(dercyaItem, poseItem) {
       dateFrom: data.dateFrom || today, dateTo: '', dateLivraison: '',
       transport: 'liv_pose', remarques: data.remarques || '', autres: data.autres || '',
       largeur: data.largeur || '', longueur: data.longueur || '',
-      revendeur: data.revendeur || '', needPose: true, poseDate: '', statut: 'admin',
+      revendeur: data.revendeur || 'Client particulier', needPose: true, poseDate: '', statut: 'admin',
       createdBy: 'megao-sync',
       pages: [
         { type: 'commande', label: 'Fiche commande', checks: {} },
