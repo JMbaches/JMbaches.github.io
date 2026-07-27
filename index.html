@@ -1015,6 +1015,10 @@ a:focus-visible, button:focus-visible,
       <div class="global-search-dropdown" id="global-search-dropdown"></div>
     </div>
     <div class="topbar-right">
+      <span id="battery-indicator" style="display:none;align-items:center;gap:4px;font-size:12px;color:rgba(255,255,255,.7)" title="Batterie de la tablette">
+        <i class="ti ti-battery-4" id="battery-icon" style="font-size:16px"></i>
+        <span id="battery-level">--%</span>
+      </span>
       <span id="save-indicator" style="font-size:11px;color:rgba(255,255,255,.4);cursor:default" title="Données synchronisées dans le cloud">☁ Cloud</span>
       <button class="notif-bell" onclick="goTab('notifs')" id="notif-bell-btn" style="color:rgba(255,255,255,.7)">
         <i class="ti ti-bell" style="font-size:18px"></i>
@@ -6586,6 +6590,38 @@ function toggleDarkMode() {
     const icon = document.getElementById('dark-icon');
     if (icon) icon.className = 'ti ti-sun';
   }
+})();
+
+// ----- BATTERIE (tablettes atelier verrouillées sur l'app) -----
+// API Battery Status : supportée sur Chrome/Android (nos tablettes), pas sur Safari/iOS ni
+// Firefox (retirée pour raisons de vie privée, aucune alternative fiable) — masqué proprement
+// si absente plutôt que d'afficher un indicateur cassé.
+(function initBatteryIndicator() {
+  if (typeof navigator.getBattery !== 'function') return;
+  navigator.getBattery().then(battery => {
+    const wrap = document.getElementById('battery-indicator');
+    const icon = document.getElementById('battery-icon');
+    const levelEl = document.getElementById('battery-level');
+    if (!wrap || !icon || !levelEl) return;
+    wrap.style.display = 'flex';
+
+    function update() {
+      const pct = Math.round(battery.level * 100);
+      levelEl.textContent = pct + '%';
+      let iconClass = 'ti-battery-4';
+      if (pct <= 15) iconClass = 'ti-battery-exclamation';
+      else if (pct <= 40) iconClass = 'ti-battery-1';
+      else if (pct <= 65) iconClass = 'ti-battery-2';
+      else if (pct <= 90) iconClass = 'ti-battery-3';
+      icon.className = 'ti ' + (battery.charging ? 'ti-battery-charging' : iconClass);
+      const low = pct <= 15 && !battery.charging;
+      wrap.style.color = low ? 'var(--red, #ef4444)' : 'rgba(255,255,255,.7)';
+      wrap.title = `Batterie de la tablette : ${pct}%${battery.charging ? ' (en charge)' : ''}`;
+    }
+    update();
+    battery.addEventListener('levelchange', update);
+    battery.addEventListener('chargingchange', update);
+  }).catch(() => {}); // API présente mais échoue (rare) : on n'affiche rien plutôt qu'une erreur
 })();
 
 // ----- URGENCE (helper backward-compat) -----
