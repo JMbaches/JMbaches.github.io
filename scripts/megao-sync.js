@@ -191,7 +191,11 @@ function parseMegaoText(text) {
     const afterRef = text.slice(refM.index + refM[0].length);
     for (const l of afterRef.split('\n').map(s => s.trim()).filter(Boolean)) {
       if (/^(page\s*:|code\s*client|repr[eé]sentant|r[eé]f[eé]rences|d[eé]lai|t[eé]l|e-?mail|contact\b|d[eé]signation|bulles)/i.test(l)) break;
-      if (/^france$/i.test(l)) continue;
+      // Nom de pays isolé sur sa propre ligne (adresse revendeur à l'étranger, ex. Abrisud Iberica
+      // en Espagne — vu sur données réelles, "ESPAGNE" se retrouvait sinon capturé comme client) :
+      // ignoré comme "France" plutôt que pris comme nom, pour laisser la ligne suivante (souvent
+      // "ENLEVEMENT" ou le vrai nom) être évaluée normalement par la suite de la boucle.
+      if (/^(france|espagne)$/i.test(l)) continue;
       const cpVm = l.match(/^(\d{5})\s+([A-ZÀ-Ÿ][^\n]+)/);
       if (cpVm) { cp = cpVm[1]; ville = cpVm[2].trim(); continue; }
       if (!client)  { client = l; contact = l; continue; }
@@ -475,7 +479,11 @@ function parseMegaoBacheText(text) {
     const afterRef = text.slice(refM.index + refM[0].length);
     for (const l of afterRef.split('\n').map(s => s.trim()).filter(Boolean)) {
       if (/^(page\s*:|code\s*client|repr[eé]sentant|r[eé]f[eé]rences|d[eé]lai|t[eé]l|e-?mail|contact\b|d[eé]signation|bulles)/i.test(l)) break;
-      if (/^france$/i.test(l)) continue;
+      // Nom de pays isolé sur sa propre ligne (adresse revendeur à l'étranger, ex. Abrisud Iberica
+      // en Espagne — vu sur données réelles, "ESPAGNE" se retrouvait sinon capturé comme client) :
+      // ignoré comme "France" plutôt que pris comme nom, pour laisser la ligne suivante (souvent
+      // "ENLEVEMENT" ou le vrai nom) être évaluée normalement par la suite de la boucle.
+      if (/^(france|espagne)$/i.test(l)) continue;
       const cpVm = l.match(/^(\d{5})\s+([A-ZÀ-Ÿ][^\n]+)/);
       if (cpVm) { cp = cpVm[1]; ville = cpVm[2].trim(); continue; }
       if (!client)  { client = l; contact = l; continue; }
