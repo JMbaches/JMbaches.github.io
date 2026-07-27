@@ -1736,6 +1736,21 @@ let currentTab = 'dos';
 // a ouvert le dossier depuis Atelier/Emballage/Planning/le tableau de bord/etc.
 let previousTab = 'dos';
 let currentDosId = null;
+// Pile de navigation interne (onglets + fiche dossier) pour que le bouton "retour" du
+// navigateur/tablette (geste Android inclus) revienne à l'écran précédent DANS l'appli au lieu
+// de la quitter — voir pushNavEntry()/popstate ci-dessous. Remise à zéro à chaque connexion
+// (connectUser) pour ne pas trainer l'historique d'une session précédente.
+let _navStack = [];
+// true pendant qu'on REJOUE une entrée de _navStack suite à un popstate — évite que goTab()/
+// openFiche() ne repoussent une nouvelle entrée en répondant eux-mêmes au retour arrière.
+let _applyingHistoryNav = false;
+function pushNavEntry(entry) {
+  if (_applyingHistoryNav) return;
+  const top = _navStack[_navStack.length - 1];
+  if (top && top.tab === entry.tab && top.dosId === entry.dosId) return;
+  _navStack.push(entry);
+  history.pushState(null, '', location.href);
+}
 let currentPageIdx = 0;
 let nextDosNum = 11;
 let nextNotifId = 100;
@@ -1904,6 +1919,7 @@ function doLogin() {
 }
 function connectUser(u) {
   currentUser=u;
+  _navStack = []; // repart d'une pile propre à chaque connexion (voir pushNavEntry/popstate)
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='flex';
   const rc=ROLE_COLORS[u.role]||{bg:'#EAF0F9',c:'#14479B'};
@@ -1924,6 +1940,7 @@ function connectUser(u) {
 function doLogout() {
   localStorage.removeItem('jmb_session');
   currentUser=null; currentDosId=null;
+  _navStack = [];
   // Fermer et cacher le chat
   chatOpen = false;
   const chatPanel = document.getElementById('chat-panel');
@@ -2127,6 +2144,7 @@ function goGroup(gId) {
 function goTab(tab) {
   if(currentTab==='fiche') clearPresence();
   currentTab=tab; currentDosId=null;
+  pushNavEntry({tab});
   buildNav();
   const gsi=document.getElementById('global-search-input');
   if(gsi) gsi.value=globalSearchQuery;
@@ -2765,6 +2783,7 @@ function openFiche(id) {
   if (currentTab !== 'fiche') previousTab = currentTab;
   currentDosId=id; currentPageIdx=0;
   currentTab='fiche'; buildNav();
+  pushNavEntry({tab:'fiche', dosId:id});
   setPresence(id);
   renderFiche();
 }
@@ -6773,6 +6792,34 @@ document.addEventListener('keydown', function(e) {
       if (e.key==='ArrowRight' && ci<fl.length-1) { e.preventDefault(); openFiche(fl[ci+1].id); }
     }
   }
+});
+
+// ----- BOUTON RETOUR (navigateur / geste Android) -----
+// Sans ça, le bouton retour matériel/logiciel des tablettes atelier (verrouillées sur l'appli,
+// voir mémoire projet) n'a aucune entrée d'historique interne à consommer et quitte l'appli
+// directement. On intercepte popstate pour fermer d'abord ce qu'il y a "au-dessus" (même priorité
+// que la touche Échap ci-dessus : modale → reset mdp → chat → recherche), puis dépiler _navStack
+// (onglets / fiche dossier). On repousse systématiquement un état bidon après coup pour que le
+// retour arrière reste TOUJOURS intercepté, y compris une fois _navStack vidé jusqu'à sa racine —
+// le bouton retour ne doit jamais faire sortir de l'appli, au pire il ne fait plus rien.
+window.addEventListener('popstate', function() {
+  const openMod = document.querySelector('.modal-overlay.open');
+  if (openMod) { closeModal(openMod.id); history.pushState(null,'',location.href); return; }
+  const resetMod = document.getElementById('modal-reset-pwd');
+  if (resetMod && resetMod.style.display === 'flex') { hideResetPassword(); history.pushState(null,'',location.href); return; }
+  const chatPanel = document.getElementById('chat-panel');
+  if (chatPanel && chatPanel.classList.contains('open')) { if (typeof toggleChat === 'function') toggleChat(); history.pushState(null,'',location.href); return; }
+  const dd = document.getElementById('global-search-dropdown');
+  if (dd && dd.classList.contains('open')) { dd.classList.remove('open'); history.pushState(null,'',location.href); return; }
+  if (_navStack.length > 1) {
+    _navStack.pop();
+    const prev = _navStack[_navStack.length - 1];
+    _applyingHistoryNav = true;
+    if (prev.tab === 'fiche' && prev.dosId) openFiche(prev.dosId);
+    else goTab(prev.tab);
+    _applyingHistoryNav = false;
+  }
+  history.pushState(null, '', location.href);
 });
 
 // ----- TOAST HORS CONNEXION -----
