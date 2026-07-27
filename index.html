@@ -1313,6 +1313,14 @@ a:focus-visible, button:focus-visible,
             <option value="bache">Bâches uniquement</option>
           </select>
         </div>
+        <div class="form-group"><label class="form-label">Poste atelier</label>
+          <select id="u-poste-atelier">
+            <option value="">Vue d'ensemble (tous postes)</option>
+            <option value="tablier">Tablier</option>
+            <option value="accessoires">Accessoires</option>
+            <option value="axes">Axes</option>
+          </select>
+        </div>
         <div class="form-group"><label class="form-label">Droits d'accès</label>
           <div id="perms-grid" style="display:flex;flex-direction:column;gap:4px;margin-top:4px"></div>
         </div>
@@ -1366,7 +1374,7 @@ a:focus-visible, button:focus-visible,
     <div class="modal-ft">
       <div style="flex:1;font-size:12px;color:var(--ink-faint)" id="checklist-progress"></div>
       <button class="btn btn-secondary" onclick="closeModal('modal-checklist')">Fermer</button>
-      <button class="btn btn-primary" id="checklist-fabrique-btn"><i class="ti ti-check"></i> Marquer fabriqué</button>
+      <div id="checklist-fabrique-btn" style="display:flex;gap:8px"></div>
     </div>
   </div>
 </div>
@@ -4083,6 +4091,15 @@ async function changerStatutDossier(d, newStatut, logSuffix) {
       d = live;
     }
   }
+  // Découpage de l'atelier en 3 postes (Tablier → Accessoires + Axes → Emballage), volets
+  // uniquement (2026-07-27) — les bâches gardent le flux "Fabriqué" en une étape. Indépendant du
+  // décompte de stock (interrupteur stockDecompteActif) : ce suivi de poste doit s'initialiser à
+  // chaque entrée réelle en production, que le décompte soit actif ou non.
+  if (newStatut === 'production' && prev !== 'production' && !isBacheDossier(d)) {
+    d.atelierPoste = 'tablier';
+    d.atelierAccessoiresFait = false;
+    d.atelierAxeFait = false;
+  }
   d.statut = newStatut; d.statutChangedAt = nowISO();
   logHistory(d.id,'statut',`Statut changé${logSuffix?' '+logSuffix:''} : ${STATUT_LABEL[prev]} → ${STATUT_LABEL[newStatut]}`);
   pushNotif('statut:'+newStatut,d.id,d);
@@ -4631,6 +4648,25 @@ function dossierDansPerimetre(d, u) {
   const p = u && u.perimetre;
   if (!p || p === 'tous') return true;
   return (p === 'bache') === isBacheDossier(d);
+}
+// Restriction PAR POSTE ATELIER (u.posteAtelier: ''|'tablier'|'accessoires'|'axes', 2026-07-27) —
+// un compte affecté à un poste ne voit QUE les dossiers volets qui en sont à son étape (et rien
+// une fois sa partie faite : un dossier disparaît de la vue "accessoires" dès que les accessoires
+// sont validés, même si l'axe ne l'est pas encore). Compte non affecté (posteAtelier vide, ex.
+// Direction/Admin) = vue d'ensemble des 3 postes, comme avant l'ajout de ce champ. Les bâches
+// restent hors de ce découpage : invisibles à tout compte restreint à un poste.
+// d.atelierPoste absent (dossiers déjà en production avant l'ajout de cette fonctionnalité) =
+// retombe sur 'tablier', point de départ du pipeline — pas de migration de données nécessaire.
+function dossierVisibleAuPoste(d, u) {
+  u = u || currentUser;
+  const poste = u && u.posteAtelier;
+  if (!poste) return true;
+  if (isBacheDossier(d)) return false;
+  const etape = d.atelierPoste || 'tablier';
+  if (poste === 'tablier') return etape === 'tablier';
+  if (poste === 'accessoires') return etape === 'accessoires_axes' && !d.atelierAccessoiresFait;
+  if (poste === 'axes') return etape === 'accessoires_axes' && !d.atelierAxeFait;
+  return true;
 }
 // Vue scope-consciente de `dossiers` — à utiliser pour TOUTE liste affichée à l'utilisateur.
 // Fonction PURE qui retourne une copie filtrée : ne JAMAIS réassigner la variable globale

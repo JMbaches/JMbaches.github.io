@@ -10,8 +10,93 @@
    scope lexical global du document (voir mémoire projet : piège
    let/window).
    ================================================================ */
+// Rafraîchit la vue Atelier actuellement affichée (liste ou grand écran) — à utiliser après une
+// action de poste plutôt que renderDos() (utilisé par avancerDos, qui replace la vue par l'onglet
+// "Dossiers" même quand l'action vient de l'Atelier — comportement existant qu'on ne reproduit
+// pas ici).
+function rerenderAtelierCourant() {
+  if (currentTab === 'atelier_grand') renderAtelierGrand();
+  else renderAtelier();
+}
+// Boutons d'action "poste atelier" pour un dossier en production, à la place du bouton "Fabriqué"
+// unique — bâches : inchangé (un seul bouton "Fabriqué"). Volets : 3 postes successifs (voir
+// changerStatutDossier et dossierVisibleAuPoste dans index.html) :
+//   1. Tablier — un seul bouton, fait passer le dossier à l'étape "accessoires_axes".
+//   2. Accessoires + Axes — deux boutons indépendants (un compte "vue d'ensemble" voit les deux,
+//      un compte affecté à un seul de ces 2 postes ne voit que le sien) ; une fois un des deux
+//      fait, il est remplacé par un badge "✓" (le dossier disparaît complètement de la vue d'un
+//      compte affecté à ce poste une fois sa part faite, cf. dossierVisibleAuPoste).
+// `onclickPrefix` (optionnel) : JS à exécuter AVANT l'action (ex. fermer une modale), comme le
+// faisait déjà le bouton "Fabriqué" d'origine dans les modales (closeModal(...);avancerDos(...)).
+function atelierPosteActionsHtml(d, size, onclickPrefix) {
+  onclickPrefix = onclickPrefix || '';
+  const btnClass = size==='lg' ? 'btn btn-primary' : 'btn btn-secondary btn-sm';
+  const btnStyle = size==='lg' ? 'font-size:13px;padding:8px 16px' : '';
+  if (isBacheDossier(d)) {
+    return can('adv_prod')
+      ? `<button class="${btnClass}" style="${btnStyle}" onclick="${onclickPrefix}avancerDos('${d.id}',event)"><i class="ti ti-check"></i> Fabriqué</button>`
+      : '';
+  }
+  if (!can('adv_prod')) return '';
+  const etape = d.atelierPoste || 'tablier';
+  const poste = currentUser && currentUser.posteAtelier;
+  if (etape === 'tablier') {
+    if (poste && poste !== 'tablier') return '';
+    return `<button class="${btnClass}" style="${btnStyle}" onclick="${onclickPrefix}terminerPosteTablier('${d.id}',event)"><i class="ti ti-check"></i> Tablier fabriqué</button>`;
+  }
+  const doneBadge = label => `<span style="font-size:12px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:4px"><i class="ti ti-circle-check"></i> ${label}</span>`;
+  let html = '';
+  if (!poste || poste === 'accessoires') {
+    html += d.atelierAccessoiresFait
+      ? doneBadge('Accessoires')
+      : `<button class="${btnClass}" style="${btnStyle}" onclick="${onclickPrefix}terminerPosteAccessoires('${d.id}',event)"><i class="ti ti-check"></i> Accessoires prêts</button>`;
+  }
+  if (!poste || poste === 'axes') {
+    html += d.atelierAxeFait
+      ? doneBadge('Axe')
+      : `<button class="${btnClass}" style="${btnStyle}" onclick="${onclickPrefix}terminerPosteAxe('${d.id}',event)"><i class="ti ti-check"></i> Axe prêt</button>`;
+  }
+  return html;
+}
+async function terminerPosteTablier(dosId, e) {
+  if (e) e.stopPropagation();
+  const d = dossiers.find(x => x.id === dosId); if (!d || isBacheDossier(d)) return;
+  d.atelierPoste = 'accessoires_axes';
+  logHistory(d.id, 'statut', `Atelier — tablier fabriqué, envoyé aux postes accessoires + axes`);
+  saveData();
+  showToast(`✓ Tablier fabriqué — ${d.client}`);
+  rerenderAtelierCourant();
+}
+async function terminerPosteAccessoires(dosId, e) {
+  if (e) e.stopPropagation();
+  const d = dossiers.find(x => x.id === dosId); if (!d || isBacheDossier(d)) return;
+  d.atelierAccessoiresFait = true;
+  logHistory(d.id, 'statut', `Atelier — poste accessoires validé`);
+  if (d.atelierAxeFait) {
+    await changerStatutDossier(d, 'emballage', '(atelier — dernier poste : accessoires)');
+    showToast(`✓ Accessoires prêts — ${d.client} envoyé en emballage`);
+  } else {
+    showToast(`✓ Accessoires prêts — ${d.client}`);
+  }
+  saveData();
+  rerenderAtelierCourant();
+}
+async function terminerPosteAxe(dosId, e) {
+  if (e) e.stopPropagation();
+  const d = dossiers.find(x => x.id === dosId); if (!d || isBacheDossier(d)) return;
+  d.atelierAxeFait = true;
+  logHistory(d.id, 'statut', `Atelier — poste axes validé`);
+  if (d.atelierAccessoiresFait) {
+    await changerStatutDossier(d, 'emballage', '(atelier — dernier poste : axes)');
+    showToast(`✓ Axe prêt — ${d.client} envoyé en emballage`);
+  } else {
+    showToast(`✓ Axe prêt — ${d.client}`);
+  }
+  saveData();
+  rerenderAtelierCourant();
+}
 function renderAtelier() {
-  const prod=filteredDossiers(dossiers.filter(d=>d.statut==='production')).filter(matchesTypeFilter);
+  const prod=filteredDossiers(dossiers.filter(d=>d.statut==='production')).filter(matchesTypeFilter).filter(d=>dossierVisibleAuPoste(d));
   const mc=document.getElementById('main-content');
   const header=`<div class="section-header"><div class="section-title">Commandes à fabriquer</div><div style="display:flex;align-items:center;gap:10px">${typeFilterSelectHtml('renderAtelier')}<span style="font-size:13px;color:var(--ink-faint)">${prod.length} en cours</span></div></div>`;
   if(!prod.length){mc.innerHTML=header+`<div class="empty-state"><i class="ti ti-tools"></i>Aucune commande en production pour le moment</div>`;return;}
@@ -40,7 +125,7 @@ function renderAtelier() {
             <span style="font-size:12px;color:var(--ink-faint)"><i class="ti ti-calendar" style="font-size:12px;vertical-align:-1px"></i> ${fmt(d.dateLivraison)}${d.dateFab?` <span style="color:var(--teal);font-weight:600" title="Semaine de fabrication souhaitée">· Sem. ${numeroSemaineISO(new Date(d.dateFab+'T00:00:00'))}</span>`:''}</span>
             <div style="display:flex;gap:6px">
               <button class="btn btn-ghost btn-sm" onclick="openVueFab('${d.id}')"><i class="ti ti-eye"></i> Voir</button>
-              ${can('adv_prod')?`<button class="btn btn-secondary btn-sm" onclick="avancerDos('${d.id}',event)"><i class="ti ti-check"></i> Fabriqué</button>`:''}
+              ${atelierPosteActionsHtml(d,'sm')}
             </div>
           </div>
         </div>
@@ -49,7 +134,7 @@ function renderAtelier() {
   </div>`;
 }
 function getSortedProd() {
-  const prod = filteredDossiers(dossiers.filter(d => d.statut === 'production')).filter(matchesTypeFilter);
+  const prod = filteredDossiers(dossiers.filter(d => d.statut === 'production')).filter(matchesTypeFilter).filter(d=>dossierVisibleAuPoste(d));
   // Appliquer l'ordre manuel si existant, sinon tri auto : URGENT > date livraison
   const manualIds = atelierOrder.filter(id => prod.find(d => d.id === id));
   const unordered = prod.filter(d => !manualIds.includes(d.id));
@@ -208,7 +293,7 @@ function renderAtelierGrand() {
             <div style="display:flex;gap:7px">
               <button class="btn btn-ghost" onclick="openVueFab('${d.id}')" style="font-size:12px;padding:7px 12px"><i class="ti ti-eye"></i> Vue fab.</button>
               <button class="btn btn-secondary" onclick="openChecklist('${d.id}')" style="font-size:12px;padding:7px 12px"><i class="ti ti-list-check"></i> Checklist</button>
-              ${can('adv_prod')?`<button class="btn btn-primary" onclick="avancerDos('${d.id}',event)" style="font-size:13px;padding:8px 16px"><i class="ti ti-check"></i> Fabriqué</button>`:''}
+              ${atelierPosteActionsHtml(d,'lg')}
             </div>
           </div>
         </div>
@@ -292,9 +377,9 @@ function openVueFab(dosId) {
       </div>`})()}
     </div>`;
 
-  document.getElementById('vf-footer-btns').innerHTML = can('adv_prod')
-    ? `<button class="btn btn-primary" style="font-size:15px;padding:10px 28px" onclick="closeModal('modal-vue-fab');avancerDos('${d.id}',event)"><i class="ti ti-check"></i> Marquer Fabriqué</button>`
-    : '';
+  document.getElementById('vf-footer-btns').innerHTML = isBacheDossier(d)
+    ? (can('adv_prod') ? `<button class="btn btn-primary" style="font-size:15px;padding:10px 28px" onclick="closeModal('modal-vue-fab');avancerDos('${d.id}',event)"><i class="ti ti-check"></i> Marquer Fabriqué</button>` : '')
+    : `<div style="display:flex;gap:10px">${atelierPosteActionsHtml(d,'lg',"closeModal('modal-vue-fab');")}</div>`;
   openModal('modal-vue-fab');
 }
 
@@ -302,9 +387,14 @@ function openChecklist(dosId) {
   const d=dossiers.find(x=>x.id===dosId); if(!d) return;
   document.getElementById('checklist-title').textContent=`Checklist — ${d.client}`;
   document.getElementById('checklist-sub').textContent=`${d.id} · ${d.structure||'—'}`;
-  const btn=document.getElementById('checklist-fabrique-btn');
-  btn.onclick=()=>{avancerDos(dosId,null);closeModal('modal-checklist');};
-  btn.style.display=can('adv_prod')&&d.statut==='production'?'':'none';
+  const btnWrap=document.getElementById('checklist-fabrique-btn');
+  if (d.statut==='production') {
+    btnWrap.innerHTML = isBacheDossier(d)
+      ? (can('adv_prod') ? `<button class="btn btn-primary" onclick="avancerDos('${dosId}',event);closeModal('modal-checklist')"><i class="ti ti-check"></i> Marquer fabriqué</button>` : '')
+      : atelierPosteActionsHtml(d,'lg',"closeModal('modal-checklist');");
+  } else {
+    btnWrap.innerHTML = '';
+  }
   renderChecklistBody(dosId);
   openModal('modal-checklist');
 }
