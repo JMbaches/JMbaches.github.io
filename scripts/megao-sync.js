@@ -178,6 +178,12 @@ function parseMegaoText(text) {
   const emailM = text.match(/E-?mail\s*:\s*([\w.+\-]+@[\w.\-]+\.[a-z]{2,})/i)
               || text.match(/([\w.+\-]+@[\w.\-]+\.[a-z]{2,})/i);
   const email  = emailM ? emailM[1].trim() : '';
+  // Références : champ Mégao souvent utilisé pour noter le VRAI client final quand un revendeur
+  // enlève pour son compte (le PDF porte alors une ligne "PREVENIR <revendeur>" à côté) — collé
+  // sans espace à la valeur suivante ("Références :MICHELDélai :", vu sur données réelles), d'où
+  // l'arrêt avant "Délai" plutôt qu'un simple \n.
+  const referencesM = text.match(/R[ée]f[ée]rences\s*:\s*([^\n]*?)(?=D[ée]lai\s*:|\n|$)/i);
+  const references  = referencesM ? referencesM[1].trim() : '';
 
   // Client : bloc juste après COMMANDE N° (pdf-parse sort les lignes en colonnes)
   let client = '', contact = '', adresse = '', cp = '', ville = '';
@@ -193,10 +199,16 @@ function parseMegaoText(text) {
     }
   }
   // Cas "enlèvement" (bloc client remplacé par une instruction de retrait plutôt qu'un nom,
-  // confirmé sur données réelles Mégao — CMDCLI.Nomliv contient littéralement "ENLEVEMENT" ou
-  // "ENLEVEMENT LE <date>" dans ce cas) : repli sur le revendeur plutôt que de garder un nom
-  // manifestement faux (même correction que pour les bâches, cf. parseMegaoBacheText).
-  if (/^enl[eè]vement\b/i.test(client) && revendeur) { client = revendeur; contact = revendeur; }
+  // confirmé sur données réelles Mégao — CMDCLI.Nomliv contient littéralement "ENLEVEMENT",
+  // "ENLEVEMENT CLIENT/USINE" ou "ENLEVEMENT LE <date>" dans ce cas) : Références d'abord (le vrai
+  // client final quand un revendeur enlève pour son compte, cf. commentaire ci-dessus — décision
+  // utilisateur du 2026-07-27 malgré un contre-exemple identifié où Références contient une valeur
+  // sans rapport, ex. dossier réel 121027 "PARISOTO" vs revendeur "ADRIEN CLEMENTE" correct — jugé
+  // acceptable), sinon repli sur le revendeur comme avant plutôt que de garder un nom faux.
+  if (/^enl[eè]vement\b/i.test(client) && (references || revendeur)) {
+    client = references || revendeur;
+    contact = client;
+  }
 
   // HT : "Net HT\n 1 823,84" (valeur sur la ligne suivante dans pdf-parse)
   const htM = text.match(/Net\s+HT\s*\n\s*([\d][\d\s]*,\d{2})/i)
@@ -453,6 +465,10 @@ function parseMegaoBacheText(text) {
   const emailM = text.match(/E-?mail\s*:\s*([\w.+\-]+@[\w.\-]+\.[a-z]{2,})/i)
               || text.match(/([\w.+\-]+@[\w.\-]+\.[a-z]{2,})/i);
   const email  = emailM ? emailM[1].trim() : '';
+  // Références : voir commentaire identique dans parseMegaoText — champ Mégao souvent utilisé
+  // pour noter le VRAI client final quand un revendeur enlève pour son compte.
+  const referencesM = text.match(/R[ée]f[ée]rences\s*:\s*([^\n]*?)(?=D[ée]lai\s*:|\n|$)/i);
+  const references  = referencesM ? referencesM[1].trim() : '';
 
   let client = '', contact = '', adresse = '', cp = '', ville = '';
   if (refM) {
@@ -466,10 +482,14 @@ function parseMegaoBacheText(text) {
       if (!adresse) { adresse = l; continue; }
     }
   }
-  // Cas "enlèvement" (vu sur commande 120791 réelle) : le bloc client n'est pas un nom mais
-  // une instruction ("ENLEVEMENT" / "PREVENIR ..."), le vrai client apparaît dans le bloc
-  // revendeur à la place. Repli sur revendeur plutôt que de garder un nom manifestement faux.
-  if (/^enl[eè]vement$/i.test(client) && revendeur) { client = revendeur; contact = revendeur; }
+  // Cas "enlèvement" (vu sur commande 120791 réelle, et sur les variantes réelles "ENLEVEMENT
+  // CLIENT"/"ENLEVEMENT USINE" — d'où \b plutôt que $ ci-dessous, l'ancre stricte ratait ces deux
+  // variantes) : le bloc client n'est pas un nom mais une instruction. Références d'abord (le
+  // vrai client final, cf. commentaire ci-dessus), sinon repli sur le revendeur comme avant.
+  if (/^enl[eè]vement\b/i.test(client) && (references || revendeur)) {
+    client = references || revendeur;
+    contact = client;
+  }
 
   const htM = text.match(/Net\s+HT\s*\n\s*([\d][\d\s]*,\d{2})/i)
            || text.match(/Total\s+HT\s*\n\s*([\d][\d\s]*,\d{2})/i);
