@@ -1114,20 +1114,23 @@ a:focus-visible, button:focus-visible,
             </select>
           </div>
           <div class="form-group"><label class="form-label">Options</label><input id="f-options" placeholder="ex: Motorisation, Bluetooth..."></div>
-          <div class="form-group"><label class="form-label">Matière des lames</label><select id="f-typeLame">
-            <option value="">—</option>
-            <option value="PVC">PVC</option>
-            <option value="Polycarbonate">Polycarbonate</option>
-          </select></div>
-          <div class="form-group"><label class="form-label">Lames</label><input id="f-lames" placeholder="ex: Gris"></div>
+          <div class="form-group" style="grid-column:span 2">
+            <label class="form-label">Lignes de lames</label>
+            <!-- Une ou plusieurs lignes (matière/couleur/longueur) — une commande peut avoir
+                 plusieurs segments de lames différents (tablier principal + escalier, décroché...),
+                 chacun avec sa propre matière/couleur/longueur. La 1ère ligne alimente les champs
+                 dossier existants (typeLame/lames), les lignes suivantes sont additives
+                 (lamesDetail) — voir ajouterLigneLame()/lireLignesLames(). -->
+            <div id="lames-lignes"></div>
+            <button type="button" class="btn btn-secondary btn-sm" style="margin-top:4px;align-self:flex-start" onclick="ajouterLigneLame()"><i class="ti ti-plus"></i> Ajouter une ligne de lame</button>
+          </div>
           <div class="form-group"><label class="form-label">Couleur bouchon</label><input id="f-couleurBouchon" placeholder="ex: Noir"></div>
-          <!-- Lignes de lames supplémentaires (commande à plusieurs longueurs/matières) — pas de
-               champ visible, juste portées du parseur jusqu'à l'enregistrement (JSON), affichées
-               en lecture seule dans la fiche une fois le dossier créé -->
-          <input type="hidden" id="f-lamesDetail">
-          <!-- Bassin avec décroché (terme catalogue Mégao "DECROCHE") — pas de champ visible non
-               plus, juste porté du parseur jusqu'à l'enregistrement, même logique que lamesDetail -->
+          <!-- Bassin avec décroché (terme catalogue Mégao "DECROCHE") — pas de champ visible,
+               juste porté du parseur jusqu'à l'enregistrement -->
           <input type="hidden" id="f-decroche">
+          <!-- Lames d'escalier séparées (terme catalogue Mégao "LAMES SEUL(ES) POUR L'ESCALIER")
+               — même logique que f-decroche -->
+          <input type="hidden" id="f-lameEscalier">
           <div class="form-group"><label class="form-label">Pieds</label><input id="f-pieds" placeholder="ex: 7016/Gris"></div>
           <div class="form-group"><label class="form-label">Escalier</label><input id="f-escalier" placeholder="ex: Escalier roman de 3 m Maxi - Equerre"></div>
           <div class="form-group"><label class="form-label">Découpe</label><input id="f-decoupe" placeholder="ex: Découpe équerre rayon ou pan coupé de 1 à 20cm"></div>
@@ -3161,7 +3164,7 @@ function renderPageCommande(d, p) { p = p || {};
         ${d.lamesDetail && d.lamesDetail.length > 1 ? `<div style="margin-top:10px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:var(--radius);padding:8px 12px;font-size:12px;color:#92400E">
           <i class="ti ti-alert-triangle"></i> <strong>Plusieurs lignes de lames sur cette commande</strong> — seule la 1ère (ci-dessus) est éditable ici, vérifier le bon de commande original pour les autres :
           <ul style="margin:4px 0 0 18px;padding:0">
-            ${d.lamesDetail.slice(1).map(li => `<li>${li.type||'?'}${li.couleur?' — '+escapeHtml(li.couleur):' — (aucune couleur trouvée)'}</li>`).join('')}
+            ${d.lamesDetail.slice(1).map(li => `<li>${li.type||'?'}${li.couleur?' — '+escapeHtml(li.couleur):' — (aucune couleur trouvée)'}${li.longueur?` — ${li.longueur} m`:''}</li>`).join('')}
           </ul>
         </div>` : ''}
         ${d.nbLamesCalcule ? `<div style="margin-top:10px;background:var(--teal-light);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--teal)">
@@ -4262,6 +4265,56 @@ function cloturerDossier(type) {
 /* ================================================================
    NOUVEAU DOSSIER
    ================================================================ */
+
+// Lignes de lames (matière/couleur/longueur) de la modale de création — une commande peut avoir
+// plusieurs segments de lames différents (tablier principal + escalier, décroché...), chacun avec
+// sa propre matière/couleur/longueur. Demandé par l'utilisateur (2026-07-28) pour pouvoir saisir ça
+// manuellement, pas seulement le recevoir du parseur Mégao (qui, lui, ne capture pas la longueur).
+function ligneLameHtml(type, couleur, longueur) {
+  const t = type === 'Polycarbonate' ? 'Polycarbonate' : 'PVC';
+  return `<div class="ligne-lame-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+    <select class="ligne-lame-type" style="flex:0 0 150px;width:150px">
+      <option value="PVC" ${t==='PVC'?'selected':''}>PVC</option>
+      <option value="Polycarbonate" ${t==='Polycarbonate'?'selected':''}>Polycarbonate</option>
+    </select>
+    <input class="ligne-lame-couleur" style="flex:1;width:auto" placeholder="Couleur (ex: Blanc)" value="${escapeHtml(couleur||'')}">
+    <input class="ligne-lame-longueur" type="number" min="0" step="0.01" style="flex:0 0 120px;width:120px" placeholder="Long. (m)" value="${longueur !== undefined && longueur !== null && longueur !== '' ? longueur : ''}">
+    <button type="button" class="btn btn-ghost btn-sm" title="Retirer cette ligne" onclick="retirerLigneLame(this)"><i class="ti ti-trash"></i></button>
+  </div>`;
+}
+function ajouterLigneLame(type, couleur, longueur) {
+  const c = document.getElementById('lames-lignes');
+  if (!c) return;
+  c.insertAdjacentHTML('beforeend', ligneLameHtml(type, couleur, longueur));
+  majBoutonsLigneLame();
+}
+function retirerLigneLame(btn) {
+  const rows = document.querySelectorAll('#lames-lignes .ligne-lame-row');
+  if (rows.length <= 1) return; // toujours garder au moins 1 ligne
+  btn.closest('.ligne-lame-row').remove();
+  majBoutonsLigneLame();
+}
+function majBoutonsLigneLame() {
+  const rows = document.querySelectorAll('#lames-lignes .ligne-lame-row');
+  rows.forEach(r => { const b = r.querySelector('button'); if (b) b.style.visibility = rows.length > 1 ? 'visible' : 'hidden'; });
+}
+// rows = [{type, couleur, longueur}] — vide ou absent = 1 ligne neuve vierge (nouveau dossier),
+// sinon préremplit depuis les données du parseur Mégao (fillFormFromMegao).
+function resetLignesLames(rows) {
+  const c = document.getElementById('lames-lignes');
+  if (!c) return;
+  c.innerHTML = '';
+  (rows && rows.length ? rows : [{ type: 'PVC', couleur: '', longueur: '' }])
+    .forEach(r => ajouterLigneLame(r.type, r.couleur, r.longueur));
+}
+function lireLignesLames() {
+  return [...document.querySelectorAll('#lames-lignes .ligne-lame-row')].map(r => ({
+    type: r.querySelector('.ligne-lame-type').value,
+    couleur: r.querySelector('.ligne-lame-couleur').value.trim(),
+    longueur: parseFloat(r.querySelector('.ligne-lame-longueur').value) || undefined,
+  }));
+}
+
 /* ================================================================
    IMPORT PDF MÉGAO
    ================================================================ */
@@ -4283,11 +4336,11 @@ function fillFormFromMegao(data) {
   set('f-adresse',   data.adresse);
   set('f-cp',        data.cp);
   set('f-ville',     data.ville);
-  set('f-typeLame',  data.typeLame);
-  set('f-lames',     data.lames);
+  resetLignesLames(data.lamesDetail && data.lamesDetail.length ? data.lamesDetail
+                  : (data.typeLame || data.lames ? [{ type: data.typeLame, couleur: data.lames }] : null));
   set('f-couleurBouchon', data.couleurBouchon);
-  set('f-lamesDetail', data.lamesDetail ? JSON.stringify(data.lamesDetail) : undefined);
   set('f-decroche', data.decroche ? '1' : undefined);
+  set('f-lameEscalier', data.lameEscalier ? '1' : undefined);
   set('f-pieds',     data.pieds);
   set('f-alim',      data.alim);
   set('f-moteur',    data.moteur);
@@ -4480,6 +4533,12 @@ async function parseMegaoPDFLocal(file) {
     const decM = c.match(/^-?\s*DECROCHE\b\s*/i);
     const decroche = !!decM;
     if (decM) c = c.slice(decM[0].length).trim();
+    // "LAMES SEUL(ES) POUR (RECOUVRIR) L'ESCALIER" : autre marqueur catalogue Mégao (lames plus
+    // petites, batch séparé pour recouvrir l'escalier) — même famille que DECROCHE, pas une couleur.
+    // Confirmé par l'utilisateur (2026-07-28), même fix que scripts/megao-sync.js.
+    const escM = c.match(/^-?\s*LAMES?\s+SEULE?S?\s+POUR\s+(?:RECOUVRIR\s+)?L['’]ESCALIER\.?\s*/i);
+    const lameEscalier = !!escM;
+    if (escM) c = c.slice(escM[0].length).trim();
     // Couleur du bouchon (embout de lame) : motif "B. <couleur>" dans le texte Mégao (ex: "B. Noir"
     // = Bouchon noir), distinct de la couleur de la lame elle-même — confirmé par l'utilisateur
     // (2026-07-22), corrige une hypothèse erronée précédente qui lisait "B." comme "Bicolore".
@@ -4494,19 +4553,22 @@ async function parseMegaoPDFLocal(file) {
     // 2026-07-27) — jamais de ligne "B.<couleur>" séparée dans le PDF pour du PVC en pratique. Le
     // Polycarbonate peut différer (ligne dédiée gérée ci-dessus quand présente).
     if (!cb && codeType === 'PVC' && c) cb = c;
-    return { type: codeType, couleur: c, couleurBouchon: cb, decroche };
+    return { type: codeType, couleur: c, couleurBouchon: cb, decroche, lameEscalier };
   }
   const lameInfoAll = lamProdsAll.map(deriveLameInfoFromProd);
-  // Ligne canonique = la 1ère ligne NON-décroché s'il y en a une, sinon la 1ère ligne tout court —
-  // même raison que scripts/megao-sync.js (le segment décroché ne doit jamais représenter la
-  // commande, même quand il apparaît en premier dans le texte, cf. dossier réel 120770).
-  const lameInfoFirst = lameInfoAll.find(li => !li.decroche) || lameInfoAll[0]
-                      || { type: '', couleur: '', couleurBouchon: '', decroche: false };
+  // Ligne canonique = la 1ère ligne qui n'est ni décroché ni escalier s'il y en a une, sinon la
+  // 1ère ligne tout court — même raison que scripts/megao-sync.js (un segment spécial ne doit
+  // jamais représenter la commande, même quand il apparaît en premier, cf. dossiers réels
+  // 120770/120758).
+  const lameInfoFirst = lameInfoAll.find(li => !li.decroche && !li.lameEscalier) || lameInfoAll[0]
+                      || { type: '', couleur: '', couleurBouchon: '', decroche: false, lameEscalier: false };
   const typeLame = lameInfoFirst.type;
   let lames = lameInfoFirst.couleur;
   let couleurBouchon = lameInfoFirst.couleurBouchon;
-  // Bassin avec décroché (voir deriveLameInfoFromProd) : vrai peu importe la ligne concernée.
+  // Bassin avec décroché / lames d'escalier séparées (voir deriveLameInfoFromProd) : vrai peu
+  // importe la ligne concernée.
   const decroche = lameInfoAll.some(li => li.decroche);
+  const lameEscalier = lameInfoAll.some(li => li.lameEscalier);
   // Lignes de lames SUPPLÉMENTAIRES (au-delà de la 1ère) — avant ce fix, silencieusement perdues.
   // undefined pour les dossiers à une seule ligne (comportement historique inchangé).
   const lamesDetail = lameInfoAll.length > 1 ? lameInfoAll.map(li => ({ type: li.type, couleur: li.couleur })) : undefined;
@@ -4579,7 +4641,7 @@ async function parseMegaoPDFLocal(file) {
   const ht     = ht1 || (htM2 ? parseFloat(htM2[1].replace(/\s/g,'').replace(',','.')) : 0);
 
   return { ref, client, contact, tel, email, adresse, cp, ville,
-           structure, typeLame, lames, couleurBouchon, lamesDetail, decroche, pieds: '', alim, moteur,
+           structure, typeLame, lames, couleurBouchon, lamesDetail, decroche, lameEscalier, pieds: '', alim, moteur,
            options: '', remarques: '', autres: '', escalier, decoupe,
            largeur, longueur, revendeur,
            transport, ht, dateFrom, isVolet };
@@ -4872,7 +4934,8 @@ function setBacheStructure(ref) {
   renderFiche();
 }
 function openNewDos() {
-  ['f-client','f-tel','f-email','f-contact','f-revendeur','f-adresse','f-cp','f-ville','f-contraintes','f-options','f-typeLame','f-lames','f-couleurBouchon','f-lamesDetail','f-decroche','f-pieds','f-alim','f-typeAlimentation','f-moteur','f-ref','f-remarques','f-autres','f-largeur','f-longueur','f-surface','f-hauteur','f-profondeur','f-notes-dims','f-telecommande','f-gestionSel','f-passesSangles','f-flasqueMurale','f-murCouleur','f-murHauteur','f-caillebotisChoix','f-caillebotisLargeur','f-caillebotisProfondeur','f-fixation','f-equerresRenfort','f-corniere6060','f-poutreCouleur','f-nombrePoutres','f-options-bache','f-bacheGamme','f-bacheTypeBassin','f-bacheEpaisseur','f-bacheBullesType','f-bacheColoris','f-bacheDecoupeAspi','f-bacheDecoupeEscalier','f-bacheBarreCharge','f-bacheOeilletsSupp','f-bacheEnrouleur','f-bachePansCoupes','f-bacheTransportZone'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  resetLignesLames();
+  ['f-client','f-tel','f-email','f-contact','f-revendeur','f-adresse','f-cp','f-ville','f-contraintes','f-options','f-couleurBouchon','f-decroche','f-lameEscalier','f-pieds','f-alim','f-typeAlimentation','f-moteur','f-ref','f-remarques','f-autres','f-largeur','f-longueur','f-surface','f-hauteur','f-profondeur','f-notes-dims','f-telecommande','f-gestionSel','f-passesSangles','f-flasqueMurale','f-murCouleur','f-murHauteur','f-caillebotisChoix','f-caillebotisLargeur','f-caillebotisProfondeur','f-fixation','f-equerresRenfort','f-corniere6060','f-poutreCouleur','f-nombrePoutres','f-options-bache','f-bacheGamme','f-bacheTypeBassin','f-bacheEpaisseur','f-bacheBullesType','f-bacheColoris','f-bacheDecoupeAspi','f-bacheDecoupeEscalier','f-bacheBarreCharge','f-bacheOeilletsSupp','f-bacheEnrouleur','f-bachePansCoupes','f-bacheTransportZone'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const np=document.getElementById('f-need-pose');if(np)np.checked=false;;
   document.getElementById('f-structure').value='';
   document.getElementById('f-structure-bache').innerHTML = bacheStructureOptionsHtml('');
@@ -4928,18 +4991,23 @@ function saveDossier() {
   const id='D-2024-0'+nextDosNum++;
   const tva=parseFloat(document.getElementById('f-tva').value)||20;
   const ht=parseFloat(document.getElementById('f-ht').value)||0;
+  // Ligne(s) de lames saisies dans la modale (matière/couleur/longueur chacune) — la 1ère ligne
+  // alimente les champs historiques typeLame/lames, toutes les lignes sont gardées dans
+  // lamesDetail (même si une seule) pour ne pas perdre la longueur saisie par ligne.
+  const lignesLames = lireLignesLames();
   const d={id,type,
     client,tel:document.getElementById('f-tel').value,email:document.getElementById('f-email').value,
     contact:document.getElementById('f-contact').value,revendeur:document.getElementById('f-revendeur')?.value||'Client particulier',adresse:document.getElementById('f-adresse').value,
     cp:document.getElementById('f-cp').value,ville:document.getElementById('f-ville').value,
     contraintes:document.getElementById('f-contraintes').value,
     structure,options:document.getElementById(isBache ? 'f-options-bache' : 'f-options').value,
-    lames:document.getElementById('f-lames').value,couleurBouchon:document.getElementById('f-couleurBouchon')?.value||'',
-    lamesDetail:(() => { try { const v = document.getElementById('f-lamesDetail')?.value; return v ? JSON.parse(v) : null; } catch(e) { return null; } })(),
+    lames:lignesLames[0]?.couleur||'',couleurBouchon:document.getElementById('f-couleurBouchon')?.value||'',
+    lamesDetail: lignesLames.some(l => l.couleur || l.longueur) ? lignesLames : null,
     decroche: document.getElementById('f-decroche')?.value === '1',
+    lameEscalier: document.getElementById('f-lameEscalier')?.value === '1',
     pieds:document.getElementById('f-pieds').value,
     escalier:document.getElementById('f-escalier')?.value||'',decoupe:document.getElementById('f-decoupe')?.value||'',
-    typeLame:document.getElementById('f-typeLame')?.value||'',
+    typeLame:lignesLames[0]?.type||'',
     alim:document.getElementById('f-alim').value,typeAlimentation:document.getElementById('f-typeAlimentation')?.value||'',moteur:document.getElementById('f-moteur').value,
     telecommande:document.getElementById('f-telecommande')?.value||'',
     gestionSel:document.getElementById('f-gestionSel')?.value||'',
