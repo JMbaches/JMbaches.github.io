@@ -336,13 +336,13 @@ function renderAtelierGrand() {
               </div>
             </div>
           </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:4px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:4px;flex-wrap:wrap">
             <span style="font-size:13px;font-weight:500;color:${retard?'var(--red)':'var(--ink-faint)'}">
               <i class="ti ti-calendar" style="font-size:12px;vertical-align:-1px"></i> ${fmt(d.dateLivraison)}
               ${d.dateFab?` <span style="color:var(--teal);font-weight:600" title="Semaine de fabrication souhaitée">· Sem. ${numeroSemaineISO(new Date(d.dateFab+'T00:00:00'))}</span>`:''}
               ${retard?'<span style="font-size:10px;font-weight:700;color:var(--red);margin-left:4px">EN RETARD</span>':''}
             </span>
-            <div style="display:flex;gap:7px">
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
               <button class="btn btn-ghost" onclick="openVueFab('${d.id}')" style="font-size:12px;padding:7px 12px"><i class="ti ti-eye"></i> Vue fab.</button>
               ${!isBacheDossier(d)?`<button class="btn btn-ghost" onclick="openFicheAccessoire('${d.id}')" style="font-size:12px;padding:7px 12px"><i class="ti ti-puzzle"></i> Fiche accessoire</button>`:''}
               <button class="btn btn-secondary" onclick="openChecklist('${d.id}')" style="font-size:12px;padding:7px 12px"><i class="ti ti-list-check"></i> Checklist</button>
