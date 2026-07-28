@@ -1125,6 +1125,9 @@ a:focus-visible, button:focus-visible,
                champ visible, juste portées du parseur jusqu'à l'enregistrement (JSON), affichées
                en lecture seule dans la fiche une fois le dossier créé -->
           <input type="hidden" id="f-lamesDetail">
+          <!-- Bassin avec décroché (terme catalogue Mégao "DECROCHE") — pas de champ visible non
+               plus, juste porté du parseur jusqu'à l'enregistrement, même logique que lamesDetail -->
+          <input type="hidden" id="f-decroche">
           <div class="form-group"><label class="form-label">Pieds</label><input id="f-pieds" placeholder="ex: 7016/Gris"></div>
           <div class="form-group"><label class="form-label">Escalier</label><input id="f-escalier" placeholder="ex: Escalier roman de 3 m Maxi - Equerre"></div>
           <div class="form-group"><label class="form-label">Découpe</label><input id="f-decoupe" placeholder="ex: Découpe équerre rayon ou pan coupé de 1 à 20cm"></div>
@@ -4284,6 +4287,7 @@ function fillFormFromMegao(data) {
   set('f-lames',     data.lames);
   set('f-couleurBouchon', data.couleurBouchon);
   set('f-lamesDetail', data.lamesDetail ? JSON.stringify(data.lamesDetail) : undefined);
+  set('f-decroche', data.decroche ? '1' : undefined);
   set('f-pieds',     data.pieds);
   set('f-alim',      data.alim);
   set('f-moteur',    data.moteur);
@@ -4471,6 +4475,11 @@ async function parseMegaoPDFLocal(file) {
     let c = lameParenIdx >= 0 ? p.desig.slice(lameParenIdx + 1).trim() : p.desig;
     // Nettoyage défensif : si la matière s'est retrouvée capturée dans le coloris, on la retire
     c = c.replace(/^(POLYCARBONATE|POLY|PVC)\s+/i, '').trim();
+    // "DECROCHE" = vrai terme catalogue Mégao (bassin avec décroché, d'où une 2e ligne de lame pour
+    // ce segment), pas une couleur — même fix que scripts/megao-sync.js (confirmé 2026-07-28).
+    const decM = c.match(/^-?\s*DECROCHE\b\s*/i);
+    const decroche = !!decM;
+    if (decM) c = c.slice(decM[0].length).trim();
     // Couleur du bouchon (embout de lame) : motif "B. <couleur>" dans le texte Mégao (ex: "B. Noir"
     // = Bouchon noir), distinct de la couleur de la lame elle-même — confirmé par l'utilisateur
     // (2026-07-22), corrige une hypothèse erronée précédente qui lisait "B." comme "Bicolore".
@@ -4485,13 +4494,19 @@ async function parseMegaoPDFLocal(file) {
     // 2026-07-27) — jamais de ligne "B.<couleur>" séparée dans le PDF pour du PVC en pratique. Le
     // Polycarbonate peut différer (ligne dédiée gérée ci-dessus quand présente).
     if (!cb && codeType === 'PVC' && c) cb = c;
-    return { type: codeType, couleur: c, couleurBouchon: cb };
+    return { type: codeType, couleur: c, couleurBouchon: cb, decroche };
   }
   const lameInfoAll = lamProdsAll.map(deriveLameInfoFromProd);
-  const lameInfoFirst = lameInfoAll[0] || { type: '', couleur: '', couleurBouchon: '' };
+  // Ligne canonique = la 1ère ligne NON-décroché s'il y en a une, sinon la 1ère ligne tout court —
+  // même raison que scripts/megao-sync.js (le segment décroché ne doit jamais représenter la
+  // commande, même quand il apparaît en premier dans le texte, cf. dossier réel 120770).
+  const lameInfoFirst = lameInfoAll.find(li => !li.decroche) || lameInfoAll[0]
+                      || { type: '', couleur: '', couleurBouchon: '', decroche: false };
   const typeLame = lameInfoFirst.type;
   let lames = lameInfoFirst.couleur;
   let couleurBouchon = lameInfoFirst.couleurBouchon;
+  // Bassin avec décroché (voir deriveLameInfoFromProd) : vrai peu importe la ligne concernée.
+  const decroche = lameInfoAll.some(li => li.decroche);
   // Lignes de lames SUPPLÉMENTAIRES (au-delà de la 1ère) — avant ce fix, silencieusement perdues.
   // undefined pour les dossiers à une seule ligne (comportement historique inchangé).
   const lamesDetail = lameInfoAll.length > 1 ? lameInfoAll.map(li => ({ type: li.type, couleur: li.couleur })) : undefined;
@@ -4564,7 +4579,7 @@ async function parseMegaoPDFLocal(file) {
   const ht     = ht1 || (htM2 ? parseFloat(htM2[1].replace(/\s/g,'').replace(',','.')) : 0);
 
   return { ref, client, contact, tel, email, adresse, cp, ville,
-           structure, typeLame, lames, couleurBouchon, lamesDetail, pieds: '', alim, moteur,
+           structure, typeLame, lames, couleurBouchon, lamesDetail, decroche, pieds: '', alim, moteur,
            options: '', remarques: '', autres: '', escalier, decoupe,
            largeur, longueur, revendeur,
            transport, ht, dateFrom, isVolet };
@@ -4857,7 +4872,7 @@ function setBacheStructure(ref) {
   renderFiche();
 }
 function openNewDos() {
-  ['f-client','f-tel','f-email','f-contact','f-revendeur','f-adresse','f-cp','f-ville','f-contraintes','f-options','f-typeLame','f-lames','f-couleurBouchon','f-lamesDetail','f-pieds','f-alim','f-typeAlimentation','f-moteur','f-ref','f-remarques','f-autres','f-largeur','f-longueur','f-surface','f-hauteur','f-profondeur','f-notes-dims','f-telecommande','f-gestionSel','f-passesSangles','f-flasqueMurale','f-murCouleur','f-murHauteur','f-caillebotisChoix','f-caillebotisLargeur','f-caillebotisProfondeur','f-fixation','f-equerresRenfort','f-corniere6060','f-poutreCouleur','f-nombrePoutres','f-options-bache','f-bacheGamme','f-bacheTypeBassin','f-bacheEpaisseur','f-bacheBullesType','f-bacheColoris','f-bacheDecoupeAspi','f-bacheDecoupeEscalier','f-bacheBarreCharge','f-bacheOeilletsSupp','f-bacheEnrouleur','f-bachePansCoupes','f-bacheTransportZone'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['f-client','f-tel','f-email','f-contact','f-revendeur','f-adresse','f-cp','f-ville','f-contraintes','f-options','f-typeLame','f-lames','f-couleurBouchon','f-lamesDetail','f-decroche','f-pieds','f-alim','f-typeAlimentation','f-moteur','f-ref','f-remarques','f-autres','f-largeur','f-longueur','f-surface','f-hauteur','f-profondeur','f-notes-dims','f-telecommande','f-gestionSel','f-passesSangles','f-flasqueMurale','f-murCouleur','f-murHauteur','f-caillebotisChoix','f-caillebotisLargeur','f-caillebotisProfondeur','f-fixation','f-equerresRenfort','f-corniere6060','f-poutreCouleur','f-nombrePoutres','f-options-bache','f-bacheGamme','f-bacheTypeBassin','f-bacheEpaisseur','f-bacheBullesType','f-bacheColoris','f-bacheDecoupeAspi','f-bacheDecoupeEscalier','f-bacheBarreCharge','f-bacheOeilletsSupp','f-bacheEnrouleur','f-bachePansCoupes','f-bacheTransportZone'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const np=document.getElementById('f-need-pose');if(np)np.checked=false;;
   document.getElementById('f-structure').value='';
   document.getElementById('f-structure-bache').innerHTML = bacheStructureOptionsHtml('');
@@ -4921,6 +4936,7 @@ function saveDossier() {
     structure,options:document.getElementById(isBache ? 'f-options-bache' : 'f-options').value,
     lames:document.getElementById('f-lames').value,couleurBouchon:document.getElementById('f-couleurBouchon')?.value||'',
     lamesDetail:(() => { try { const v = document.getElementById('f-lamesDetail')?.value; return v ? JSON.parse(v) : null; } catch(e) { return null; } })(),
+    decroche: document.getElementById('f-decroche')?.value === '1',
     pieds:document.getElementById('f-pieds').value,
     escalier:document.getElementById('f-escalier')?.value||'',decoupe:document.getElementById('f-decoupe')?.value||'',
     typeLame:document.getElementById('f-typeLame')?.value||'',
