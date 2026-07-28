@@ -742,7 +742,7 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
     const doc    = { id: dosId, ref: docRef };
     const prev   = existing.data();
     const fields = ['client','tel','email','contact','adresse','cp','ville',
-                    'structure','lames','couleurBouchon','typeLame','lamesDetail','decroche','lameEscalier','pieds','alim','moteur','escalier','decoupe','options','remarques','autres','transport',
+                    'structure','lames','couleurBouchon','typeLame','pieds','alim','moteur','escalier','decoupe','options','remarques','autres','transport',
                     'largeur','longueur','revendeur','refCommande',
                     // Accessoires volet lus directement dans le PDF (cf. deriveChampsAccessoiresVoletDepuisPdf)
                     'telecommande','gestionSel','passesSangles','flasqueMurale','corniere6060','equerresRenfort',
@@ -752,6 +752,17 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
     for (const f of fields) {
       if (data[f]) update[f] = data[f];
     }
+    // lamesDetail/decroche/lameEscalier : dérivés à 100% du texte de CE PDF (contrairement à un
+    // champ contact, il n'y a pas de risque d'"extraction partielle" qui justifierait de ne jamais
+    // écraser une valeur existante) — donc TOUJOURS écrasés avec le résultat de ce parse, même
+    // redevenu vide/false. Sans ça, une commande révisée qui perd sa 2e ligne de lame (ex. le
+    // segment escalier/décroché retiré) garde pour toujours l'ancienne donnée en base : bug réel
+    // trouvé sur le dossier 120470 (2026-07-28) — le PDF dit maintenant "escalier non recouvert" et
+    // n'a plus qu'une ligne, mais lamesDetail gardait encore l'ancienne ligne d'escalier obsolète,
+    // le for ci-dessus ne l'ayant jamais écrasée puisque `data.lamesDetail` était devenu `undefined`.
+    update.lamesDetail = data.lamesDetail || null;
+    update.decroche = !!data.decroche;
+    update.lameEscalier = !!data.lameEscalier;
     // Estimée uniquement quand la valeur qu'on vient d'écrire ci-dessus vient réellement de
     // l'estimation (pas d'un champ déjà rempli à la main resté inchangé par le for ci-dessus).
     if (data.caillebotisLargeur && data.caillebotisLargeurEstimee) update.caillebotisLargeurEstimee = true;
