@@ -46,6 +46,16 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node megao-enrich-sync.js
 
+      # megao-enrich-sync.js réussit toujours, même si la VM Mégao (qui envoie
+      # les emails d'enrichissement) est éteinte — ce step détecte le SILENCE
+      # prolongé (incident réel du 2026-07-22 au 2026-07-28, découvert par
+      # hasard faute d'alerte) plutôt qu'un échec technique.
+      - name: Vérifier le silence de l'enrichissement Mégao (chien de garde VM)
+        working-directory: scripts
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node check-megao-enrich-watchdog.js
+
       - name: Lancer la sync Mégao
         working-directory: scripts
         env:

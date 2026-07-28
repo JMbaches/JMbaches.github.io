@@ -226,6 +226,18 @@ async function main() {
     const uids = await imap.search({ seen: false, subject: SUBJECT_MARKER }, { uid: true });
     console.log(`${uids.length} email(s) d'enrichissement trouvé(s)`);
 
+    // Horodatage "dernier signe de vie de la VM" — mis à jour dès qu'un email
+    // d'enrichissement est trouvé, indépendamment du succès du traitement de
+    // chaque dossier. Sert de base au chien de garde (check-megao-enrich-
+    // watchdog.js) : ce workflow réussit TOUJOURS même si la VM est éteinte
+    // (0 email trouvé n'est pas une erreur), donc "le job a réussi" ne prouve
+    // rien côté VM — ce timestamp est le seul signal fiable de silence prolongé.
+    if (uids.length > 0) {
+      await db.collection('config').doc('megaoEnrichWatchdog').set(
+        { lastSeenAt: new Date().toISOString() }, { merge: true }
+      );
+    }
+
     for (const uid of uids) {
       const msg    = await imap.fetchOne(uid, { source: true }, { uid: true });
       const parsed = await simpleParser(msg.source);
