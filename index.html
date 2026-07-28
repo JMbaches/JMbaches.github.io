@@ -4832,8 +4832,10 @@ function openNewDos() {
   document.getElementById('f-ht').value='';
   document.getElementById('f-ttc').value='';
   document.getElementById('f-devis-statut').value='en_attente';
-  const today=new Date().toISOString().split('T')[0];
-  document.getElementById('f-date-livraison').value=today;
+  // Date de livraison vide à la création : c'est une date FUTURE décidée par
+  // l'atelier/admin (délai de fabrication), jamais aujourd'hui — la remplir avec
+  // today ferait passer le dossier "en retard" dès le lendemain (dateLivraison < today).
+  document.getElementById('f-date-livraison').value='';
   const fDateFab = document.getElementById('f-date-fab');
   if (fDateFab) fDateFab.innerHTML = optionsSemainesFab('');
   const devisSection = document.getElementById('form-section-devis');
