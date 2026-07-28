@@ -4280,7 +4280,7 @@ function fillFormFromMegao(data) {
   set('f-longueur',  data.longueur);
   if (data.largeur || data.longueur) calcSurface();
   if (data.ht > 0) { set('f-ht', data.ht); calcTTC(); }
-  if (data.dateFrom) set('f-date-livraison', data.dateFrom);
+  if (data.dateFrom) set('f-date-from', data.dateFrom);
   // Structure : correspondance exacte (parseur retourne déjà l'option exacte)
   if (data.structure) {
     const sel = document.getElementById('f-structure');
