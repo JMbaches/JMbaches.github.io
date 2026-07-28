@@ -72,7 +72,13 @@ function parseMegaoText(text) {
   // même classe de bug que le fix longueur du 2026-07-23 (087d458), cette fois sur la couleur.
   // S'arrête juste avant le marqueur de quantité (UN/ML/M2/PCS + chiffre), qu'il soit collé sans
   // espace (BlancML, cas déjà géré) ou sur une ligne séparée (nouveau cas).
-  const lamM      = text.match(/^(LAM[A-Z0-9]+)\s*([A-Z][a-zÀ-ÿé][\s\S]*?)(?:UN|ML|M2|PCS)\s+[\d,]/im);
+  // Plusieurs lignes LAM possibles sur une même commande (2 longueurs différentes, ou PVC +
+  // Polycarbonate) — vu sur 12/130 commandes réelles (~9%, mesuré le 2026-07-28). Avant ce fix,
+  // seule la 1ère ligne était captée, les suivantes silencieusement perdues (aucune trace nulle
+  // part, ni fiche ni décompte stock). matchAll plutôt qu'un simple match, comme pour vrAllM plus
+  // haut (même classe de bug, même remède).
+  const lamAllM   = [...text.matchAll(/^(LAM[A-Z0-9]+)\s*([A-Z][a-zÀ-ÿé][\s\S]*?)(?:UN|ML|M2|PCS)\s+[\d,]/gim)];
+  const lamM      = lamAllM[0] || null;
   // Type de lame : le code produit distingue PVC (LAM…) et Polycarbonate (LAMPOL…)
   const typeLame  = lamM ? (/POL/i.test(lamM[1]) ? 'Polycarbonate' : 'PVC') : '';
   const trspM     = text.match(/^(TRSP[A-Z0-9]+)\s*([A-Z][a-zÀ-ÿé].+)/m);
@@ -97,28 +103,42 @@ function parseMegaoText(text) {
                  || (/tablier\s+seul/i.test(text) ? 'Tablier seul' : '');
   // Le marqueur de quantité n'est plus dans lamM[2] (exclu par la regex ci-dessus) — reste juste
   // à recoller les lignes wrappées en un seul texte (même nettoyage que le design des accessoires).
-  const lameRaw   = lamM ? lamM[2].replace(/\s*\n\s*/g, ' ').trim() : '';
-  const lameParenIdx = lameRaw.lastIndexOf(')');
-  let lames       = lameParenIdx >= 0 ? lameRaw.slice(lameParenIdx + 1).trim() : lameRaw;
-  // Couleur du bouchon (embout de lame) : motif "B. <couleur>" dans le texte Mégao (ex: "B. Noir"
-  // = Bouchon noir), distinct de la couleur de la lame elle-même — confirmé par l'utilisateur
-  // (2026-07-22), corrige une hypothèse erronée précédente qui lisait "B." comme "Bicolore".
-  const bouchonM  = lames.match(/\bB\.\s*([A-Za-zÀ-ÿ]+)\b\s*/i);
-  let couleurBouchon = bouchonM
-    ? (BOUCHON_LABELS[bouchonM[1].toUpperCase()] || (bouchonM[1].charAt(0).toUpperCase() + bouchonM[1].slice(1).toLowerCase()))
-    : '';
-  if (bouchonM) lames = (lames.slice(0, bouchonM.index) + lames.slice(bouchonM.index + bouchonM[0].length)).trim();
-  // "Noir fumé fond noir" est le nom CATALOGUE Mégao du polycarbonate noir opaque (vérifié sur
-  // plusieurs vrais BO, ex. dossiers 118437/119577/119782/119980) — pas une couleur distincte du
-  // "Noir" tout court choisi par le client. Simplifié en "Noir" (confirmé par l'utilisateur,
-  // 2026-07-28) : sinon la couleur affichée est inutilement verbeuse ET coloreurLameVersFinition
-  // (stock.js) ne matche jamais exactement "Noir", donc le décompte stock échouait en silence.
-  if (/noir\s*fum[ée]\s*fond\s*noir/i.test(lames)) lames = 'Noir';
-  // PVC : le bouchon est TOUJOURS de la même couleur que la lame (confirmé par l'utilisateur
-  // 2026-07-27) — jamais de ligne "B.<couleur>" séparée dans le PDF pour du PVC en pratique, donc
-  // couleurBouchon reste vide sans ce repli. Le Polycarbonate peut différer (ligne dédiée gérée
-  // ci-dessus quand présente) — pas de valeur par défaut à inventer pour le Poly.
-  if (!couleurBouchon && typeLame === 'PVC' && lames) couleurBouchon = lames;
+  // Dérive {type, couleur, couleurBouchon} pour UNE ligne LAM — factorisé pour être appliqué à
+  // chaque ligne trouvée (lamAllM), pas seulement la 1ère. Logique inchangée par rapport à avant
+  // ce fix (jointure des lignes wrappées, extraction bouchon, normalisation "Noir fumé fond noir",
+  // repli bouchon=lame pour le PVC), juste appliquée en boucle au lieu d'une seule fois.
+  function deriveLameInfo(m) {
+    const codeType = /POL/i.test(m[1]) ? 'Polycarbonate' : 'PVC';
+    const lameRaw = m[2].replace(/\s*\n\s*/g, ' ').trim();
+    const lameParenIdx = lameRaw.lastIndexOf(')');
+    let c = lameParenIdx >= 0 ? lameRaw.slice(lameParenIdx + 1).trim() : lameRaw;
+    // Couleur du bouchon (embout de lame) : motif "B. <couleur>" dans le texte Mégao (ex: "B. Noir"
+    // = Bouchon noir), distinct de la couleur de la lame elle-même — confirmé par l'utilisateur
+    // (2026-07-22), corrige une hypothèse erronée précédente qui lisait "B." comme "Bicolore".
+    const bM = c.match(/\bB\.\s*([A-Za-zÀ-ÿ]+)\b\s*/i);
+    let cb = bM ? (BOUCHON_LABELS[bM[1].toUpperCase()] || (bM[1].charAt(0).toUpperCase() + bM[1].slice(1).toLowerCase())) : '';
+    if (bM) c = (c.slice(0, bM.index) + c.slice(bM.index + bM[0].length)).trim();
+    // "Noir fumé fond noir" est le nom CATALOGUE Mégao du polycarbonate noir opaque (vérifié sur
+    // plusieurs vrais BO, ex. dossiers 118437/119577/119782/119980) — pas une couleur distincte du
+    // "Noir" tout court choisi par le client. Simplifié en "Noir" (confirmé par l'utilisateur,
+    // 2026-07-28) : sinon la couleur affichée est inutilement verbeuse ET coloreurLameVersFinition
+    // (stock.js) ne matche jamais exactement "Noir", donc le décompte stock échouait en silence.
+    if (/noir\s*fum[ée]\s*fond\s*noir/i.test(c)) c = 'Noir';
+    // PVC : le bouchon est TOUJOURS de la même couleur que la lame (confirmé par l'utilisateur
+    // 2026-07-27) — jamais de ligne "B.<couleur>" séparée dans le PDF pour du PVC en pratique, donc
+    // couleurBouchon reste vide sans ce repli. Le Polycarbonate peut différer (ligne dédiée gérée
+    // ci-dessus quand présente) — pas de valeur par défaut à inventer pour le Poly.
+    if (!cb && codeType === 'PVC' && c) cb = c;
+    return { type: codeType, couleur: c, couleurBouchon: cb };
+  }
+  const lameInfoAll = lamAllM.map(deriveLameInfo);
+  const lameInfoFirst = lameInfoAll[0] || { type: '', couleur: '', couleurBouchon: '' };
+  let lames = lameInfoFirst.couleur;
+  let couleurBouchon = lameInfoFirst.couleurBouchon;
+  // Lignes de lames SUPPLÉMENTAIRES (au-delà de la 1ère) — avant ce fix, silencieusement perdues.
+  // undefined pour les dossiers à une seule ligne (91% du parc réel mesuré), donc aucun impact sur
+  // le comportement existant (lames/typeLame/couleurBouchon = toujours la 1ère ligne, comme avant).
+  const lamesDetail = lameInfoAll.length > 1 ? lameInfoAll.map(li => ({ type: li.type, couleur: li.couleur })) : undefined;
 
   // Moteur : suffixe du code VR après le préfixe de structure (VRSIL80S → 80S)
   const moteurM = vrCode.match(/^VR(?:SUBT|SUB|MOUV|XTR|COF|SOL|SIL)([A-Z0-9]+)$/i);
@@ -230,6 +250,7 @@ function parseMegaoText(text) {
   return {
     ref, refCommande: ref, client, contact, tel, email, adresse, cp, ville,
     structure, lames, couleurBouchon, pieds, alim, moteur, typeLame, escalier, decoupe,
+    lamesDetail,
     options: '', remarques: '', autres: '', // options réellement alimenté via le spread ci-dessous
     largeur, longueur, revendeur,
     transport, ht, dateFrom, isVolet,
@@ -695,7 +716,7 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
     const doc    = { id: dosId, ref: docRef };
     const prev   = existing.data();
     const fields = ['client','tel','email','contact','adresse','cp','ville',
-                    'structure','lames','couleurBouchon','typeLame','pieds','alim','moteur','escalier','decoupe','options','remarques','autres','transport',
+                    'structure','lames','couleurBouchon','typeLame','lamesDetail','pieds','alim','moteur','escalier','decoupe','options','remarques','autres','transport',
                     'largeur','longueur','revendeur','refCommande',
                     // Accessoires volet lus directement dans le PDF (cf. deriveChampsAccessoiresVoletDepuisPdf)
                     'telecommande','gestionSel','passesSangles','flasqueMurale','corniere6060','equerresRenfort',
@@ -742,6 +763,7 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
       lames:       data.lames      || '',
       couleurBouchon: data.couleurBouchon || '',
       typeLame:    data.typeLame   || '',
+      lamesDetail: data.lamesDetail || null,
       pieds:       data.pieds      || '',
       alim:        data.alim       || '',
       moteur:      data.moteur     || '',
