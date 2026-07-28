@@ -3074,7 +3074,7 @@ function renderPageCommande(d, p) { p = p || {};
       </div>
     </div>
     <div class="fiche-grid c3">
-      <div class="fiche-cell"><div class="fiche-cell-label">Date commande</div><input value="${d.dateLivraison||''}" type="date" onchange="setDosField('dateLivraison',this.value)"></div>
+      <div class="fiche-cell"><div class="fiche-cell-label">Date commande</div><input value="${d.dateFrom||''}" type="date" onchange="setDosField('dateFrom',this.value)"></div>
       <div class="fiche-cell"><div class="fiche-cell-label">Semaine de fabrication souhaitée</div><select onchange="setDosField('dateFab',this.value)" title="Priorise ce dossier dans la file de l'atelier — plus tôt = traité plus tôt">${optionsSemainesFab(d.dateFab||'')}</select></div>
       <div class="fiche-cell"><div class="fiche-cell-label">Transport</div>
         <div class="transport-btns">
@@ -3314,7 +3314,7 @@ function renderPageCommandeBache(d, p) { p = p || {};
       </div>
     </div>
     <div class="fiche-grid c3">
-      <div class="fiche-cell"><div class="fiche-cell-label">Date commande</div><input value="${d.dateLivraison||''}" type="date" onchange="setDosField('dateLivraison',this.value)"></div>
+      <div class="fiche-cell"><div class="fiche-cell-label">Date commande</div><input value="${d.dateFrom||''}" type="date" onchange="setDosField('dateFrom',this.value)"></div>
       <div class="fiche-cell"><div class="fiche-cell-label">Semaine de fabrication souhaitée</div><select onchange="setDosField('dateFab',this.value)" title="Priorise ce dossier dans la file de l'atelier — plus tôt = traité plus tôt">${optionsSemainesFab(d.dateFab||'')}</select></div>
       <div class="fiche-cell"><div class="fiche-cell-label">Transport</div>
         <div class="transport-btns">
