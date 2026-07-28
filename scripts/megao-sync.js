@@ -741,28 +741,40 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
   if (existing.exists) {
     const doc    = { id: dosId, ref: docRef };
     const prev   = existing.data();
-    const fields = ['client','tel','email','contact','adresse','cp','ville',
-                    'structure','lames','couleurBouchon','typeLame','pieds','alim','moteur','escalier','decoupe','options','remarques','autres','transport',
-                    'largeur','longueur','revendeur','refCommande',
-                    // Accessoires volet lus directement dans le PDF (cf. deriveChampsAccessoiresVoletDepuisPdf)
-                    'telecommande','gestionSel','passesSangles','flasqueMurale','corniere6060','equerresRenfort',
-                    'murHauteur','murCouleur','poutreCouleur','nombrePoutres','caillebotisChoix','caillebotisProfondeur',
-                    'caillebotisLargeur','typeAlimentation'];
-    const update = {};
-    for (const f of fields) {
-      if (data[f]) update[f] = data[f];
-    }
-    // lamesDetail/decroche/lameEscalier : dérivés à 100% du texte de CE PDF (contrairement à un
-    // champ contact, il n'y a pas de risque d'"extraction partielle" qui justifierait de ne jamais
-    // écraser une valeur existante) — donc TOUJOURS écrasés avec le résultat de ce parse, même
-    // redevenu vide/false. Sans ça, une commande révisée qui perd sa 2e ligne de lame (ex. le
-    // segment escalier/décroché retiré) garde pour toujours l'ancienne donnée en base : bug réel
-    // trouvé sur le dossier 120470 (2026-07-28) — le PDF dit maintenant "escalier non recouvert" et
-    // n'a plus qu'une ligne, mais lamesDetail gardait encore l'ancienne ligne d'escalier obsolète,
-    // le for ci-dessus ne l'ayant jamais écrasée puisque `data.lamesDetail` était devenu `undefined`.
-    update.lamesDetail = data.lamesDetail || null;
-    update.decroche = !!data.decroche;
-    update.lameEscalier = !!data.lameEscalier;
+    // TOUS ces champs sont dérivés à 100% du texte du PDF de CETTE commande (chaque email traité
+    // est un document complet, jamais un correctif partiel — l'email est supprimé une fois traité,
+    // cf. imap.messageDelete plus bas, donc il n'y a pas de "nouvelle tentative sur les mêmes
+    // données" à ménager). Donc TOUJOURS écrasés avec le résultat de ce parse, même redevenu
+    // vide — pas de raison de garder une ancienne valeur si la commande a été révisée et ne la
+    // contient plus. Mêmes valeurs de repli que la branche de création plus bas, pour que rééditer
+    // un dossier existant se comporte comme en créer un nouveau à l'identique.
+    // Bug réel trouvé sur le dossier 120470 (2026-07-28) : le PDF dit maintenant "escalier non
+    // recouvert" et n'a plus qu'une ligne de lame, mais l'ancien code (qui n'écrasait un champ que
+    // s'il avait une nouvelle valeur non vide) gardait l'ancienne ligne d'escalier obsolète pour
+    // toujours dans `lamesDetail`.
+    // N'est PAS concerné par cette règle (logique séparée, volontairement différente) : `ht` (ne se
+    // met à jour que si jamais renseigné — protège un montant contre un recalcul silencieux) et
+    // `caillebotisLargeurEstimee`/`statut`/`needPose`/etc. (enrichis par d'autres process que le
+    // parse PDF, pas concernés par cette liste).
+    const update = {
+      client: data.client || '', tel: data.tel || '', email: data.email || '',
+      contact: data.contact || '', adresse: data.adresse || '', cp: data.cp || '', ville: data.ville || '',
+      structure: data.structure || '', lames: data.lames || '', couleurBouchon: data.couleurBouchon || '',
+      typeLame: data.typeLame || '', lamesDetail: data.lamesDetail || null,
+      decroche: !!data.decroche, lameEscalier: !!data.lameEscalier,
+      pieds: data.pieds || '', alim: data.alim || '', moteur: data.moteur || '',
+      escalier: data.escalier || '', decoupe: data.decoupe || '', options: data.options || '',
+      remarques: data.remarques || '', autres: data.autres || '', transport: data.transport || 'liv_pose',
+      largeur: data.largeur || '', longueur: data.longueur || '',
+      revendeur: data.revendeur || 'Client particulier', refCommande: data.ref,
+      telecommande: data.telecommande || '', gestionSel: data.gestionSel || '',
+      passesSangles: data.passesSangles || '', flasqueMurale: data.flasqueMurale || '',
+      corniere6060: data.corniere6060 || '', equerresRenfort: data.equerresRenfort || '',
+      murHauteur: data.murHauteur || '', murCouleur: data.murCouleur || '',
+      poutreCouleur: data.poutreCouleur || '', nombrePoutres: data.nombrePoutres || '',
+      caillebotisChoix: data.caillebotisChoix || '', caillebotisProfondeur: data.caillebotisProfondeur || '',
+      caillebotisLargeur: data.caillebotisLargeur || '', typeAlimentation: data.typeAlimentation || '',
+    };
     // Estimée uniquement quand la valeur qu'on vient d'écrire ci-dessus vient réellement de
     // l'estimation (pas d'un champ déjà rempli à la main resté inchangé par le for ci-dessus).
     if (data.caillebotisLargeur && data.caillebotisLargeurEstimee) update.caillebotisLargeurEstimee = true;
