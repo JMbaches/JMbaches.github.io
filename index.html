@@ -4456,6 +4456,10 @@ async function parseMegaoPDFLocal(file) {
     ? (BOUCHON_LABELS[bouchonM[1].toUpperCase()] || (bouchonM[1].charAt(0).toUpperCase() + bouchonM[1].slice(1).toLowerCase()))
     : '';
   if (bouchonM) lames = (lames.slice(0, bouchonM.index) + lames.slice(bouchonM.index + bouchonM[0].length)).trim();
+  // "Noir fumé fond noir" est le nom CATALOGUE Mégao du polycarbonate noir opaque — pas une
+  // couleur distincte du "Noir" tout court choisi par le client (même fix que megao-sync.js,
+  // confirmé par l'utilisateur 2026-07-28).
+  if (/noir\s*fum[ée]\s*fond\s*noir/i.test(lames)) lames = 'Noir';
   // PVC : le bouchon est TOUJOURS de la même couleur que la lame (confirmé par l'utilisateur
   // 2026-07-27) — jamais de ligne "B.<couleur>" séparée dans le PDF pour du PVC en pratique. Le
   // Polycarbonate peut différer (ligne dédiée gérée ci-dessus quand présente).
