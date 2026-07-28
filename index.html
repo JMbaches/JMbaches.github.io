@@ -3062,7 +3062,13 @@ ${d.autres?`<div class="box danger" style="margin-top:8px"><div class="box-label
 
 function renderPageCommande(d, p) { p = p || {};
   const tr=d.transport||'';
-  const STRUCTS=['Volet hors-sol Silver Roll','Volet hors-sol solaire Golden Roll','Volet hors-sol avec coffre','Volet hors-sol grand bassin X-Trem Roll','Volet déplaçable Mouv&Roll','Volet immergé Subwater','Volet immergé Subwater Total','SAV / réglage volet','Remplacement tablier / lames','Métrage / repérage'];
+  const STRUCTS=['Volet hors-sol Silver Roll','Volet hors-sol solaire Golden Roll','Volet hors-sol avec coffre','Volet hors-sol grand bassin X-Trem Roll','Volet déplaçable Mouv&Roll','Volet immergé Subwater','Volet immergé Subwater Total','SAV / réglage volet','Remplacement tablier / lames','Métrage / repérage','Tablier seul','Banc avec structure intégrée (bassin maxi 5mx10m)'];
+  // Si la structure réelle du dossier n'est dans AUCUNE des options ci-dessus (valeur imprévue,
+  // ex. saisie manuelle ou future variante Mégao), on l'ajoute quand même en tête de liste — sinon
+  // le <select> retombe silencieusement sur la 1ère option (aucun <option> "selected") et affiche
+  // un produit différent de celui de la liste des dossiers, qui lit d.structure brut (bug réel
+  // trouvé le 2026-07-28, ex. dossier 121063 "Tablier seul" affiché comme "Volet hors-sol Silver Roll").
+  const structOptions = (d.structure && !STRUCTS.includes(d.structure)) ? [d.structure, ...STRUCTS] : STRUCTS;
   return `<div class="card" style="margin-bottom:12px">
     <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">
       <div>
@@ -3089,7 +3095,7 @@ function renderPageCommande(d, p) { p = p || {};
     <div class="fiche-grid c3">
       <div class="fiche-cell"><div class="fiche-cell-label">Client</div><input value="${d.client||''}" onchange="setDosField('client',this.value)"></div>
       <div class="fiche-cell"><div class="fiche-cell-label">Revendeur</div><input value="${d.revendeur||''}" onchange="setDosField('revendeur',this.value)" placeholder="ex: ABATIK"></div>
-      <div class="fiche-cell"><div class="fiche-cell-label">Structure</div><select onchange="setDosField('structure',this.value);renderFiche();" style="background:transparent;border:none;padding:0;font-size:13px;font-weight:500">${STRUCTS.map(s=>`<option${d.structure===s?' selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="fiche-cell"><div class="fiche-cell-label">Structure</div><select onchange="setDosField('structure',this.value);renderFiche();" style="background:transparent;border:none;padding:0;font-size:13px;font-weight:500">${structOptions.map(s=>`<option${d.structure===s?' selected':''}>${s}</option>`).join('')}</select></div>
       <div class="fiche-cell"><div class="fiche-cell-label">Téléphone</div><input value="${d.tel||''}" onchange="setDosField('tel',this.value)"></div>
     </div>
     <div class="fiche-section">
