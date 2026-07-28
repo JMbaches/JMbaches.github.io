@@ -1389,9 +1389,9 @@ a:focus-visible, button:focus-visible,
 <div class="modal-overlay" id="modal-vue-fab">
   <div class="modal" style="max-width:900px;height:90vh;display:flex;flex-direction:column;padding:0;overflow:hidden">
     <div id="vf-content" style="flex:1;overflow-y:auto"></div>
-    <div class="modal-ft" style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <div class="modal-ft" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;row-gap:8px">
       <button class="btn btn-ghost" onclick="closeModal('modal-vue-fab')"><i class="ti ti-x"></i> Fermer</button>
-      <div id="vf-footer-btns"></div>
+      <div id="vf-footer-btns" style="display:flex;flex-wrap:wrap;gap:8px"></div>
     </div>
   </div>
 </div>

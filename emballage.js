@@ -226,12 +226,12 @@ function renderEmballageGrand() {
 
   mc.innerHTML = `
   <div id="toast-msg" class="toast-msg"></div>
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;row-gap:8px">
     <div style="font-size:21px;font-weight:700;color:var(--ink);letter-spacing:-.2px">
       <i class="ti ti-package" style="vertical-align:-3px;margin-right:9px;color:#92400E"></i>
       ${sorted.length} commande${sorted.length>1?'s':''} à emballer
     </div>
-    <div style="display:flex;align-items:center;gap:12px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;row-gap:8px">
       ${typeFilterSelectHtml('renderEmballageGrand')}
       <div style="font-size:14px;color:var(--ink-faint);text-transform:capitalize">${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</div>
       ${emballageOrder.length>0?`<button class="btn btn-ghost btn-sm" onclick="emballageOrder=[];renderEmballageGrand()" title="Remettre le tri automatique"><i class="ti ti-refresh"></i> Réinitialiser ordre</button>`:''}

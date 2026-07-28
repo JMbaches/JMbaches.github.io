@@ -172,9 +172,9 @@ function renderAtelier() {
             <i class="ti ti-clock" style="color:#92400E;font-size:14px"></i>
             <span style="font-size:12px;color:#92400E">Fiche de fabrication en attente</span>
           </div>`}
-          <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border)">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding-top:8px;border-top:1px solid var(--border);flex-wrap:wrap;row-gap:6px">
             <span style="font-size:12px;color:var(--ink-faint)"><i class="ti ti-calendar" style="font-size:12px;vertical-align:-1px"></i> ${fmt(d.dateLivraison)}${d.dateFab?` <span style="color:var(--teal);font-weight:600" title="Semaine de fabrication souhaitée">· Sem. ${numeroSemaineISO(new Date(d.dateFab+'T00:00:00'))}</span>`:''}</span>
-            <div style="display:flex;gap:6px">
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
               <button class="btn btn-ghost btn-sm" onclick="openVueFab('${d.id}')"><i class="ti ti-eye"></i> Voir</button>
               ${!isBacheDossier(d)?`<button class="btn btn-ghost btn-sm" onclick="openFicheAccessoire('${d.id}')" title="Fiche accessoire"><i class="ti ti-puzzle"></i></button>`:''}
               ${atelierPosteActionsHtml(d,'sm')}
@@ -248,9 +248,9 @@ function renderAtelierGrand() {
     return;
   }
   mc.innerHTML = `
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;row-gap:8px">
     <div style="font-size:21px;font-weight:700;color:var(--ink);letter-spacing:-.2px"><i class="ti ti-tool" style="vertical-align:-3px;margin-right:9px;color:var(--accent)"></i>${sorted.length} commande${sorted.length>1?'s':''} en production</div>
-    <div style="display:flex;align-items:center;gap:12px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;row-gap:8px">
       ${typeFilterSelectHtml('renderAtelierGrand')}
       <div style="font-size:14px;color:var(--ink-faint);text-transform:capitalize">${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</div>
       ${atelierOrder.length>0?`<button class="btn btn-ghost btn-sm" onclick="atelierOrder=[];renderAtelierGrand()" title="Remettre le tri automatique"><i class="ti ti-refresh"></i> Réinitialiser ordre</button>`:''}
