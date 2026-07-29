@@ -146,8 +146,11 @@ async function saveUser() {
       // Envoyer l'email de définition de mot de passe
       await firebase.auth().sendPasswordResetEmail(email);
 
-      // Ajouter localement
-      users.push({ id: uid, ...profileData });
+      // Ne pas pousser localement dans `users` : le listener onSnapshot('users') (voir
+      // firebase-layer-v3.js) reconstruit déjà tout le tableau à partir de Firestore, souvent
+      // avant même d'arriver ici (l'écriture ci-dessus est quasi instantanée alors que
+      // sendPasswordResetEmail est un aller-retour réseau plus lent). Pousser en plus créait un
+      // doublon transitoire du même compte dans la liste affichée.
       saveData(); closeModal('modal-user'); buildLoginSelect(); renderUsers();
       showToast(`✓ Compte créé — email de définition de mot de passe envoyé à ${email}`);
     } catch(e) {
