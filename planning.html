@@ -837,8 +837,10 @@ async function planWeek(poolInput, depot, workday, days, poseDaysISO, closures =
           // proche, pas seulement à distance strictement égale. Le plafond (AGE_BONUS_MAX_KM) évite un
           // détour absurde même pour une commande très ancienne. Sans orderDate → bonus nul (traité
           // comme le plus récent).
-          const AGE_BONUS_KM_PER_DAY = 1;   // 1 km de bonus perçu par jour d'ancienneté...
-          const AGE_BONUS_MAX_KM = 60;      // ...plafonné à 60 km
+          // Renforcé le 2026-07-29 (1→2 km/jour, 60→120 km) : le premier réglage sous-priorisait
+          // trop les dossiers anciens dès qu'un concurrent un peu plus proche se présentait.
+          const AGE_BONUS_KM_PER_DAY = 2;   // 2 km de bonus perçu par jour d'ancienneté...
+          const AGE_BONUS_MAX_KM = 120;     // ...plafonné à 120 km (atteint au même délai, 60j)
           const ageBonusKm = (orderDate) => {
             if (!orderDate) return 0;
             const days = (Date.now() - Date.parse(orderDate + 'T00:00:00')) / 86400000;
