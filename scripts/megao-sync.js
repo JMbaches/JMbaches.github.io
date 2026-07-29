@@ -139,7 +139,11 @@ function parseMegaoText(text) {
     // "Noir" tout court choisi par le client. Simplifié en "Noir" (confirmé par l'utilisateur,
     // 2026-07-28) : sinon la couleur affichée est inutilement verbeuse ET coloreurLameVersFinition
     // (stock.js) ne matche jamais exactement "Noir", donc le décompte stock échouait en silence.
-    if (/noir\s*fum[ée]\s*fond\s*noir/i.test(c)) c = 'Noir';
+    // Leading "Noir" rendu optionnel : quand un marqueur bouchon "B. Noir" précède immédiatement
+    // ce même mot (ex. dossier 114893, "B.  Noir\nfumé fond noir"), l'extraction bouchon ci-dessus
+    // l'a déjà consommé pour couleurBouchon, ne laissant que "fumé fond noir" — sans ce repli la
+    // normalisation ne se déclenchait plus et la couleur lame restait tronquée/fausse.
+    if (/(?:noir\s*)?fum[ée]\s*fond\s*noir/i.test(c)) c = 'Noir';
     // PVC : le bouchon est TOUJOURS de la même couleur que la lame (confirmé par l'utilisateur
     // 2026-07-27) — jamais de ligne "B.<couleur>" séparée dans le PDF pour du PVC en pratique, donc
     // couleurBouchon reste vide sans ce repli. Le Polycarbonate peut différer (ligne dédiée gérée
