@@ -128,6 +128,9 @@ function _envoyerDossiersPlanning(frame) {
     fixedTime:        '',
     notBefore:        d.dateFrom     || '',
     notAfter:         d.dateLivraison|| '',
+    // d.dateFrom = date de commande réelle extraite du PDF Mégao (voir megao-sync.js) — réutilisée
+    // ici pour activer la priorisation par ancienneté de Planning IA, jusqu'ici jamais alimentée.
+    orderDate:        d.dateFrom     || '',
     linkId: '', linkRole: 0, linkGap: 0, archived: false,
   }));
   const binomes = _binomesConfig.length > 0
