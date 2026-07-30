@@ -121,6 +121,25 @@ est obtenu.
   donc un `saveData()` appelé pendant un test persiste réellement la mutation
   (piège vécu, a fuité sur un compte réel une fois — corrigé immédiatement).
 
+### 7. Secteurs de pose JM / Azenco / Akena (`poseSecteur`, 2026-07-30)
+Qui pose un dossier **livraison+pose** dépend du **département du chantier** (2 premiers chiffres
+du CP), d'après la carte POSE'N CO fournie par l'utilisateur. Fonction `classePose(transport, cp,
+structure)` — **dupliquée** dans `index.html` ET `scripts/megao-sync.js` (pas de module partagé ;
+les 2 listes `JM_POSE_DEPTS`/`AKENA_POSE_DEPTS` doivent rester identiques aux 2 endroits) :
+- **Immergé** (`structure` contient "immerg") → **toujours JM**, quel que soit le département.
+- Département dans `JM_POSE_DEPTS` (35 dépts) → pose **JM** : `needPose=true`, `poseSecteur='jm'`, va au planning.
+- Département dans `AKENA_POSE_DEPTS` (`02 59 60 62 76 80`) → JM ne pose pas : transport **rétrogradé en `'livraison'`**, aucune pose.
+- Tout autre département → pose **Azenco** (sous-traitance) : `poseSecteur='azenco'`, `needPose=false`, PAS au planning, badge orange "Pose Azenco — indicatif".
+- `poseSecteur` vaut `'jm'` | `'azenco'` | `''`. Le planning n'inclut un dossier que via
+  `poseComptePlanning(d)` = `(needPose || transport==='liv_pose') && poseSecteur!=='azenco'` — le
+  `|| transport==='liv_pose'` est un filet pour les vieux dossiers sans `needPose`, mais exclut
+  explicitement Azenco (sinon un liv_pose Azenco serait rattrapé à tort). Utilisé partout où le
+  planning filtre (planning.js + garde-fou d'envoi atelier).
+- Recalculé automatiquement : à l'import Mégao (upsertDossier volet) et à chaque changement de
+  `transport`/`cp`/`structure` dans la fiche (setDosField). Les bâches ne sont jamais concernées.
+- Le statut de livraison (expédié→livré→**posé**) reste inchangé pour une pose Azenco (transport
+  reste `'liv_pose'`, la pose a bien lieu, mais par Azenco) — seul le PLANNING JM l'exclut.
+
 ## Ce qui est délibérément désactivé / limité (ne pas "corriger" sans en parler)
 - `config/stock.decompteAutoActif = false` en prod : le décompte auto de stock à
   l'entrée en production est câblé et testé bout en bout, mais **désactivé

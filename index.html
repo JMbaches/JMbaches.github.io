@@ -2734,6 +2734,9 @@ function renderDos() {
               ${d.refCommande?`<span style="font-size:10px;font-family:'JetBrains Mono',monospace;background:var(--accent-light);color:var(--accent-deep);padding:1px 6px;border-radius:3px">${highlight(d.refCommande, globalSearchQuery)}</span>`:''}
               ${(()=>{const w=users.filter(u=>u.id!==currentUser.id&&u.presenceDos===d.id);return w.length?`<span title="${w.map(u=>u.prenom||u.name).join(', ')} sur ce dossier" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:1px 6px;border-radius:3px;background:#FEF3C7;color:#92400E"><i class="ti ti-eye" style="font-size:10px"></i>${w.map(u=>(u.prenom||u.name||'?')[0]).join('')}</span>`:''})()}
               ${(()=>{
+                // Pose sous-traitée Azenco : PAS à planifier par JM — badge indicatif à la place des
+                // badges de planification (prioritaire sur eux, testé avant needPose/liv_pose).
+                if (d.poseSecteur==='azenco') return `<span title="Pose sous-traitée à Azenco — non planifiée par JM" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:1px 6px;border-radius:3px;background:#FEF0E4;color:#8A3A0A"><i class="ti ti-info-circle" style="font-size:10px"></i> Pose Azenco</span>`;
                 if (!(d.needPose||d.transport==='liv_pose')) return '';
                 if (d.poseValideClient) return `<span title="Pose validée avec le client" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:1px 6px;border-radius:3px;background:#D1FAE5;color:#065F46"><i class="ti ti-circle-check" style="font-size:10px"></i> Planifié</span>`;
                 if (d.poseDate) return `<span title="Date proposée, en attente de validation client" style="display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:1px 6px;border-radius:3px;background:#FEF3C7;color:#92400E"><i class="ti ti-phone" style="font-size:10px"></i> En attente validation</span>`;
@@ -3115,6 +3118,7 @@ function renderPageCommande(d, p) { p = p || {};
           <button class="tb${tr==='livraison'?' on':''}" onclick="setDosField('transport','livraison');renderFiche()">Livraison</button>
         </div>
         ${(tr==='liv_pose'||tr==='livraison') ? `<input value="${escapeHtml(d.transporteur||'')}" onchange="setDosField('transporteur',this.value)" placeholder="Transporteur (ex: GLS, XPO...)" style="margin-top:6px;font-size:12px">` : ''}
+        ${poseSecteurBadgeHtml(d)}
       </div>
       ${canSeeCA()?`<div class="fiche-cell"><div class="fiche-cell-label">Montant TTC</div><div style="font-size:14px;font-weight:600;color:var(--accent)">${ttc(d).toLocaleString('fr-FR',{minimumFractionDigits:2})} €</div></div>`:'<div class="fiche-cell"></div>'}
     </div>
@@ -3306,7 +3310,9 @@ function renderPageCommande(d, p) { p = p || {};
         d.statut==='attente_planif'
         ? `<span style="font-size:12px;color:var(--teal)"><i class="ti ti-calendar-time"></i> En attente d'une date de pose — reviendra automatiquement en Saisie une fois planifié</span>`
         : `
-        ${!d.needPose?`<button class="btn btn-ghost btn-sm" onclick="envoyerAuPlanning()" title="Envoie ce dossier dans l'onglet Planning pour planifier la pose, sans attendre la fabrication"><i class="ti ti-calendar-plus"></i> Envoyer au planning</button>`:`<span class="badge" style="color:var(--teal);border-color:var(--teal)" title="Ce dossier apparaît dans l'onglet Planning"><i class="ti ti-calendar-check"></i> Dans le planning</span>`}
+        ${d.poseSecteur==='azenco'
+          ? `<span class="badge" style="color:#8A3A0A;border-color:#F4B183" title="Pose sous-traitée à Azenco — JM ne la planifie pas (à titre indicatif)"><i class="ti ti-info-circle"></i> Pose Azenco (non planifiée)</span>`
+          : (!d.needPose?`<button class="btn btn-ghost btn-sm" onclick="envoyerAuPlanning()" title="Envoie ce dossier dans l'onglet Planning pour planifier la pose, sans attendre la fabrication"><i class="ti ti-calendar-plus"></i> Envoyer au planning</button>`:`<span class="badge" style="color:var(--teal);border-color:var(--teal)" title="Ce dossier apparaît dans l'onglet Planning"><i class="ti ti-calendar-check"></i> Dans le planning</span>`)}
         ${['verif','pret_atelier'].includes(d.statut)?`<button class="btn btn-ghost btn-sm" onclick="renvoyerSaisie()" style="color:var(--amber);border-color:rgba(217,119,6,.3)" title="Renvoyer en saisie admin"><i class="ti ti-arrow-back-up"></i> Renvoyer en saisie</button>`:''}
         <button class="btn btn-primary" onclick="avancerFiche()"><i class="ti ti-arrow-right"></i> ${getNextBtnLabel(d)}</button>
       `):`<span class="badge b-expedie">Dossier clôturé</span>`}
@@ -3540,6 +3546,47 @@ function renderPageExp(d, p) { p = p || {};
 /* ================================================================
    ACTIONS FICHE
    ================================================================ */
+// ── Secteurs de pose (carte POSE'N CO "Secteurs poseurs", confirmée par l'utilisateur 2026-07-30) ──
+// Détermine QUI fait la pose d'un dossier livraison+pose, à partir du département du chantier :
+//   • JM  → pose faite par JM → planifiée (needPose=true, apparaît dans l'onglet Planning)
+//   • Azenco (sous-traitance) → PAS planifiée par JM, juste signalée par un badge "Pose Azenco"
+//   • Akena → JM ne fait/planifie rien : le dossier repasse en "Livraison seule" (aucune pose)
+// Règle prioritaire : un volet IMMERGÉ est TOUJOURS posé par JM, quel que soit le département.
+// ⚠ Ces 2 listes DOIVENT rester identiques à celles de scripts/megao-sync.js (script Node séparé,
+// pas de module partagé) — toute correction se fait aux DEUX endroits.
+const JM_POSE_DEPTS = new Set(['01','04','05','06','07','08','12','13','21','25','26','30','34','38','39','42','43','48','51','52','54','55','57','63','67','68','69','70','71','73','74','83','84','88','90']);
+const AKENA_POSE_DEPTS = new Set(['02','59','60','62','76','80']);
+function _deptFromCp(cp){ return String(cp||'').replace(/\D/g,'').slice(0,2); }
+function _estImmerge(structure){ return /immerg/i.test(structure||''); }
+// Retourne { transport, needPose, poseSecteur } ajustés selon le secteur de pose. Ne s'applique
+// qu'aux dossiers dont le transport de départ est 'liv_pose' ; sinon renvoie le transport tel quel
+// (enlvt/livraison n'ont jamais de pose). Département inconnu (CP pas encore saisi) → traité comme
+// JM par défaut (planifié, sans badge) pour ne pas oublier une pose ; reclassé dès que le CP est
+// renseigné.
+function classePose(transport, cp, structure){
+  if(transport!=='liv_pose') return { transport, needPose:false, poseSecteur:'' };
+  if(_estImmerge(structure)) return { transport:'liv_pose', needPose:true, poseSecteur:'jm' };
+  const dept=_deptFromCp(cp);
+  if(dept.length<2) return { transport:'liv_pose', needPose:true, poseSecteur:'' };
+  if(JM_POSE_DEPTS.has(dept)) return { transport:'liv_pose', needPose:true, poseSecteur:'jm' };
+  if(AKENA_POSE_DEPTS.has(dept)) return { transport:'livraison', needPose:false, poseSecteur:'' };
+  return { transport:'liv_pose', needPose:false, poseSecteur:'azenco' };
+}
+// Badge orange "Pose Azenco — indicatif" : affiché quand la pose est sous-traitée à Azenco (donc
+// PAS planifiée par JM). Rien à afficher pour une pose JM (c'est le cas normal, déjà dans le
+// planning) ni pour une livraison/enlèvement.
+function poseSecteurBadgeHtml(d){
+  if(d.poseSecteur!=='azenco') return '';
+  return `<div style="margin-top:6px"><span style="display:inline-flex;align-items:center;gap:4px;background:#FEF0E4;color:#8A3A0A;border:1px solid #F4B183;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600" title="Pose sous-traitée à Azenco — non planifiée par JM, à titre indicatif"><i class="ti ti-info-circle" style="font-size:11px"></i> Pose Azenco — indicatif</span></div>`;
+}
+// Un dossier compte pour le planning des poses JM ssi une pose est prévue ET qu'elle n'est PAS
+// sous-traitée à Azenco. Le "|| transport==='liv_pose'" reste un filet pour les vieux dossiers dont
+// needPose n'aurait pas été calculé ; on exclut explicitement poseSecteur==='azenco' (needPose est
+// déjà faux pour ces poses, mais le filet transport les rattraperait à tort dans le planning).
+// Défini ici (script inline index.html) mais aussi appelé depuis planning.js — même scope global.
+function poseComptePlanning(d){
+  return (d.needPose || d.transport==='liv_pose') && d.poseSecteur!=='azenco';
+}
 function setDosField(k,v) {
   const d=dossiers.find(x=>x.id===currentDosId);
   if(!d) return;
@@ -3549,14 +3596,22 @@ function setDosField(k,v) {
   // Une correction manuelle de la largeur caillebotis (estimée depuis la largeur du bassin par
   // megao-sync.js) vaut confirmation — elle n'est plus une simple estimation à vérifier.
   if(k==='caillebotisLargeur' && old!==v) d.caillebotisLargeurEstimee=false;
-  // Quand transport change
-  if(k==='transport') {
-    if(v==='liv_pose') {
-      d.needPose=true;
-    } else if(old==='liv_pose') {
-      // Retrait de liv+pose : nettoyer planning
-      d.needPose=false; d.poseDate=''; d.poseurId='';
-      // Supprimer de l'app planning si ouverte
+  // Reclassement du secteur de pose : déclenché par tout changement qui l'influence — le transport
+  // lui-même, le département (CP) ou la structure (immergé = toujours JM). Voir classePose ci-dessus.
+  if(k==='transport' || k==='cp' || k==='structure') {
+    const wasNeedPose=d.needPose;
+    const cls=classePose(d.transport, d.cp, d.structure);
+    // Secteur Akena : une commande liv+pose est rétrogradée en "Livraison seule" (JM ne pose pas).
+    if(k==='transport' && d.transport==='liv_pose' && cls.transport==='livraison') {
+      d.transport='livraison';
+      if(typeof showToast==='function') showToast('Secteur Akena — passé en « Livraison seule » (pose non suivie par JM)');
+    }
+    d.needPose=cls.needPose;
+    d.poseSecteur=cls.poseSecteur;
+    // Sortie du planning (needPose repasse à faux alors qu'il était vrai) : nettoyer la pose planifiée
+    // et retirer le dossier de l'app planning embarquée si elle est ouverte (comportement existant).
+    if(wasNeedPose && !d.needPose) {
+      d.poseDate=''; d.poseurId='';
       const frame=document.getElementById('planning-ia-frame');
       if(frame&&frame.contentWindow) frame.contentWindow.postMessage({type:'JMBACH_REMOVE',ids:[d.id]},'*');
     }
@@ -3661,7 +3716,7 @@ function fileSize(b) {
 // ---- PORTE-DOCUMENT ----
 let _pdDosId=null, _pdFolder='Général';
 
-const PD_DEFAULT_FOLDERS=['Bon de commande','Facture','Fiche de côte','Fiche de fabrication'];
+const PD_DEFAULT_FOLDERS=['Bon de commande','Facture','Fiche de côte','Fiche de fabrication','Photos'];
 
 function openPorteDoc(dosId){
   _pdDosId=dosId; _pdFolder='Général';
@@ -3676,6 +3731,14 @@ function openPorteDoc(dosId){
     // 'Fiche de fabrication' (même famille de bug que le doublon 'Général', cf. b8e7995).
     d.docFolders=[...new Set(d.docFolders.map(f=>f==='Fiche produit'?'Fiche de fabrication':f))];
     (d.documents||[]).forEach(doc=>{ if(doc.folder==='Fiche produit') doc.folder='Fiche de fabrication'; });
+    saveData();
+  }
+  if(d.docFolders && !d.docFolders.includes('Photos')){
+    // Migration : sous-dossier "Photos" ajouté au porte-document le 2026-07-30 — les dossiers
+    // créés avant cette date ont un docFolders déjà peuplé (donc pas régénéré depuis
+    // PD_DEFAULT_FOLDERS ci-dessus) et n'ont jamais reçu ce nouveau dossier. Ajouté à l'ouverture,
+    // même principe que la migration "Fiche de fabrication" plus bas.
+    d.docFolders.push('Photos');
     saveData();
   }
   if(d.docFolders && d.docFolders.includes('Général')){
@@ -3911,6 +3974,9 @@ async function envoyerAuPlanning() {
   // pour les bâches, cf. renderPageCommandeBache), mais on vérifie aussi ici en prévision d'un
   // futur appel direct.
   if (isBacheDossier(d)) return;
+  // Pose sous-traitée Azenco : JM ne la planifie pas — le bouton "Envoyer au planning" est masqué
+  // pour ces dossiers (cf. avance-bar), garde-fou ici aussi contre tout appel direct.
+  if (d.poseSecteur === 'azenco') { showToast('Pose Azenco — non planifiée par JM'); return; }
   d.needPose = true;
   if (d.statut === 'nouveau' || d.statut === 'admin') {
     await changerStatutDossier(d, 'attente_planif', 'envoyé au planning');
@@ -4184,7 +4250,10 @@ async function changerStatutDossier(d, newStatut, logSuffix) {
   // remplacé, les deux peuvent coexister sans conflit).
   const STATUTS_AMONT_PRET_ATELIER = ['nouveau', 'admin', 'verif', 'attente_planif'];
   if (prev === 'pret_atelier' && newStatut !== 'pret_atelier' && !STATUTS_AMONT_PRET_ATELIER.includes(newStatut)) {
-    if ((d.needPose || d.transport === 'liv_pose') && !d.poseValideClient) {
+    // Une pose Azenco n'est pas planifiée/validée par JM (poseComptePlanning l'exclut) — elle ne
+    // doit donc PAS bloquer l'envoi à l'atelier en attendant une validation client qui n'arrivera
+    // jamais côté JM. Seules les poses JM à planifier sont concernées par ce garde-fou.
+    if (poseComptePlanning(d) && !d.poseValideClient) {
       showToast(`⚠ Impossible d'avancer : la pose n'a pas encore été validée avec le client`);
       return false;
     }

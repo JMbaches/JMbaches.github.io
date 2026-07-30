@@ -105,7 +105,7 @@ window.addEventListener('message', async (e) => {
 
 function _envoyerDossiersPlanning(frame) {
   if (!frame || !frame.contentWindow) return;
-  const liste = dossiersScope().filter(d => d.transport === 'liv_pose' || d.needPose);
+  const liste = dossiersScope().filter(d => poseComptePlanning(d));
   const chantiers = liste.map(d => ({
     id:               d.id,
     externalId:       d.id,
@@ -182,7 +182,7 @@ function recupererPlanningIA() {
 function renderPlanningAvance() {
   const mc = document.getElementById('main-content');
   mc.style.padding = '0';
-  const liste = dossiersScope().filter(d => d.transport === 'liv_pose' || d.needPose);
+  const liste = dossiersScope().filter(d => poseComptePlanning(d));
   mc.innerHTML = `
     <div id="planning-sync-bar" style="display:flex;align-items:center;gap:8px;padding:6px 16px;background:var(--surface);border-bottom:1px solid var(--border);font-size:12px;color:var(--ink-soft)">
       <i class="ti ti-loader" style="animation:spin .8s linear infinite"></i> Connexion à l'app planning…
@@ -209,8 +209,8 @@ function _planningAvanceAutoSync() {
 function renderPlanning() {
   const mc = document.getElementById('main-content');
   const dossiersP = dossiersScope();
-  const aPlaner = dossiersP.filter(d => (d.needPose || d.transport === 'liv_pose') && !d.poseDate);
-  const planifies = dossiersP.filter(d => (d.needPose || d.transport === 'liv_pose') && d.poseDate);
+  const aPlaner = dossiersP.filter(d => poseComptePlanning(d) && !d.poseDate);
+  const planifies = dossiersP.filter(d => poseComptePlanning(d) && d.poseDate);
   // "Validé client" = date confirmée par téléphone dans Planning IA (bouton "Valider avec le
   // client"), pas juste proposée — seuls ceux-là font revenir le dossier en Saisie admin (cf.
   // JMBACH_UPDATE plus haut). Distingués ici pour que la personne au planning sache qui appeler.
@@ -277,7 +277,7 @@ function renderEdtWeek(container) {
 
   const cols = days.map((d,i) => {
     const iso = toISODate(d);
-    const dosJour = dossiersEdt.filter(x => (x.needPose || x.transport === 'liv_pose') && x.poseDate === iso);
+    const dosJour = dossiersEdt.filter(x => poseComptePlanning(x) && x.poseDate === iso);
     const todayCls = isToday(d) ? ' today' : '';
     return `
       <div class="edt-head-cell${todayCls}">
@@ -289,7 +289,7 @@ function renderEdtWeek(container) {
 
   const cells = days.map(d => {
     const iso = toISODate(d);
-    const dosJour = dossiersEdt.filter(x => (x.needPose || x.transport === 'liv_pose') && x.poseDate === iso);
+    const dosJour = dossiersEdt.filter(x => poseComptePlanning(x) && x.poseDate === iso);
     const todayCls = isToday(d) ? ' today' : '';
     return `
       <div class="edt-col${todayCls}" id="edtcol-${iso}"

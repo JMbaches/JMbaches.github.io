@@ -24,7 +24,7 @@ const bucket = admin.storage().bucket();
 // ⚠ Doit rester aligné avec PD_DEFAULT_FOLDERS dans index.html (sans 'Général', que
 // l'affichage préfixe déjà — cf. fix doublon b8e7995 — et avec le nom actuel
 // 'Fiche de fabrication', renommé depuis 'Fiche produit' en 418b702).
-const PD_DEFAULT_FOLDERS = ['Bon de commande', 'Facture', 'Fiche de côte', 'Fiche de fabrication'];
+const PD_DEFAULT_FOLDERS = ['Bon de commande', 'Facture', 'Fiche de côte', 'Fiche de fabrication', 'Photos'];
 
 // Codes abrégés Mégao pour la couleur de bouchon (motif "B.<code>", ex. "B.TRSP" = Bouchon
 // Transparent), quand ce n'est pas déjà un nom de couleur en clair (ex. "B.Noir") — confirmé par
@@ -728,9 +728,30 @@ function refToId(ref) {
   return (ref || '').replace(/\//g, '-').replace(/\s+/g, '_').trim();
 }
 
+// ─── Secteurs de pose (carte POSE'N CO, confirmée par l'utilisateur 2026-07-30) ──────────────
+// Détermine qui pose un dossier livraison+pose selon le département du chantier :
+//   JM → pose planifiée par JM (needPose=true) ; Azenco → sous-traitée, non planifiée (badge
+//   poseSecteur='azenco') ; Akena → JM ne pose pas, la commande repasse en "Livraison seule".
+// Un volet IMMERGÉ est toujours posé par JM, quel que soit le département.
+// ⚠ Ces 2 listes DOIVENT rester identiques à celles de index.html (JM_POSE_DEPTS / AKENA_POSE_DEPTS)
+// — dupliquées ici car ce script Node ne partage pas de module avec le front. Corriger aux 2 endroits.
+const JM_POSE_DEPTS = new Set(['01','04','05','06','07','08','12','13','21','25','26','30','34','38','39','42','43','48','51','52','54','55','57','63','67','68','69','70','71','73','74','83','84','88','90']);
+const AKENA_POSE_DEPTS = new Set(['02','59','60','62','76','80']);
+function classePose(transport, cp, structure) {
+  if (transport !== 'liv_pose') return { transport, needPose: false, poseSecteur: '' };
+  if (/immerg/i.test(structure || '')) return { transport: 'liv_pose', needPose: true, poseSecteur: 'jm' };
+  const dept = String(cp || '').replace(/\D/g, '').slice(0, 2);
+  if (dept.length < 2) return { transport: 'liv_pose', needPose: true, poseSecteur: '' };
+  if (JM_POSE_DEPTS.has(dept)) return { transport: 'liv_pose', needPose: true, poseSecteur: 'jm' };
+  if (AKENA_POSE_DEPTS.has(dept)) return { transport: 'livraison', needPose: false, poseSecteur: '' };
+  return { transport: 'liv_pose', needPose: false, poseSecteur: 'azenco' };
+}
+
 // ─── Créer ou mettre à jour le dossier ───────────────────────────────────────
 async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
   if (!data.ref) { console.warn('Ref absente — dossier ignoré'); return; }
+  // Classement du secteur de pose (JM planifie / Azenco sous-traite / Akena → livraison seule).
+  const pose = classePose(data.transport || 'liv_pose', data.cp, data.structure);
 
   const nowDate  = new Date();
   const now      = nowDate.toISOString();
@@ -768,7 +789,8 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
       decroche: !!data.decroche, lameEscalier: !!data.lameEscalier,
       pieds: data.pieds || '', alim: data.alim || '', moteur: data.moteur || '',
       escalier: data.escalier || '', decoupe: data.decoupe || '', options: data.options || '',
-      remarques: data.remarques || '', autres: data.autres || '', transport: data.transport || 'liv_pose',
+      remarques: data.remarques || '', autres: data.autres || '',
+      transport: pose.transport, needPose: pose.needPose, poseSecteur: pose.poseSecteur,
       largeur: data.largeur || '', longueur: data.longueur || '',
       revendeur: data.revendeur || 'Client particulier', refCommande: data.ref,
       telecommande: data.telecommande || '', gestionSel: data.gestionSel || '',
@@ -835,7 +857,8 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
       // création (bug confirmé par l'utilisateur, 2026-07-22 : d.dateLivraison < today déclenche
       // le badge retard, cf. index.html ligne ~2257). À définir manuellement (f-date-livraison).
       dateLivraison: '',
-      transport:   data.transport  || 'liv_pose',
+      transport:   pose.transport,
+      poseSecteur: pose.poseSecteur,
       remarques:   data.remarques  || '',
       autres:      data.autres     || '',
       largeur:     data.largeur    || '',
@@ -861,7 +884,7 @@ async function upsertDossier(data, pdfBuffer = null, pdfFilename = '') {
       caillebotisLargeur: data.caillebotisLargeur || '',
       caillebotisLargeurEstimee: !!(data.caillebotisLargeur && data.caillebotisLargeurEstimee),
       typeAlimentation: data.typeAlimentation || '',
-      needPose:    data.transport  === 'liv_pose',
+      needPose:    pose.needPose,
       poseDate:    '',
       statut:      'admin',
       createdBy:   'megao-sync',
