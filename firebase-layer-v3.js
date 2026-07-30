@@ -176,52 +176,85 @@ function stopFirestoreListeners() {
   window._chatMessages = [];
 }
 
+function _isPlainObject(v) {
+  return v !== null && typeof v === 'object' &&
+    (Object.getPrototypeOf(v) === Object.prototype || Object.getPrototypeOf(v) === null);
+}
+// Empêche une valeur invalide pour Firestore (NaN, Infinity, undefined — typiquement un champ
+// numérique mal saisi en cours d'édition) de faire échouer TOUT un lot d'écriture : avant ce fix
+// (2026-07-30), un seul dossier dans cet état bloquait silencieusement la sauvegarde de TOUS les
+// autres (lot Firestore atomique — un seul document fautif suffit à faire échouer tout le
+// batch.commit()). On omet la valeur fautive (elle n'est simplement pas écrite ce tour-ci ;
+// merge:true laisse l'ancienne valeur Firestore intacte) plutôt que de tout bloquer. Les
+// sentinelles Firestore (FieldValue.serverTimestamp(), Timestamp lus du serveur...) ne sont pas
+// des objets "plain" — elles traversent sans être touchées.
+function sanitizeForFirestore(value) {
+  if (Array.isArray(value)) {
+    return value.map(item => {
+      const v = sanitizeForFirestore(item);
+      return v === undefined ? null : v;
+    });
+  }
+  if (_isPlainObject(value)) {
+    const out = {};
+    for (const k of Object.keys(value)) {
+      const v = sanitizeForFirestore(value[k]);
+      if (v !== undefined) out[k] = v;
+    }
+    return out;
+  }
+  if (typeof value === 'number' && !Number.isFinite(value)) return undefined;
+  return value;
+}
+
+// Écrit `items` par lots dans `collection`. Si un lot entier échoue (permission, valeur refusée
+// malgré la sanitisation, etc.), on le rejoue document par document pour isoler le(s) fautif(s) —
+// un seul document invalide ne doit plus jamais empêcher la sauvegarde de tous les autres.
+async function _commitResilient(collection, items, getId, toDoc, label) {
+  const CHUNK = 50;
+  let hasError = false;
+  for (let i = 0; i < items.length; i += CHUNK) {
+    const slice = items.slice(i, i + CHUNK);
+    try {
+      const batch = _db.batch();
+      slice.forEach(it => batch.set(_db.collection(collection).doc(getId(it)), sanitizeForFirestore(toDoc(it)), { merge: true }));
+      await batch.commit();
+    } catch (e) {
+      for (const it of slice) {
+        try {
+          await _db.collection(collection).doc(getId(it)).set(sanitizeForFirestore(toDoc(it)), { merge: true });
+        } catch (e2) {
+          // Users : permission refusée pour un compte donné reste silencieuse (comportement
+          // pré-existant), pas une erreur bloquante pour les autres documents.
+          if (label !== 'users' || e2.code !== 'permission-denied') {
+            console.error(`Firestore saveData [${label}] error sur ${getId(it)}:`, e2);
+            hasError = true;
+          }
+        }
+      }
+    }
+  }
+  return hasError;
+}
+
 window.saveData = async function saveData() {
   if (!_firestoreReady) return;
   let hasError = false;
 
-  // 1. Dossiers
-  try {
-    const batch = _db.batch();
-    dossiers.forEach(d => {
-      const data = { ...d }; delete data.id;
-      batch.set(_db.collection('dossiers').doc(d.id), data, { merge: true });
-    });
-    await batch.commit();
-  } catch (e) {
-    console.error('Firestore saveData [dossiers] error:', e);
-    hasError = true;
-  }
+  hasError = await _commitResilient(
+    'dossiers', dossiers, d => d.id,
+    d => { const data = { ...d }; delete data.id; return data; }, 'dossiers'
+  ) || hasError;
 
-  // 2. Users — uniquement si l'utilisateur a le droit d'écrire
-  try {
-    const batch = _db.batch();
-    users.forEach(u => {
-      const data = { ...u }; delete data.id;
-      delete data.pwd;
-      batch.set(_db.collection('users').doc(u.id), data, { merge: true });
-    });
-    await batch.commit();
-  } catch (e) {
-    // Permission refusée pour cet utilisateur — silencieux, pas une erreur bloquante
-    if (e.code !== 'permission-denied') {
-      console.error('Firestore saveData [users] error:', e);
-      hasError = true;
-    }
-  }
+  hasError = await _commitResilient(
+    'users', users, u => u.id,
+    u => { const data = { ...u }; delete data.id; delete data.pwd; return data; }, 'users'
+  ) || hasError;
 
-  // 3. Notifications
-  try {
-    const batch = _db.batch();
-    notifications.forEach(n => {
-      const data = { ...n }; delete data.id;
-      batch.set(_db.collection('notifications').doc(String(n.id)), data, { merge: true });
-    });
-    await batch.commit();
-  } catch (e) {
-    console.error('Firestore saveData [notifications] error:', e);
-    hasError = true;
-  }
+  hasError = await _commitResilient(
+    'notifications', notifications, n => String(n.id),
+    n => { const data = { ...n }; delete data.id; return data; }, 'notifications'
+  ) || hasError;
 
   showSaveIndicator(hasError ? 'error' : 'ok');
 };

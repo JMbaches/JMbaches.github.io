@@ -62,6 +62,16 @@ en batch (avec `merge:true`). C'est la convention établie dans tout le code
 en la remplaçant par des writes ciblés sans en parler, ça casserait le pattern
 partout ailleurs.
 
+Depuis le 2026-07-30 (`_commitResilient`/`sanitizeForFirestore`, firebase-layer-v3.js), ce n'est
+plus un lot Firestore unique et atomique pour toute la collection : les écritures sont chunkées
+(50 documents/lot) et chaque valeur invalide pour Firestore (NaN, Infinity, undefined — typiquement
+un champ numérique mal saisi en cours d'édition côté client) est omise avant écriture au lieu de
+faire échouer tout le lot. Un lot qui échoue quand même est rejoué document par document pour
+isoler le(s) fautif(s). Avant ce fix, UN SEUL dossier dans un état invalide bloquait
+silencieusement la sauvegarde de tous les autres — symptôme rapporté par l'utilisateur comme
+"erreur de sauvegarde" apparemment liée à une action sans rapport (ex. création de compte, qui
+déclenche le même `saveData()` global).
+
 ### 3. Piège du Service Worker en test
 L'app est une PWA (`sw.js`). En test, le SW peut servir du JS en cache **malgré
 un rechargement de page** — plusieurs bugs ont semblé "ne pas se corriger" alors
@@ -95,8 +105,16 @@ est obtenu.
 
 ### 6. Restrictions & rôles
 - `u.perimetre` (`tous`/`volet`/`bache`) restreint les dossiers visibles par compte.
-- `u.posteAtelier` (`tablier`/`accessoires`/`axes`) restreint la vue Atelier volets
-  à un poste précis (découpage du travail en 3 postes séparés).
+- `u.posteAtelier` (`accessoires`/`tablier_pvc`/`tablier_poly`/`axes`) restreint la vue Atelier
+  volets à un poste précis. Ordre de fabrication (réordonné + tablier scindé PVC/Poly le
+  2026-07-30, sur demande utilisateur) : **Accessoires → Tablier (PVC ou Poly selon
+  `d.typeLame`) → Axes → Emballage** — entièrement séquentiel, un seul poste actionnable à la
+  fois par dossier (voir `atelierEtapeActuelle()`/`atelierTablierFait()` dans atelier.js — cette
+  dernière reste compatible avec les dossiers déjà en production avant ce changement via l'ancien
+  champ `d.atelierPoste==='accessoires_axes'`, sans migration de données). Un compte affecté à un
+  poste ne peut plus glisser-déposer les cartes du grand écran atelier pour réordonner la file
+  (ce n'est pas sa décision) — seuls les comptes en vue d'ensemble (`posteAtelier` vide,
+  direction/admin) le peuvent (`atelierPeutReorganiser()`).
 - Toujours vérifier après un test de permissions que `currentUser.posteAtelier`
   (ou tout champ muté "juste pour tester") n'a pas été persisté par erreur sur
   un vrai compte : `currentUser` EST le même objet que l'entrée dans `users[]`,

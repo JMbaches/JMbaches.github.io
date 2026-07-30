@@ -69,14 +69,28 @@ function rerenderAtelierCourant() {
   if (currentTab === 'atelier_grand') renderAtelierGrand();
   else renderAtelier();
 }
+// Découpage de l'atelier volets en 3 postes SÉQUENTIELS (réordonné 2026-07-30, sur demande de
+// l'utilisateur) : Accessoires → Tablier (PVC ou Poly, deux stations physiques distinctes selon
+// d.typeLame) → Axes → Emballage. Bâches : inchangé (un seul bouton "Fabriqué").
+// atelierTablierFait() reste compatible avec les dossiers déjà en production AVANT ce
+// réordonnancement (ancien champ d.atelierPoste==='accessoires_axes' signifiait "tablier déjà
+// fait" sous l'ancien flux Tablier→Accessoires+Axes) — pas de migration de données nécessaire,
+// la bascule se fait par simple dérivation à la lecture.
+function atelierTablierFait(d) {
+  return d.atelierTablierFait === true || d.atelierPoste === 'accessoires_axes';
+}
+function atelierEtapeActuelle(d) {
+  if (!d.atelierAccessoiresFait) return 'accessoires';
+  if (!atelierTablierFait(d)) return 'tablier';
+  if (!d.atelierAxeFait) return 'axes';
+  return 'fait';
+}
 // Boutons d'action "poste atelier" pour un dossier en production, à la place du bouton "Fabriqué"
-// unique — bâches : inchangé (un seul bouton "Fabriqué"). Volets : 3 postes successifs (voir
-// changerStatutDossier et dossierVisibleAuPoste dans index.html) :
-//   1. Tablier — un seul bouton, fait passer le dossier à l'étape "accessoires_axes".
-//   2. Accessoires + Axes — deux boutons indépendants (un compte "vue d'ensemble" voit les deux,
-//      un compte affecté à un seul de ces 2 postes ne voit que le sien) ; une fois un des deux
-//      fait, il est remplacé par un badge "✓" (le dossier disparaît complètement de la vue d'un
-//      compte affecté à ce poste une fois sa part faite, cf. dossierVisibleAuPoste).
+// unique — bâches : inchangé. Volets : un seul bouton actionnable à la fois (l'étape courante,
+// voir atelierEtapeActuelle) ; masqué si le compte connecté est affecté à un autre poste que celui
+// de l'étape courante (dossierVisibleAuPoste, index.html, filtre déjà le dossier hors de la vue
+// dans ce cas — cette 2e vérification protège aussi les vues qui n'appliquent pas ce filtre, ex.
+// modales ouvertes directement).
 // `onclickPrefix` (optionnel) : JS à exécuter AVANT l'action (ex. fermer une modale), comme le
 // faisait déjà le bouton "Fabriqué" d'origine dans les modales (closeModal(...);avancerDos(...)).
 function atelierPosteActionsHtml(d, size, onclickPrefix) {
@@ -89,61 +103,49 @@ function atelierPosteActionsHtml(d, size, onclickPrefix) {
       : '';
   }
   if (!can('adv_prod')) return '';
-  const etape = d.atelierPoste || 'tablier';
   const poste = currentUser && currentUser.posteAtelier;
+  const etape = atelierEtapeActuelle(d);
+  if (etape === 'accessoires') {
+    if (poste && poste !== 'accessoires') return '';
+    return `<button class="${btnClass}" style="${btnStyle}" onclick="${onclickPrefix}terminerPosteAccessoires('${d.id}',event)"><i class="ti ti-check"></i> Accessoires prêts</button>`;
+  }
   if (etape === 'tablier') {
-    if (poste && poste !== 'tablier') return '';
+    const posteAttendu = d.typeLame === 'Polycarbonate' ? 'tablier_poly' : 'tablier_pvc';
+    if (poste && poste !== posteAttendu) return '';
     return `<button class="${btnClass}" style="${btnStyle}" onclick="${onclickPrefix}terminerPosteTablier('${d.id}',event)"><i class="ti ti-check"></i> Tablier fabriqué</button>`;
   }
-  const doneBadge = label => `<span style="font-size:12px;color:var(--green);font-weight:600;display:flex;align-items:center;gap:4px"><i class="ti ti-circle-check"></i> ${label}</span>`;
-  let html = '';
-  if (!poste || poste === 'accessoires') {
-    html += d.atelierAccessoiresFait
-      ? doneBadge('Accessoires')
-      : `<button class="${btnClass}" style="${btnStyle}" onclick="${onclickPrefix}terminerPosteAccessoires('${d.id}',event)"><i class="ti ti-check"></i> Accessoires prêts</button>`;
+  if (etape === 'axes') {
+    if (poste && poste !== 'axes') return '';
+    return `<button class="${btnClass}" style="${btnStyle}" onclick="${onclickPrefix}terminerPosteAxe('${d.id}',event)"><i class="ti ti-check"></i> Axe prêt</button>`;
   }
-  if (!poste || poste === 'axes') {
-    html += d.atelierAxeFait
-      ? doneBadge('Axe')
-      : `<button class="${btnClass}" style="${btnStyle}" onclick="${onclickPrefix}terminerPosteAxe('${d.id}',event)"><i class="ti ti-check"></i> Axe prêt</button>`;
-  }
-  return html;
-}
-async function terminerPosteTablier(dosId, e) {
-  if (e) e.stopPropagation();
-  const d = dossiers.find(x => x.id === dosId); if (!d || isBacheDossier(d)) return;
-  d.atelierPoste = 'accessoires_axes';
-  logHistory(d.id, 'statut', `Atelier — tablier fabriqué, envoyé aux postes accessoires + axes`);
-  saveData();
-  showToast(`✓ Tablier fabriqué — ${d.client}`);
-  rerenderAtelierCourant();
+  return '';
 }
 async function terminerPosteAccessoires(dosId, e) {
   if (e) e.stopPropagation();
   const d = dossiers.find(x => x.id === dosId); if (!d || isBacheDossier(d)) return;
   d.atelierAccessoiresFait = true;
-  logHistory(d.id, 'statut', `Atelier — poste accessoires validé`);
-  if (d.atelierAxeFait) {
-    await changerStatutDossier(d, 'emballage', '(atelier — dernier poste : accessoires)');
-    showToast(`✓ Accessoires prêts — ${d.client} envoyé en emballage`);
-  } else {
-    showToast(`✓ Accessoires prêts — ${d.client}`);
-  }
+  logHistory(d.id, 'statut', `Atelier — poste accessoires validé, envoyé au poste tablier`);
   saveData();
+  showToast(`✓ Accessoires prêts — ${d.client}`);
+  rerenderAtelierCourant();
+}
+async function terminerPosteTablier(dosId, e) {
+  if (e) e.stopPropagation();
+  const d = dossiers.find(x => x.id === dosId); if (!d || isBacheDossier(d)) return;
+  d.atelierTablierFait = true;
+  logHistory(d.id, 'statut', `Atelier — tablier fabriqué, envoyé au poste axes`);
+  saveData();
+  showToast(`✓ Tablier fabriqué — ${d.client}`);
   rerenderAtelierCourant();
 }
 async function terminerPosteAxe(dosId, e) {
   if (e) e.stopPropagation();
   const d = dossiers.find(x => x.id === dosId); if (!d || isBacheDossier(d)) return;
   d.atelierAxeFait = true;
-  logHistory(d.id, 'statut', `Atelier — poste axes validé`);
-  if (d.atelierAccessoiresFait) {
-    await changerStatutDossier(d, 'emballage', '(atelier — dernier poste : axes)');
-    showToast(`✓ Axe prêt — ${d.client} envoyé en emballage`);
-  } else {
-    showToast(`✓ Axe prêt — ${d.client}`);
-  }
+  logHistory(d.id, 'statut', `Atelier — poste axes validé — dernier poste, envoi en emballage`);
+  await changerStatutDossier(d, 'emballage', '(atelier — dernier poste : axes)');
   saveData();
+  showToast(`✓ Axe prêt — ${d.client} envoyé en emballage`);
   rerenderAtelierCourant();
 }
 function renderAtelier() {
@@ -210,7 +212,16 @@ function getSortedProd() {
 let atelierDragId = null;
 let atelierDragOverId = null;
 
+// Réorganiser l'ordre de fabrication n'est pas une décision des comptes affectés à un poste
+// précis (accessoires/tablier/axes) — seuls les comptes en vue d'ensemble (posteAtelier vide,
+// direction/admin) peuvent glisser-déposer les cartes du grand écran (2026-07-30). Double
+// vérification : renderAtelierGrand() n'attache déjà les attributs draggable/ondrag* que dans ce
+// cas, mais ces fonctions restent défensives si jamais appelées autrement.
+function atelierPeutReorganiser() {
+  return !(currentUser && currentUser.posteAtelier);
+}
 function atelierDragStart(e, id) {
+  if (!atelierPeutReorganiser()) return;
   atelierDragId = id;
   e.dataTransfer.effectAllowed = 'move';
   setTimeout(() => { const el = document.getElementById('atelier-card-'+id); if(el) el.style.opacity = '0.4'; }, 0);
@@ -220,6 +231,7 @@ function atelierDragEnd(e, id) {
   document.querySelectorAll('.atelier-card').forEach(c => c.classList.remove('atelier-drag-over'));
 }
 function atelierDragOver(e, id) {
+  if (!atelierPeutReorganiser()) return;
   e.preventDefault();
   if (id === atelierDragId) return;
   document.querySelectorAll('.atelier-card').forEach(c => c.classList.remove('atelier-drag-over'));
@@ -227,6 +239,7 @@ function atelierDragOver(e, id) {
   atelierDragOverId = id;
 }
 function atelierDrop(e, id) {
+  if (!atelierPeutReorganiser()) return;
   e.preventDefault();
   if (!atelierDragId || atelierDragId === id) return;
   const sorted = getSortedProd().map(d => d.id);
@@ -242,6 +255,7 @@ function atelierDrop(e, id) {
 
 function renderAtelierGrand() {
   const sorted = getSortedProd();
+  const peutReorganiser = atelierPeutReorganiser();
   const mc = document.getElementById('main-content');
   if (!sorted.length) {
     mc.innerHTML = `<div style="display:flex;justify-content:flex-end;margin-bottom:8px">${typeFilterSelectHtml('renderAtelierGrand')}</div><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:420px;gap:18px"><div style="width:88px;height:88px;border-radius:50%;background:var(--green-light);display:flex;align-items:center;justify-content:center"><i class="ti ti-mood-happy" style="font-size:44px;color:var(--green)"></i></div><div style="font-size:22px;color:var(--ink-soft);font-weight:600">Rien à fabriquer pour le moment</div><div style="font-size:14px;color:var(--ink-faint)">Les commandes en production apparaîtront ici</div></div>`;
@@ -253,14 +267,19 @@ function renderAtelierGrand() {
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;row-gap:8px">
       ${typeFilterSelectHtml('renderAtelierGrand')}
       <div style="font-size:14px;color:var(--ink-faint);text-transform:capitalize">${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</div>
-      ${atelierOrder.length>0?`<button class="btn btn-ghost btn-sm" onclick="atelierOrder=[];renderAtelierGrand()" title="Remettre le tri automatique"><i class="ti ti-refresh"></i> Réinitialiser ordre</button>`:''}
+      ${peutReorganiser && atelierOrder.length>0?`<button class="btn btn-ghost btn-sm" onclick="atelierOrder=[];renderAtelierGrand()" title="Remettre le tri automatique"><i class="ti ti-refresh"></i> Réinitialiser ordre</button>`:''}
     </div>
   </div>
   <div style="font-size:12px;color:var(--ink-faint);margin-bottom:20px;display:flex;align-items:center;gap:6px">
+    ${peutReorganiser ? `
     <i class="ti ti-drag-drop" style="font-size:13px"></i>
     ${atelierOrder.length>0
       ? `<span style="color:var(--accent);font-weight:600">Ordre manuel activé</span> — glissez les cartes pour réorganiser`
       : `Tri auto : <strong style="color:var(--red)">URGENT</strong> en tête, puis par date de livraison — glissez pour réorganiser`}
+    ` : `
+    <i class="ti ti-arrow-up-circle" style="font-size:13px"></i>
+    Tri auto : <strong style="color:var(--red)">URGENT</strong> en tête, puis par date de livraison — l'ordre est fixé par l'admin
+    `}
   </div>
   <div class="stagger" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:18px">
     ${sorted.map((d, idx) => {
@@ -276,12 +295,12 @@ function renderAtelierGrand() {
       const retard = d.dateLivraison && d.dateLivraison < new Date().toISOString().split('T')[0];
       const barColor = pct===100?'var(--green)':pct>50?'var(--amber)':'var(--accent)';
       return `<div id="atelier-card-${d.id}" class="atelier-card daily-card${urg?' is-urgent':''}"
-        draggable="true"
+        ${peutReorganiser ? `draggable="true"
         ondragstart="atelierDragStart(event,'${d.id}')"
         ondragend="atelierDragEnd(event,'${d.id}')"
         ondragover="atelierDragOver(event,'${d.id}')"
-        ondrop="atelierDrop(event,'${d.id}')"
-        style="cursor:grab${urg?';border-color:#F09595':''}">
+        ondrop="atelierDrop(event,'${d.id}')"` : ''}
+        style="${peutReorganiser?'cursor:grab':''}${urg?';border-color:#F09595':''}">
         <div style="padding:15px 18px 13px;background:${urg?'var(--red-light)':'var(--bg)'};border-bottom:1px solid ${urg?'#F4CFCF':'var(--border)'}">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
             <div style="display:flex;align-items:center;gap:9px">
@@ -290,7 +309,7 @@ function renderAtelierGrand() {
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               ${urg?`<span style="background:var(--red);color:#fff;font-size:11px;font-weight:700;padding:3px 11px;border-radius:3px;box-shadow:var(--shadow-xs)"><i class="ti ti-alert-triangle" style="font-size:11px;vertical-align:-1px"></i> URGENT</span>`:''}
-              <i class="ti ti-grip-vertical drag-handle" title="Glisser pour réorganiser"></i>
+              ${peutReorganiser ? `<i class="ti ti-grip-vertical drag-handle" title="Glisser pour réorganiser"></i>` : ''}
             </div>
           </div>
           <div style="font-size:22px;font-weight:700;color:var(--ink);margin-bottom:2px;letter-spacing:-.3px">${d.client}</div>
