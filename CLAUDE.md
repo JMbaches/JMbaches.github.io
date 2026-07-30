@@ -147,6 +147,17 @@ les 2 listes `JM_POSE_DEPTS`/`AKENA_POSE_DEPTS` doivent rester identiques aux 2 
 - `caillebotisLargeur` est **estimée** depuis la largeur du bassin (~5% de risque
   d'erreur accepté sciemment) — la vraie valeur vient des fiches fab/côte.
 - Fixation béton/coque : non automatisable (aucun code Mégao fiable), laissé de côté.
+- Flasque murale Silver Roll (code Mégao `ACVRFLASQMUR`, 213 occurrences réelles) : la réf
+  stock `Flasque de fixation murale` existe (`aluminium.csv` legacy, jamais migrée en tant que
+  telle vers Firestore à vérifier), mais **aucune fonction de l'ancienne app Stock.exe ne la
+  décrémentait** — automatiser ça serait une décision nouvelle, pas un portage. Sa désignation
+  dit "remplace un pied de la structure" : décompter 1 pied de moins en plus n'est pas tranché.
+  En attente de clarification JM avant d'écrire quoi que ce soit.
+- Équerre poutre/mur "pose sur arase" (code Mégao `ACVREQUPOUTR`, 897 occurrences réelles,
+  volume élevé) : **aucune réf stock au nom correspondant** dans le catalogue legacy (seules
+  "Equerre de flasque/poutre bassin béton/coque" et "Equerre de renfort telescopique" existent,
+  aucune ne correspond). Bloqué tant que JM n'a pas confirmé sous quel nom stock ranger cet
+  accessoire — ne pas deviner un mapping.
 - ~28 anciens dossiers ont `typeLame` vide : identifiés, backfill volontairement
   pas fait (décision de s'arrêter là).
 - 7 dossiers réels (sur 185) sans bon de commande dans le porte-document,

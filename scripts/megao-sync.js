@@ -60,10 +60,23 @@ function parseMegaoText(text) {
   // 42% des commandes réelles) — matchAll plutôt qu'un simple match, sinon la première ligne VR
   // rencontrée (parfois un escalier ou une découpe, pas la structure) écrase le vrai type de
   // volet. VRES*/VRDEC* explicitement exclus de la recherche de la ligne "structure".
-  const vrAllM    = [...text.matchAll(/^(VR[A-Z0-9<>]+)\s*([A-Z][a-zÀ-ÿé].+)/gm)];
+  // [\s\S]*? + unité/quantité capturées (groupes 3/4) : même fix que lamAllM plus bas — avant ce
+  // jour, `.+` ne traversait pas un saut de ligne (désignation VRES/VRDEC coupée en deux par
+  // pdf-parse aurait perdu sa fin en silence, même classe de bug que le fix couleur/longueur des
+  // lames) ET la quantité était explicitement effacée par cleanDesig (`.*$` après le marqueur),
+  // avec un risque de dédoublonnage silencieux : 2 lignes de désignation identique mais de
+  // quantités différentes (ex. 2x "Escalier roman 3m") fusionnaient en une seule dans le Set.
+  const vrAllM    = [...text.matchAll(/^(VR[A-Z0-9<>]+)\s*([A-Z][a-zÀ-ÿé][\s\S]*?)(UN|ML|M2|PCS)\s+([\d,]+)/gm)];
   const isAccessoireVR = code => /^VRES|^VRDEC/.test(code);
   const vrM       = vrAllM.find(m => !isAccessoireVR(m[1])) || null;
-  const cleanDesig = m => m[2].replace(/\s*(UN|ML|M2|PCS)\s+.*$/i, '').trim();
+  // Quantité réintégrée dans le texte (pas juste effacée) : "(×N)" si N≠1, comme la convention
+  // déjà utilisée pour les accessoires (cf. affichage porte-document `l.qte`). d.escalier/d.decoupe
+  // restent des champs texte libre édités à la main dans la fiche — pas de tableau structuré séparé.
+  const cleanDesig = m => {
+    const design = m[2].replace(/\s*\n\s*/g, ' ').trim();
+    const qte = parseFloat(m[4].replace(',', '.'));
+    return qte && qte !== 1 ? `${design} (×${qte})` : design;
+  };
   const escalier  = [...new Set(vrAllM.filter(m => /^VRES/.test(m[1])).map(cleanDesig))].join(' ; ');
   const decoupe   = [...new Set(vrAllM.filter(m => /^VRDEC/.test(m[1])).map(cleanDesig))].join(' ; ');
   // [\s\S]*? (pas .+) pour spanner un retour à la ligne PDF quand la couleur/finition est
@@ -77,7 +90,19 @@ function parseMegaoText(text) {
   // seule la 1ère ligne était captée, les suivantes silencieusement perdues (aucune trace nulle
   // part, ni fiche ni décompte stock). matchAll plutôt qu'un simple match, comme pour vrAllM plus
   // haut (même classe de bug, même remède).
-  const lamAllM   = [...text.matchAll(/^(LAM[A-Z0-9]+)\s*([A-Z][a-zÀ-ÿé][\s\S]*?)(?:UN|ML|M2|PCS)\s+[\d,]/gim)];
+  // Unité + quantité capturées (groupes 3/4, non-capturants avant) pour dériver une longueur PAR
+  // LIGNE (voir deriveLameInfo) — jusqu'ici seule une longueur GLOBALE (somme de toutes les
+  // lignes, cf. `longueur` plus bas) existait, perdue dès qu'il y a plusieurs lignes de lames
+  // (décroché/escalier séparé/2 matières). Ne change pas ce que le motif matche, juste ce qui est
+  // capturé.
+  // Flag /i retiré (2026-07-30) : rendait `[a-zÀ-ÿé]` insensible à la casse, donc équivalent à
+  // `[A-Z]` — cassait la détection de frontière code/désignation dans des cas construits (ex.
+  // "LAMPOL4(le ml)PolyBleu" se coupait en "LAMP"/"OL4(le ml)PolyBleu", le "L" de "OL4" satisfaisant
+  // à tort le test "2e lettre en minuscule"). Vérifié sans risque sur du vrai texte pdf-parse (5
+  // PDF réels téléchargés) : le mot juste après le code y est toujours un vrai Title Case
+  // ("LAMPOL4Lames polycarbonate..."), donc AUCUN dossier réel n'a été touché par ce bug latent —
+  // corrigé par prudence, pas de régression (codes/UN/ML/M2/PCS toujours en majuscules en pratique).
+  const lamAllM   = [...text.matchAll(/^(LAM[A-Z0-9]+)\s*([A-Z][a-zÀ-ÿé][\s\S]*?)(UN|ML|M2|PCS)\s+([\d,]+)/gm)];
   // Type de lame (dérivé plus bas, une fois la ligne canonique choisie parmi lamAllM — voir
   // lameInfoFirst) : le code produit distingue PVC (LAM…) et Polycarbonate (LAMPOL…), mais le
   // segment "DECROCHE" (petit morceau de tablier pour un bassin avec décroché, cf. deriveLameInfo)
@@ -88,7 +113,7 @@ function parseMegaoText(text) {
   const enlevM    = text.match(/^(ENLEV[A-Z0-9]+)/im);
   const JM_COVER_DEPTS = new Set(['01','04','05','06','07','08','12','13','21','25','26','30','34','38','39','42','43','48','51','52','54','55','57','63','67','68','69','70','71','73','74','83','84','88','90']);
   // Structure : correspondance avec les options du select de l'app
-  const vrDesig = vrM ? vrM[2].replace(/\s*(UN|ML|M2|PCS)\s+.*$/i, '').trim() : '';
+  const vrDesig = vrM ? vrM[2].replace(/\s*\n\s*/g, ' ').trim() : '';
   const vrCode  = vrM ? vrM[1] : '';
   const vrText  = (vrCode + ' ' + vrDesig).toLowerCase();
   const STRUCT_MAP = [
@@ -149,7 +174,10 @@ function parseMegaoText(text) {
     // couleurBouchon reste vide sans ce repli. Le Polycarbonate peut différer (ligne dédiée gérée
     // ci-dessus quand présente) — pas de valeur par défaut à inventer pour le Poly.
     if (!cb && codeType === 'PVC' && c) cb = c;
-    return { type: codeType, couleur: c, couleurBouchon: cb, decroche, lameEscalier };
+    // Longueur PAR LIGNE (pas la somme globale) : seulement quand l'unité est ML (une ligne UN/M2/
+    // PCS — rare, ex. lames d'escalier vendues à l'unité — n'a pas de longueur en mètres à en tirer).
+    const longueur = m[3] && m[3].toUpperCase() === 'ML' ? m[4].replace(',', '.') : '';
+    return { type: codeType, couleur: c, couleurBouchon: cb, decroche, lameEscalier, longueur };
   }
   const lameInfoAll = lamAllM.map(deriveLameInfo);
   // Ligne canonique = la 1ère ligne qui n'est ni décroché ni escalier s'il y en a une, sinon la
@@ -168,7 +196,17 @@ function parseMegaoText(text) {
   // Lignes de lames SUPPLÉMENTAIRES (au-delà de la 1ère) — avant ce fix, silencieusement perdues.
   // undefined pour les dossiers à une seule ligne (91% du parc réel mesuré), donc aucun impact sur
   // le comportement existant (lames/typeLame/couleurBouchon = toujours la 1ère ligne, comme avant).
-  const lamesDetail = lameInfoAll.length > 1 ? lameInfoAll.map(li => ({ type: li.type, couleur: li.couleur })) : undefined;
+  // couleurBouchon/decroche/lameEscalier/longueur ajoutés le 2026-07-30 : deriveLameInfo les
+  // calculait déjà pour CHAQUE ligne, seule la 1ère (via lameInfoFirst/decroche/lameEscalier
+  // globaux ci-dessus) les exposait — les lignes supplémentaires ne gardaient que type/couleur,
+  // perdant l'essentiel de ce qui rendait cette ligne "spéciale" en premier lieu (ex. impossible de
+  // savoir QUELLE ligne était le décroché une fois au-delà de la 1ère). Même forme que
+  // `lignesLames`/`ligneLameHtml` côté saisie manuelle (index.html) pour rester compatible avec
+  // l'UI d'édition existante, qui ne connaît que {type, couleur, longueur}.
+  const lamesDetail = lameInfoAll.length > 1 ? lameInfoAll.map(li => ({
+    type: li.type, couleur: li.couleur, couleurBouchon: li.couleurBouchon,
+    decroche: li.decroche, lameEscalier: li.lameEscalier, longueur: li.longueur,
+  })) : undefined;
 
   // Moteur : suffixe du code VR après le préfixe de structure (VRSIL80S → 80S)
   const moteurM = vrCode.match(/^VR(?:SUBT|SUB|MOUV|XTR|COF|SOL|SIL)([A-Z0-9]+)$/i);

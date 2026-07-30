@@ -1259,12 +1259,13 @@ a:focus-visible, button:focus-visible,
               <option value="paye">Payé</option>
             </select>
           </div>
+          <div class="form-group"><label class="form-label">Contre remboursement — Montant à percevoir (€)</label><input id="f-contre-remboursement" type="number" min="0" step="0.01" placeholder="0.00"></div>
         </div>
       </div>
       <div class="form-section">
         <div class="form-section-title"><i class="ti ti-calendar"></i> Planning</div>
         <div class="form-grid form-grid-2">
-          <div class="form-group"><label class="form-label">Date souhaitée (pas avant)</label><input id="f-date-from" type="date"></div>
+          <div class="form-group"><label class="form-label">Date souhaitée</label><input id="f-date-from" type="date"></div>
           <div class="form-group"><label class="form-label">Date limite (pas après)</label><input id="f-date-to" type="date"></div>
           <div class="form-group"><label class="form-label">Date limite de livraison</label><input id="f-date-livraison" type="date"></div>
           <div class="form-group"><label class="form-label">Semaine de fabrication souhaitée</label><select id="f-date-fab"></select></div>
@@ -3109,7 +3110,7 @@ function renderPageCommande(d, p) { p = p || {};
       </div>
     </div>
     <div class="fiche-grid c3">
-      <div class="fiche-cell"><div class="fiche-cell-label">Date commande</div><input value="${d.dateFrom||''}" type="date" onchange="setDosField('dateFrom',this.value)"></div>
+      <div class="fiche-cell"><div class="fiche-cell-label">Date souhaitée</div><input value="${d.dateFrom||''}" type="date" onchange="setDosField('dateFrom',this.value)"></div>
       <div class="fiche-cell"><div class="fiche-cell-label">Semaine de fabrication souhaitée</div><select onchange="setDosField('dateFab',this.value)" title="Priorise ce dossier dans la file de l'atelier — plus tôt = traité plus tôt">${optionsSemainesFab(d.dateFab||'')}</select></div>
       <div class="fiche-cell"><div class="fiche-cell-label">Transport</div>
         <div class="transport-btns">
@@ -3121,6 +3122,7 @@ function renderPageCommande(d, p) { p = p || {};
         ${poseSecteurBadgeHtml(d)}
       </div>
       ${canSeeCA()?`<div class="fiche-cell"><div class="fiche-cell-label">Montant TTC</div><div style="font-size:14px;font-weight:600;color:var(--accent)">${ttc(d).toLocaleString('fr-FR',{minimumFractionDigits:2})} €</div></div>`:'<div class="fiche-cell"></div>'}
+      <div class="fiche-cell"><div class="fiche-cell-label">Contre remboursement — Montant à percevoir (€)</div><input value="${d.contreRemboursementMontant||''}" type="number" min="0" step="0.01" placeholder="0.00" onchange="setDosField('contreRemboursementMontant',parseFloat(this.value)||0)"></div>
     </div>
     <div class="fiche-grid c3">
       <div class="fiche-cell"><div class="fiche-cell-label">Client</div><input value="${d.client||''}" onchange="setDosField('client',this.value)"></div>
@@ -3354,7 +3356,7 @@ function renderPageCommandeBache(d, p) { p = p || {};
       </div>
     </div>
     <div class="fiche-grid c3">
-      <div class="fiche-cell"><div class="fiche-cell-label">Date commande</div><input value="${d.dateFrom||''}" type="date" onchange="setDosField('dateFrom',this.value)"></div>
+      <div class="fiche-cell"><div class="fiche-cell-label">Date souhaitée</div><input value="${d.dateFrom||''}" type="date" onchange="setDosField('dateFrom',this.value)"></div>
       <div class="fiche-cell"><div class="fiche-cell-label">Semaine de fabrication souhaitée</div><select onchange="setDosField('dateFab',this.value)" title="Priorise ce dossier dans la file de l'atelier — plus tôt = traité plus tôt">${optionsSemainesFab(d.dateFab||'')}</select></div>
       <div class="fiche-cell"><div class="fiche-cell-label">Transport</div>
         <div class="transport-btns">
@@ -3364,6 +3366,7 @@ function renderPageCommandeBache(d, p) { p = p || {};
         ${tr==='livraison' ? `<input value="${escapeHtml(d.transporteur||'')}" onchange="setDosField('transporteur',this.value)" placeholder="Transporteur (ex: GLS, XPO...)" style="margin-top:6px;font-size:12px">` : ''}
       </div>
       ${canSeeCA()?`<div class="fiche-cell"><div class="fiche-cell-label">Montant TTC</div><div style="font-size:14px;font-weight:600;color:var(--accent)">${ttc(d).toLocaleString('fr-FR',{minimumFractionDigits:2})} €</div></div>`:'<div class="fiche-cell"></div>'}
+      <div class="fiche-cell"><div class="fiche-cell-label">Contre remboursement — Montant à percevoir (€)</div><input value="${d.contreRemboursementMontant||''}" type="number" min="0" step="0.01" placeholder="0.00" onchange="setDosField('contreRemboursementMontant',parseFloat(this.value)||0)"></div>
     </div>
     <div class="fiche-grid c3">
       <div class="fiche-cell"><div class="fiche-cell-label">Client</div><input value="${d.client||''}" onchange="setDosField('client',this.value)"></div>
@@ -4613,18 +4616,30 @@ async function parseMegaoPDFLocal(file) {
 
   // Produits : en PDF.js le code est séparé par un espace de la désignation
   // Regex : code  désignation  UNIT  quantité (UNIT suivi de chiffres pour éviter faux positifs)
-  const productRe = /^([A-Z][A-Z0-9]{2,})\s+(.+?)\s+(UN|ML|M2|PCS)\b\s+[\d,]/gm;
+  // Quantité capturée en entier (pas juste [\d,]) — même fix que scripts/megao-sync.js (2026-07-30)
+  // pour dériver une longueur de lame PAR LIGNE (voir deriveLameInfoFromProd/lamesDetail plus bas).
+  const productRe = /^([A-Z][A-Z0-9]{2,})\s+(.+?)\s+(UN|ML|M2|PCS)\b\s+([\d,]+)/gm;
   const products  = [];
   let pm;
-  while ((pm = productRe.exec(text)) !== null) products.push({ code: pm[1], desig: pm[2].trim() });
+  while ((pm = productRe.exec(text)) !== null) products.push({ code: pm[1], desig: pm[2].trim(), unit: pm[3], qte: parseFloat(pm[4].replace(',', '.')) });
   console.log('[Mégao parser] Produits détectés :', products.map(p => p.code).join(', '));
 
   // Escalier / découpe : lignes VRES*/VRDEC*, jamais captées par productRe ci-dessus (désignation
   // sur plusieurs lignes avant "UN", parfois collée au code sans espace) — même regex dédiée que
   // scripts/megao-sync.js (matchAll sur le code VR au lieu du bloc générique produit), portée ici
   // pour que l'upload manuel de PDF capture aussi ces lignes (elles ne l'étaient pas du tout).
-  const vrAllM = [...text.matchAll(/^(VR[A-Z0-9<>]+)\s*([A-Z][a-zÀ-ÿé].+)/gm)];
-  const cleanVrDesig = m => m[2].replace(/\s*(UN|ML|M2|PCS)\s+.*$/i, '').trim();
+  // [\s\S]*? + unité/quantité capturées (groupes 3/4) — même fix que scripts/megao-sync.js
+  // (2026-07-30) : `.+` ne traversait pas un saut de ligne (désignation coupée en deux perdue en
+  // silence) ET la quantité était effacée par cleanVrDesig, avec un risque de dédoublonnage
+  // silencieux (2 lignes de désignation identique mais quantités différentes fusionnaient dans le Set).
+  const vrAllM = [...text.matchAll(/^(VR[A-Z0-9<>]+)\s*([A-Z][a-zÀ-ÿé][\s\S]*?)(UN|ML|M2|PCS)\s+([\d,]+)/gm)];
+  // Quantité réintégrée dans le texte ("(×N)" si N≠1) au lieu d'être juste effacée — même
+  // convention que l'affichage des accessoires (porte-document, `l.qte`).
+  const cleanVrDesig = m => {
+    const design = m[2].replace(/\s*\n\s*/g, ' ').trim();
+    const qte = parseFloat(m[4].replace(',', '.'));
+    return qte && qte !== 1 ? `${design} (×${qte})` : design;
+  };
   const escalier = [...new Set(vrAllM.filter(m => /^VRES/.test(m[1])).map(cleanVrDesig))].join(' ; ');
   const decoupe  = [...new Set(vrAllM.filter(m => /^VRDEC/.test(m[1])).map(cleanVrDesig))].join(' ; ');
 
@@ -4694,7 +4709,11 @@ async function parseMegaoPDFLocal(file) {
     // 2026-07-27) — jamais de ligne "B.<couleur>" séparée dans le PDF pour du PVC en pratique. Le
     // Polycarbonate peut différer (ligne dédiée gérée ci-dessus quand présente).
     if (!cb && codeType === 'PVC' && c) cb = c;
-    return { type: codeType, couleur: c, couleurBouchon: cb, decroche, lameEscalier };
+    // Longueur PAR LIGNE (pas de somme globale ici) — même fix que scripts/megao-sync.js
+    // (2026-07-30) : `p.unit`/`p.qte` sont déjà disponibles ici (productRe les capture), pas
+    // besoin d'une 2e regex dédiée comme côté serveur.
+    const longueur = p.unit === 'ML' ? String(p.qte) : '';
+    return { type: codeType, couleur: c, couleurBouchon: cb, decroche, lameEscalier, longueur };
   }
   const lameInfoAll = lamProdsAll.map(deriveLameInfoFromProd);
   // Ligne canonique = la 1ère ligne qui n'est ni décroché ni escalier s'il y en a une, sinon la
@@ -4712,7 +4731,12 @@ async function parseMegaoPDFLocal(file) {
   const lameEscalier = lameInfoAll.some(li => li.lameEscalier);
   // Lignes de lames SUPPLÉMENTAIRES (au-delà de la 1ère) — avant ce fix, silencieusement perdues.
   // undefined pour les dossiers à une seule ligne (comportement historique inchangé).
-  const lamesDetail = lameInfoAll.length > 1 ? lameInfoAll.map(li => ({ type: li.type, couleur: li.couleur })) : undefined;
+  // couleurBouchon/decroche/lameEscalier/longueur ajoutés le 2026-07-30 — même fix que
+  // scripts/megao-sync.js, même forme que lignesLames (saisie manuelle) pour rester compatible.
+  const lamesDetail = lameInfoAll.length > 1 ? lameInfoAll.map(li => ({
+    type: li.type, couleur: li.couleur, couleurBouchon: li.couleurBouchon,
+    decroche: li.decroche, lameEscalier: li.lameEscalier, longueur: li.longueur,
+  })) : undefined;
 
   // Moteur : suffixe du code VR après le préfixe de structure (VRSIL80S → 80S)
   const moteurM = vrProd ? vrProd.code.match(/^VR(?:SUBT|SUB|MOUV|XTR|COF|SOL|SIL)([A-Z0-9]+)$/i) : null;
@@ -5088,6 +5112,7 @@ function openNewDos() {
   document.getElementById('f-ht').value='';
   document.getElementById('f-ttc').value='';
   document.getElementById('f-devis-statut').value='en_attente';
+  document.getElementById('f-contre-remboursement').value='';
   // Date de livraison vide à la création : c'est une date FUTURE décidée par
   // l'atelier/admin (délai de fabrication), jamais aujourd'hui — la remplir avec
   // today ferait passer le dossier "en retard" dès le lendemain (dateLivraison < today).
@@ -5180,6 +5205,7 @@ function saveDossier() {
     bachePansCoupes:document.getElementById('f-bachePansCoupes')?.value||'',
     bacheTransportZone:document.getElementById('f-bacheTransportZone')?.value||'',
     ht,tva,ref:document.getElementById('f-ref').value,devisStatut:document.getElementById('f-devis-statut').value,
+    contreRemboursementMontant:parseFloat(document.getElementById('f-contre-remboursement').value)||0,
     dateFrom:document.getElementById('f-date-from').value,dateTo:document.getElementById('f-date-to').value,
     dateLivraison:document.getElementById('f-date-livraison').value,
     dateFab:document.getElementById('f-date-fab')?.value||'',
