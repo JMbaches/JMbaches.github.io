@@ -6822,9 +6822,19 @@ function resetFiltres() {
 
 function filterDos(val) {
   globalSearchQuery = val.trim();
+  // renderDos() reconstruit tout #main-content, ce qui recrée le <input id="dos-search"> lui-même
+  // (nouveau nœud DOM) — sans réappliquer le focus/curseur ici, le champ perdait le focus à
+  // CHAQUE frappe, obligeant à recliquer dessus pour taper la lettre suivante (bug réel, 2026-07-30).
+  const el = document.getElementById('dos-search');
+  const cursorPos = el ? el.selectionStart : null;
   renderDos();
   const panel = document.getElementById('filtres-avances-panel');
   if (panel && panel.style.display !== 'none') panel.style.display = 'block';
+  const newEl = document.getElementById('dos-search');
+  if (newEl) {
+    newEl.focus();
+    if (cursorPos != null) newEl.setSelectionRange(cursorPos, cursorPos);
+  }
 }
 
 function setStatFilter(s, el) {
