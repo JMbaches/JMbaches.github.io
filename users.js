@@ -58,6 +58,40 @@ function syncPerms() {
   const defaults=ROLE_DEFAULT_PERMS[role]||[];
   document.querySelectorAll('#perms-grid input[type=checkbox]').forEach(cb=>{cb.checked=defaults.includes(cb.value);});
 }
+// Le champ "Poste atelier" (Accessoires/Tablier/Axes, cf. atelier.js::atelierEtapeActuelle) n'a de
+// sens que pour le rôle "Ouvrier atelier" — masqué pour tout autre rôle et remis à "vue
+// d'ensemble" pour ne pas laisser une valeur fantôme non voulue traîner sur un autre rôle.
+function syncPosteAtelierVisibility() {
+  const role=document.getElementById('u-role').value;
+  const fg=document.getElementById('fg-poste-atelier');
+  const estOuvrier = role==='ouvrier';
+  fg.style.display = estOuvrier ? '' : 'none';
+  if (!estOuvrier) {
+    document.getElementById('u-poste-atelier-etape').value='';
+    document.getElementById('fg-poste-atelier-matiere').style.display='none';
+  } else {
+    syncPosteAtelierMatiere();
+  }
+}
+// La matière (PVC/Polycarbonate, deux stations physiques distinctes — cf. CLAUDE.md) n'a de sens
+// que si l'étape choisie est "Tablier".
+function syncPosteAtelierMatiere() {
+  const etape=document.getElementById('u-poste-atelier-etape').value;
+  document.getElementById('fg-poste-atelier-matiere').style.display = etape==='tablier' ? '' : 'none';
+}
+// Combine les 2 sélecteurs en cascade en la valeur unique stockée côté dossier
+// (dossierVisibleAuPoste, index.html) : ''|'accessoires'|'tablier_pvc'|'tablier_poly'|'axes'.
+function lirePosteAtelier() {
+  const etape=document.getElementById('u-poste-atelier-etape').value;
+  if (etape==='tablier') return 'tablier_' + document.getElementById('u-poste-atelier-matiere').value;
+  return etape;
+}
+// Inverse de lirePosteAtelier() — répartit une valeur stockée dans les 2 sélecteurs en cascade.
+function appliquerPosteAtelier(valeur) {
+  const m = /^tablier_(pvc|poly)$/.exec(valeur||'');
+  document.getElementById('u-poste-atelier-etape').value = m ? 'tablier' : (valeur||'');
+  document.getElementById('u-poste-atelier-matiere').value = m ? m[1] : 'pvc';
+}
 function buildPermsGrid(current) {
   document.getElementById('perms-grid').innerHTML=ALL_PERMS.map(p=>`
     <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--radius);border:1px solid var(--border);cursor:pointer;background:${current.includes(p.id)?'var(--accent-light)':'var(--paper)'};font-size:13px">
@@ -73,10 +107,11 @@ function openNewUser() {
   document.getElementById('u-email').value='';
   document.getElementById('u-role').value='commercial';
   document.getElementById('u-perimetre').value='tous';
-  document.getElementById('u-poste-atelier').value='';
+  appliquerPosteAtelier('');
   document.getElementById('u-pwd').value='';
   document.getElementById('u-pwd2').value='';
   buildPermsGrid(ROLE_DEFAULT_PERMS.commercial);
+  syncPosteAtelierVisibility();
   openModal('modal-user');
 }
 function openEditUser(uid) {
@@ -88,10 +123,11 @@ function openEditUser(uid) {
   document.getElementById('u-email').value=u.email||'';
   document.getElementById('u-role').value=u.role;
   document.getElementById('u-perimetre').value=u.perimetre||'tous';
-  document.getElementById('u-poste-atelier').value=u.posteAtelier||'';
+  appliquerPosteAtelier(u.posteAtelier||'');
   document.getElementById('u-pwd').value='';
   document.getElementById('u-pwd2').value='';
   buildPermsGrid(u.perms);
+  syncPosteAtelierVisibility();
   openModal('modal-user');
 }
 document.getElementById('u-role').addEventListener('change',syncPerms);
@@ -107,7 +143,7 @@ async function saveUser() {
   if(pwd1 && pwd1!==pwd2){alert('Les mots de passe ne correspondent pas');return;}
   const role=document.getElementById('u-role').value;
   const perimetre=document.getElementById('u-perimetre').value;
-  const posteAtelier=document.getElementById('u-poste-atelier').value;
+  const posteAtelier=lirePosteAtelier();
   const perms=[...document.querySelectorAll('#perms-grid input:checked')].map(cb=>cb.value);
 
   if(editingUserId) {

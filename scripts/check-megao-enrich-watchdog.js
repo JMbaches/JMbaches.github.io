@@ -21,6 +21,43 @@ const db = admin.firestore();
 const SILENCE_THRESHOLD_MS = 2 * 60 * 60 * 1000; // 2h — décidé avec l'utilisateur (2026-07-28)
 const ALERT_COOLDOWN_MS    = 6 * 60 * 60 * 1000; // 6h — anti-spam pendant qu'une panne dure
 
+// Heures ouvrées JM Bâches (2026-07-30) : lundi-vendredi 7h-17h30, Europe/Paris. En dehors de ces
+// horaires, l'absence d'email d'enrichissement est NORMALE (personne ne crée/modifie de dossier
+// la nuit ou le week-end — le script VM n'envoie que s'il y a un changement, cf. megao_enrich_vm.py
+// ::main "Rien de nouveau depuis le dernier envoi — aucun email."). Avant ce correctif, le seuil de
+// 2h se déclenchait toutes les nuits (fausse alerte quotidienne), ce qui use la confiance dans
+// l'alerte — le jour où c'est un vrai problème, plus personne n'y prête attention.
+const BIZ_START_MIN = 7 * 60;        // 07:00
+const BIZ_END_MIN   = 17 * 60 + 30;  // 17:30
+const BIZ_WEEKDAYS  = new Set(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+
+function parisParts(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Paris', weekday: 'short', hour: 'numeric', minute: 'numeric', hour12: false,
+  }).formatToParts(date);
+  const get = t => parts.find(p => p.type === t).value;
+  return { weekday: get('weekday'), hour: parseInt(get('hour'), 10) % 24, minute: parseInt(get('minute'), 10) };
+}
+function isBusinessMoment(date) {
+  const p = parisParts(date);
+  if (!BIZ_WEEKDAYS.has(p.weekday)) return false;
+  const mins = p.hour * 60 + p.minute;
+  return mins >= BIZ_START_MIN && mins < BIZ_END_MIN;
+}
+// Minutes ouvrées écoulées entre `from` et `to` (échantillonnage minute par minute, borné à 14
+// jours — largement suffisant en pratique, le cooldown d'alerte est de 6h — plutôt qu'un calcul
+// calendaire pour rester simple). Sert de base au seuil de silence à la place du temps réel écoulé,
+// pour qu'un silence de nuit/week-end ne s'accumule pas comme un vrai silence côté VM.
+function businessMinutesBetween(from, to) {
+  const MAX_MINUTES = 14 * 24 * 60;
+  const totalMinutes = Math.min(Math.round((to - from) / 60000), MAX_MINUTES);
+  let count = 0;
+  for (let i = 0; i < totalMinutes; i++) {
+    if (isBusinessMoment(new Date(from.getTime() + i * 60000))) count++;
+  }
+  return count;
+}
+
 function now() {
   const d = new Date();
   const date = d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -41,11 +78,14 @@ function now() {
     return;
   }
 
-  const silenceMs = Date.now() - new Date(data.lastSeenAt).getTime();
-  console.log(`Dernier email d'enrichissement reçu il y a ${Math.round(silenceMs / 60000)} min.`);
+  const lastSeen = new Date(data.lastSeenAt);
+  const silenceMs = Date.now() - lastSeen.getTime();
+  const bizSilenceMs = businessMinutesBetween(lastSeen, new Date()) * 60000;
+  console.log(`Dernier email d'enrichissement reçu il y a ${Math.round(silenceMs / 60000)} min `
+    + `(${Math.round(bizSilenceMs / 60000)} min ouvrées).`);
 
-  if (silenceMs < SILENCE_THRESHOLD_MS) {
-    console.log('Silence sous le seuil (2h) — RAS.');
+  if (bizSilenceMs < SILENCE_THRESHOLD_MS) {
+    console.log('Silence ouvré sous le seuil (2h) — RAS (silence nuit/week-end normal, non compté).');
     return;
   }
 

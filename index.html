@@ -1303,7 +1303,7 @@ a:focus-visible, button:focus-visible,
         <div class="form-group"><label class="form-label">Prénom &amp; Nom</label><input id="u-name" placeholder="ex: Marie Dupont"></div>
         <div class="form-group"><label class="form-label">Identifiant</label><input id="u-login" placeholder="ex: marie.dupont"></div>
         <div class="form-group"><label class="form-label">Rôle</label>
-          <select id="u-role" onchange="syncPerms()">
+          <select id="u-role" onchange="syncPerms();syncPosteAtelierVisibility()">
             <option value="direction">Direction</option>
             <option value="admin">Administration (Saisie)</option>
             <option value="verif">Vérification admin</option>
@@ -1324,13 +1324,26 @@ a:focus-visible, button:focus-visible,
             <option value="bache">Bâches uniquement</option>
           </select>
         </div>
-        <div class="form-group"><label class="form-label">Poste atelier</label>
-          <select id="u-poste-atelier">
+        <!-- Visible uniquement pour le rôle "Ouvrier atelier" (syncPosteAtelierVisibility) — les 3
+             postes atelier (Accessoires/Tablier/Axes, 2026-07-27, réordonnés 2026-07-30) n'ont de
+             sens que pour ce rôle. Choix en cascade : l'étape d'abord, puis la matière (PVC/Poly)
+             UNIQUEMENT si "Tablier" est choisi (syncPosteAtelierMatiere) — combinés en une seule
+             valeur stockée (u.posteAtelier = 'accessoires'|'tablier_pvc'|'tablier_poly'|'axes'|'')
+             par lireSposteAtelier()/appliquerPosteAtelier() dans users.js. -->
+        <div class="form-group" id="fg-poste-atelier" style="display:none">
+          <label class="form-label">Poste atelier</label>
+          <select id="u-poste-atelier-etape" onchange="syncPosteAtelierMatiere()">
             <option value="">Vue d'ensemble (tous postes)</option>
             <option value="accessoires">Accessoires</option>
-            <option value="tablier_pvc">Tablier — PVC</option>
-            <option value="tablier_poly">Tablier — Polycarbonate</option>
+            <option value="tablier">Tablier</option>
             <option value="axes">Axes</option>
+          </select>
+        </div>
+        <div class="form-group" id="fg-poste-atelier-matiere" style="display:none">
+          <label class="form-label">Matière (poste Tablier)</label>
+          <select id="u-poste-atelier-matiere">
+            <option value="pvc">PVC</option>
+            <option value="poly">Polycarbonate</option>
           </select>
         </div>
         <div class="form-group"><label class="form-label">Droits d'accès</label>
