@@ -373,15 +373,23 @@ async function stockDecompterTelecommande(d) {
 }
 
 // Gestion sel — PAS applicable à immerge/immerge_total (vérifié : aucune des deux ne référence
-// "Gestion Sel" dans le désassemblage). L'ajout de coffret hors-sol pour "Electrolyseur" dans le
-// legacy n'est délibérément pas reproduit (effet de bord non compris, décision actée).
+// "Gestion Sel" dans le désassemblage). "Electrolyseur" décompte AUSSI 1 Coffret Hors sol en
+// plus (deduire_gestion_sel appelle ajouter_coffret_hors_sol dans ce cas précis, cf.
+// fonctions.pyc::ajouter_coffret_hors_sol) — effet de bord clarifié le 2026-07-30 par une
+// relecture complète du bytecode (décompile pycdc propre à cet endroit, pas une reconstruction
+// manuelle) ; jusqu'ici délibérément pas reproduit car non compris. "Oxeo" ne déclenche rien de
+// plus, comme avant.
 async function stockDecompterGestionSel(d) {
   if (d.stockGestionSelDecompteFait) return { ok:false, reason:'déjà décompté' };
   const type = legacyVoletType(d.structure);
   if (!['silver','mouv','xtrem','banc'].includes(type)) return { ok:false, reason:'gestion sel non applicable à ce type de volet' };
   if (!d.gestionSel) return { ok:false, reason:'gestion sel non renseignée (Non)' };
   if (!['Electrolyseur','Oxeo'].includes(d.gestionSel)) return { ok:false, reason:`choix gestion sel "${d.gestionSel}" inconnu` };
-  return { ok:true, ...(await stockDecompteFixe('autre', d.gestionSel, 1)) };
+  const resultats = [{ label:d.gestionSel, ...(await stockDecompteFixe('autre', d.gestionSel, 1)) }];
+  if (d.gestionSel === 'Electrolyseur') {
+    resultats.push({ label:'Coffret Hors sol', ...(await stockDecompteFixe('alimentation', 'Coffret Hors sol', 1)) });
+  }
+  return { ok:true, resultats };
 }
 
 // Passes-sangles — champ texte legacy validé seulement par isdigit(), aucune condition de type
@@ -693,8 +701,8 @@ async function stockDecompterEntreeProduction(d) {
   const gestionSelRes = await stockDecompterGestionSel(d);
   if (gestionSelRes.ok) {
     d.stockGestionSelDecompteFait = true;
-    logHistory(d.id,'stock',`Gestion sel décomptée automatiquement : ${gestionSelRes.label}`);
-    showToast(`${gestionSelRes.label} décompté du stock`);
+    const ok = gestionSelRes.resultats.filter(r=>r.ok);
+    if (ok.length) { logHistory(d.id,'stock',`Gestion sel décomptée automatiquement : ${ok.map(r=>r.label).join(', ')}`); showToast(`Gestion sel décomptée du stock (${ok.map(r=>r.label).join(', ')})`); }
   } else if (!['déjà décompté','gestion sel non applicable à ce type de volet','gestion sel non renseignée (Non)'].includes(gestionSelRes.reason)) {
     showToast(`⚠ Décompte gestion sel impossible : ${gestionSelRes.reason}`);
     logHistory(d.id,'stock',`Décompte gestion sel automatique impossible : ${gestionSelRes.reason}`);

@@ -121,6 +121,34 @@ function deriveChampsAccessoiresVolet(accessoires) {
     if (poutreInQte <= 2) update.nombrePoutres = String(poutreInQte);
   }
 
+  // Rails (Mouv and Roll) / Ailette pour débordement (Silver Roll) — même logique que
+  // deriveChampsAccessoiresVoletDepuisPdf dans megao-sync.js, codes non tronqués ici (source
+  // Codeart base, pas rendu PDF). Voir mémoire projet pour le détail (codes vérifiés sur
+  // ARTICLE.MKD/CMDCLIB.MKD, 2026-07-30).
+  const railsLignes = lignes.filter(l => l.codeart.startsWith('ACVRRAIL'));
+  if (railsLignes.length) {
+    const longueurQte = railsLignes.filter(l => l.codeart === 'ACVRRAIL' || l.codeart === 'ACVRRAILINOX').reduce((s, l) => s + (l.qte || 0), 0);
+    if (longueurQte > 0) update.railsLongueur = String(longueurQte);
+    if (railsLignes.some(l => l.codeart === 'ACVRRAILINOX' || l.codeart === 'ACVRRAILREMP')) update.railsMateriau = 'Inox';
+  }
+  if (lignes.some(l => l.codeart.startsWith('ACVRAILDEBOR'))) update.ailetteDebordement = 'Oui';
+
+  // Clips de sécurité / batterie fixe — même logique que deriveChampsAccessoiresVoletDepuisPdf
+  // (megao-sync.js), codes non tronqués ici. Voir mémoire projet (2026-07-30) pour le détail des
+  // volumes CMDCLIB.MKD et la raison de ne pas fusionner batterieFixe dans typeAlimentation.
+  const boucleSavLigne = lignes.find(l => l.codeart.startsWith('ACVRBOUCLSAV') || /sans\s+d[ée]montage/i.test(l.design));
+  if (boucleSavLigne) {
+    if (boucleSavLigne.qte) update.clipsSansDemontage = String(boucleSavLigne.qte);
+  } else {
+    const clipsLigne = lignes.find(l => l.codeart === 'ACVRBOUCL');
+    if (clipsLigne) {
+      if (clipsLigne.qte) update.clipsSecurite = String(clipsLigne.qte);
+      const coul = clipsLigne.design.match(COULEUR_STRUCTURE_RE);
+      if (coul) update.clipsSecuriteCouleur = coul[1].charAt(0).toUpperCase() + coul[1].slice(1).toLowerCase();
+    }
+  }
+  if (lignes.some(l => l.codeart.startsWith('ACVRBAT24V') || l.codeart === 'ACVRBAT')) update.batterieFixe = 'Oui';
+
   return update;
 }
 

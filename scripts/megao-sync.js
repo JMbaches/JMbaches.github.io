@@ -349,14 +349,25 @@ function deriveChampsAccessoiresVoletDepuisPdf(text, structure, largeurBassin) {
   const equerresQte = lignes.filter(l => l.code.startsWith('ACVREQUTE') || l.code.startsWith('ACVREQUROU')).reduce((s, l) => s + (l.qte || 0), 0);
   if (equerresQte >= 1 && equerresQte <= 3) update.equerresRenfort = String(equerresQte);
 
-  // Alimentation (d.typeAlimentation, lu par stockDecompterAlimentation) — jamais dérivé avant
-  // ce jour : ACVRALIBAT ("kit chargeur + batteries...") vu sur 21/78 dossiers réels (27%, de
-  // loin le code le plus fréquent), distingue 6ah/3ah dans la désignation → 'Batterie 6ah' sinon
-  // 'Batterie' ; ACVRPLUG ("Easy Plug") → 'EasyPlug'. Electrique/Solaire/Solaire + Chargeur pas
-  // couverts : aucun code dédié rencontré dans l'échantillon réel disponible.
+  // Alimentation (d.typeAlimentation, lu par stockDecompterAlimentation) — un seul type par volet,
+  // valeurs alignées sur le <select id="f-typeAlimentation"> de la fiche et sur la section
+  // "Alimentation 24V" des check-lists atelier 2025 (Électrique / Easy plug / Solaire / Batterie).
+  // Priorité : batterie amovible > solaire > EasyPlug > électrique (coffret) — un install donné ne
+  // porte en pratique qu'un seul de ces codes ; l'ordre ne tranche que les rares cumuls.
+  //   ACVRALIBAT ("kit chargeur + batteries...", 27% des dossiers) → 'Batterie 6ah' si "6ah" dans
+  //     la désignation, sinon 'Batterie'.
+  //   ACVRALISO ("Alimentation solaire 24V...") → 'Solaire', ou 'Solaire + Chargeur' si un chargeur
+  //     ACVRCHAR ("Chargeur de batterie 24V") accompagne (les 2 valeurs existent dans le select).
+  //   ACVRPLUG ("Easy Plug") → 'EasyPlug'.
+  //   ACVRCOHS ("Coffret électrique pour volet hors sol 24V") → 'Electrique' (distinct de
+  //     ACVRCOFAS = coffret électrolyseur, qui relève de la gestion du sel, pas de l'alimentation).
   const alimBatLigne = lignes.find(l => l.code.startsWith('ACVRALIBAT'));
+  const hasSolaire   = lignes.some(l => l.code.startsWith('ACVRALISO'));
+  const hasChargeur  = lignes.some(l => l.code.startsWith('ACVRCHAR'));
   if (alimBatLigne) update.typeAlimentation = /6\s*ah/i.test(alimBatLigne.design) ? 'Batterie 6ah' : 'Batterie';
+  else if (hasSolaire) update.typeAlimentation = hasChargeur ? 'Solaire + Chargeur' : 'Solaire';
   else if (lignes.some(l => l.code.startsWith('ACVRPLUG'))) update.typeAlimentation = 'EasyPlug';
+  else if (lignes.some(l => l.code.startsWith('ACVRCOHS'))) update.typeAlimentation = 'Electrique';
 
   const murLigne = lignes.find(l => MUR_HAUTEUR_PAR_CODE_VOLET[l.code]);
   if (murLigne) {
@@ -398,6 +409,60 @@ function deriveChampsAccessoiresVoletDepuisPdf(text, structure, largeurBassin) {
     }
   }
 
+  // Rails (Mouv and Roll uniquement) : ACVRRAIL/ACVRRAILINOX = rail complémentaire galvanisé/Inox
+  // vendu au ml (au-delà du kit de base 2x3ml) ; ACVRRAILREMP = remplacement du rail galvanisé par
+  // de l'Inox pour bassin au sel (signal matériau, pas forcément une longueur supplémentaire).
+  // Codes trouvés dans le catalogue (ARTICLE.MKD) et confirmés fréquents dans les vraies commandes
+  // (CMDCLIB.MKD, ~743/392/76 occurrences respectivement, 2026-07-30) — jamais dérivés avant ce jour,
+  // repartaient silencieusement dans le catch-all `options`. Pas de troncature PDF connue à ce jour
+  // (à surveiller sur un vrai bon de commande Mouv, aucun disponible dans l'échantillon local).
+  const railsLignes = lignes.filter(l => l.code.startsWith('ACVRRAIL'));
+  if (railsLignes.length) {
+    const longueurQte = railsLignes.filter(l => l.code === 'ACVRRAIL' || l.code === 'ACVRRAILINOX').reduce((s, l) => s + (l.qte || 0), 0);
+    if (longueurQte > 0) update.railsLongueur = String(longueurQte);
+    if (railsLignes.some(l => l.code === 'ACVRRAILINOX' || l.code === 'ACVRRAILREMP')) update.railsMateriau = 'Inox';
+  }
+
+  // Ailette pour débordement (Silver Roll, section "Divers" de la check-list atelier) : ACVRAILDEBOR,
+  // accessoire fréquent (565 occurrences CMDCLIB, 2026-07-30) écarté à tort dans une 1ère passe comme
+  // "texte libre" — a en fait son propre code, comme flasqueMurale/corniere6060 ci-dessus.
+  if (lignes.some(l => l.code.startsWith('ACVRAILDEBOR'))) update.ailetteDebordement = 'Oui';
+
+  // Clips de sécurité (TABLIER, section "Clips de sécurité"/"Coloris" des check-lists atelier —
+  // le champ Coloris qui suit juste après dans la check-list papier est bien celui du clip, pas des
+  // lames, confirmé sur un vrai PDF réel 2026-07-30 : "ACVRBOUCLClips de sécurité - A METTRE A PART
+  // GrisUN 5,00..."). Volume CMDCLIB.MKD écrasant (6871, le plus gros accessoire volet trouvé à ce
+  // jour) — avait été classé à tort "mesure d'atelier" dans une 1ère passe.
+  // ACVRBOUCLSAV ("Boucle fixation volet sans démontage des lames") est un code DIFFÉRENT et plus
+  // long (4066 occurrences) — testé sur le préfixe le plus spécifique en premier pour ne pas le
+  // confondre avec ACVRBOUCL si jamais tronqué de façon identique dans un futur PDF (aucun vrai PDF
+  // avec ce code disponible dans l'échantillon local pour confirmer sa troncature — à surveiller).
+  const boucleSavLigne = lignes.find(l => l.code.startsWith('ACVRBOUCLSAV') || /sans\s+d[ée]montage/i.test(l.design));
+  if (boucleSavLigne) {
+    if (boucleSavLigne.qte) update.clipsSansDemontage = String(boucleSavLigne.qte);
+  } else {
+    // Match exact (pas un prefixe) : ACVRBOUCLSANGS ("Sangle de liaison axe volet", accessoire sans
+    // rapport) partage le même préfixe ACVRBOUCL* et ne doit pas être classé ici par erreur.
+    const clipsLigne = lignes.find(l => l.code === 'ACVRBOUCL');
+    if (clipsLigne) {
+      if (clipsLigne.qte) update.clipsSecurite = String(clipsLigne.qte);
+      const coul = clipsLigne.design.match(COULEUR_STRUCTURE_VOLET_RE);
+      if (coul) update.clipsSecuriteCouleur = coul[1].charAt(0).toUpperCase() + coul[1].slice(1).toLowerCase();
+    }
+  }
+
+  // Batterie fixe 12V/24V (section "Batterie" des check-lists atelier Mouv/Silver, DISTINCTE de la
+  // section "Kit Batterie Amovible" déjà couverte par ACVRALIBAT/typeAlimentation ci-dessus) :
+  // ACVRBAT24V ("Batterie12V (x2) pour volet 24V", 3241 occurrences CMDCLIB) et ACVRBAT ("Batterie12V
+  // (x1) pour volet 12V", 858) — vérifié qu'ils ne co-occurrent QUASI JAMAIS avec ACVRALIBAT sur la
+  // même commande (9/3241 dans une fenêtre large côté CMDCLIB.MKD, 2026-07-30), donc pas un
+  // doublonnage du kit amovible. Volontairement PAS fusionné dans `typeAlimentation` : ce champ
+  // pilote une liste fixe côté UI (<select id="f-typeAlimentation">) et une table de décompte stock
+  // (ALIMENTATION_TABLE, stock.js) — y ajouter une valeur nécessiterait de toucher ces deux endroits
+  // sensibles (cf. CLAUDE.md, décompte stock désactivé volontairement en prod), pas fait sans
+  // validation explicite. Champ informatif simple pour l'instant.
+  if (lignes.some(l => l.code.startsWith('ACVRBAT24V') || l.code === 'ACVRBAT')) update.batterieFixe = 'Oui';
+
   // Filet de sécurité (2026-07-24) : jusqu'ici tout code non explicitement traité ci-dessus était
   // silencieusement perdu (parseMegaoText renvoyait options/remarques/autres vides EN DUR, sans
   // aucun repli — contrairement au parseur bâches, qui garde toujours tout code non catégorisé en
@@ -411,9 +476,17 @@ function deriveChampsAccessoiresVoletDepuisPdf(text, structure, largeurBassin) {
     'VR', 'LAM', 'TRSP', 'ENLEV', 'EMB', 'GESTECO',
     'ACVRTELEC', 'ACCOFAS', 'ACVRCOFAS', 'ACVRPASSA', 'ACVREQUFL', 'ACVRCORN',
     'ACVREQUTE', 'ACVREQUROU', 'ACVRALIBAT', 'ACVRPLUG', 'ACVRPOUT', 'CAIBO', 'CAIPVC',
+    'ACVRALISO', 'ACVRCOHS', 'ACVRCHAR', // alimentation solaire / coffret électrique / chargeur
+    'ACVRRAIL', 'ACVRAILDEBOR', // rails Mouv and Roll / ailette débordement Silver Roll
+    'ACVRBOUCLSAV', 'ACVRBAT24V', // boucle sans démontage / batterie fixe 24V
     'ACVRPIEDANT', 'ACVRMOUVANT', // couleur pieds — traité dans parseMegaoText, pas ici
   ];
-  const VOLET_DEJA_TRAITE_EXACT = new Set(Object.keys(MUR_HAUTEUR_PAR_CODE_VOLET));
+  // Match EXACT (pas préfixe) pour ACVRBOUCL/ACVRBAT : ACVRBOUCLSANGS ("sangle de liaison axe",
+  // sans rapport) et ACVRBATAMO24VB/6AHB (composants du kit amovible, déjà couverts par
+  // ACVRALIBAT) partagent le même préfixe et ne doivent pas être avalés par erreur dans le
+  // "déjà traité" alors qu'aucun champ n'est dérivé pour eux — ils doivent rester visibles dans
+  // le catch-all `options` comme n'importe quel code non structuré.
+  const VOLET_DEJA_TRAITE_EXACT = new Set([...Object.keys(MUR_HAUTEUR_PAR_CODE_VOLET), 'ACVRBOUCL', 'ACVRBAT']);
   const autresLignes = lignes.filter(l =>
     !VOLET_DEJA_TRAITE_PREFIX.some(p => l.code.startsWith(p)) &&
     !VOLET_DEJA_TRAITE_EXACT.has(l.code)
