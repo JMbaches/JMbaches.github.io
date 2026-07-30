@@ -82,7 +82,7 @@ function renderEmballage() {
             ${d.pieds ? `<div><div class="spec-k">Pieds</div><div class="spec-v">${d.pieds}</div></div>` : ''}
           </div>` : ''}
           ${d.options ? `<div style="margin-bottom:10px"><div class="spec-k" style="margin-bottom:4px">Options</div><div style="font-size:12px;color:var(--ink-soft)">${d.options}</div></div>` : ''}
-          ${d.transport ? `<div style="margin-bottom:12px"><span style="background:#E0E7FF;color:#3730A3;padding:3px 10px;border-radius:3px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px"><i class="ti ti-truck" style="font-size:11px"></i>${transportLabel}</span></div>` : ''}
+          ${d.transport ? `<div style="margin-bottom:12px"><span style="background:#E0E7FF;color:#3730A3;padding:3px 10px;border-radius:3px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px"><i class="ti ti-truck" style="font-size:11px"></i>${transportLabel}${d.transporteur&&d.transport!=='enlvt'?' · '+escapeHtml(d.transporteur):''}</span></div>` : ''}
           ${manquantsExistants.length > 0 ? `<div style="background:var(--red-light);border:1px solid #F09595;border-radius:var(--radius);padding:8px 10px;margin-bottom:10px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--red);margin-bottom:3px">⚠ ${manquantsExistants.length} manquant${manquantsExistants.length>1?'s':''} signalé${manquantsExistants.length>1?'s':''}</div>${manquantsExistants.slice(-2).map(h=>`<div style="font-size:12px;color:var(--red)">${h.detail}</div>`).join('')}</div>` : ''}
           <div id="manquant-zone-${d.id}"></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:6px">
@@ -107,7 +107,7 @@ function renderEmballage() {
         <td style="font-size:11px;color:var(--ink-faint);font-family:'JetBrains Mono',monospace;font-weight:500">${d.id}</td>
         <td><strong>${d.client}</strong></td>
         <td style="color:var(--ink-soft)">${d.structure||'—'}</td>
-        <td><span style="background:#E0E7FF;color:#3730A3;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600">${{enlvt:'Enlèvement',liv_pose:'Liv+Pose',livraison:'Livraison'}[d.transport]||'—'}</span></td>
+        <td><span style="background:#E0E7FF;color:#3730A3;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600">${{enlvt:'Enlèvement',liv_pose:'Liv+Pose',livraison:'Livraison'}[d.transport]||'—'}</span>${d.transporteur&&d.transport!=='enlvt'?`<div style="font-size:11px;color:var(--ink-faint);margin-top:2px">${escapeHtml(d.transporteur)}</div>`:''}</td>
         <td style="font-size:12px;color:var(--ink-faint)">${fmt(d.dateLivraison)}</td>
         <td><button class="btn btn-ghost btn-sm" onclick="printFeuilLivraison('${d.id}')"><i class="ti ti-printer"></i> Imprimer</button></td>
         <td><button class="btn btn-primary btn-sm" onclick="openModalCloture('${d.id}','dos')"><i class="ti ti-check"></i> Clôturer</button></td>
@@ -154,7 +154,7 @@ function renderStockeListe() {
         <td style="font-size:11px;color:var(--ink-faint);font-family:'JetBrains Mono',monospace;font-weight:500">${highlight(d.id, globalSearchQuery)}</td>
         <td><strong>${highlight(d.client, globalSearchQuery)}</strong></td>
         <td style="color:var(--ink-soft)">${highlight(d.structure||'—', globalSearchQuery)}</td>
-        <td><span style="background:#E0E7FF;color:#3730A3;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600">${{enlvt:'Enlèvement',liv_pose:'Liv+Pose',livraison:'Livraison'}[d.transport]||'—'}</span></td>
+        <td><span style="background:#E0E7FF;color:#3730A3;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600">${{enlvt:'Enlèvement',liv_pose:'Liv+Pose',livraison:'Livraison'}[d.transport]||'—'}</span>${d.transporteur&&d.transport!=='enlvt'?`<div style="font-size:11px;color:var(--ink-faint);margin-top:2px">${escapeHtml(d.transporteur)}</div>`:''}</td>
         <td style="font-size:12px;color:var(--ink-faint)">${fmt(d.dateLivraison)}</td>
         <td onclick="event.stopPropagation()"><span style="font-size:12px;font-weight:600;${alerte?'color:var(--red)':'color:var(--ink-faint)'}">${jours!=null?jours+' j':'—'}</span></td>
         <td onclick="event.stopPropagation()" style="display:flex;gap:6px">
@@ -299,7 +299,7 @@ function renderEmballageGrand() {
           ${d.transport ? `
           <div style="margin-bottom:12px">
             <span style="background:#E0E7FF;color:#3730A3;padding:5px 13px;border-radius:3px;font-size:13px;font-weight:600;box-shadow:var(--shadow-xs);display:inline-flex;align-items:center;gap:5px">
-              <i class="ti ti-truck" style="font-size:13px"></i>${transportLabel}
+              <i class="ti ti-truck" style="font-size:13px"></i>${transportLabel}${d.transporteur&&d.transport!=='enlvt'?' · '+escapeHtml(d.transporteur):''}
             </span>
           </div>` : ''}
 

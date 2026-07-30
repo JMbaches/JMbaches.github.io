@@ -3016,6 +3016,7 @@ body { font-family: 'DM Sans', sans-serif; font-size: 12px; color: #16181D; back
   <div class="field"><label>Code postal</label><div class="val">${d.cp||'—'}</div></div>
   <div class="field"><label>Ville</label><div class="val">${d.ville||'—'}</div></div>
   <div class="field"><label>Transport</label><div class="val">${TRANSPORT_LABEL[d.transport]||d.transport||'—'}</div></div>
+  ${d.transporteur&&d.transport!=='enlvt'?`<div class="field"><label>Transporteur</label><div class="val">${escapeHtml(d.transporteur)}</div></div>`:''}
   <div class="field"><label>Date livraison prévue</label><div class="val accent">${fmt(d.dateLivraison)||'—'}</div></div>
 </div>
 ${d.contraintes?`<div class="box danger"><div class="box-label">⚠ Contraintes d'accès</div>${d.contraintes}</div>`:''}
@@ -3099,6 +3100,7 @@ function renderPageCommande(d, p) { p = p || {};
           <button class="tb${tr==='liv_pose'?' on':''}" onclick="setDosField('transport','liv_pose');renderFiche()">Liv+Pose</button>
           <button class="tb${tr==='livraison'?' on':''}" onclick="setDosField('transport','livraison');renderFiche()">Livraison</button>
         </div>
+        ${(tr==='liv_pose'||tr==='livraison') ? `<input value="${escapeHtml(d.transporteur||'')}" onchange="setDosField('transporteur',this.value)" placeholder="Transporteur (ex: GLS, XPO...)" style="margin-top:6px;font-size:12px">` : ''}
       </div>
       ${canSeeCA()?`<div class="fiche-cell"><div class="fiche-cell-label">Montant TTC</div><div style="font-size:14px;font-weight:600;color:var(--accent)">${ttc(d).toLocaleString('fr-FR',{minimumFractionDigits:2})} €</div></div>`:'<div class="fiche-cell"></div>'}
     </div>
@@ -3339,6 +3341,7 @@ function renderPageCommandeBache(d, p) { p = p || {};
           <button class="tb${tr==='enlvt'?' on':''}" onclick="setDosField('transport','enlvt');renderFiche()">Enlvt</button>
           <button class="tb${tr==='livraison'?' on':''}" onclick="setDosField('transport','livraison');renderFiche()">Livraison</button>
         </div>
+        ${tr==='livraison' ? `<input value="${escapeHtml(d.transporteur||'')}" onchange="setDosField('transporteur',this.value)" placeholder="Transporteur (ex: GLS, XPO...)" style="margin-top:6px;font-size:12px">` : ''}
       </div>
       ${canSeeCA()?`<div class="fiche-cell"><div class="fiche-cell-label">Montant TTC</div><div style="font-size:14px;font-weight:600;color:var(--accent)">${ttc(d).toLocaleString('fr-FR',{minimumFractionDigits:2})} €</div></div>`:'<div class="fiche-cell"></div>'}
     </div>
@@ -5101,7 +5104,7 @@ function saveDossier() {
     forme:document.getElementById('f-forme').value,
     notesDims:document.getElementById('f-notes-dims').value,
     needPose:document.getElementById('f-need-pose')?.checked||false,
-    transport:'',remarques:document.getElementById('f-remarques').value,
+    transport:'',transporteur:'',remarques:document.getElementById('f-remarques').value,
     autres:document.getElementById('f-autres').value,
     statut:'admin',statutChangedAt:nowISO(),createdBy:currentUser.id,
     history:[{id:Date.now(),type:'création',action:'Dossier créé',detail:'',user:currentUser.id,at:now()}],
@@ -5210,7 +5213,7 @@ body { font-family: 'DM Sans', sans-serif; color: #16181D; background: #fff; pad
 .destinataire-box .cp-ville { font-size: 20px; font-weight: 600; color: #16181D; margin-top: 4px; }
 
 /* INFOS COMMANDE */
-.commande-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border: 1px solid #ddd; border-radius: 3px; overflow: hidden; margin: 20px 0; }
+.commande-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; border: 1px solid #ddd; border-radius: 3px; overflow: hidden; margin: 20px 0; }
 .commande-cell { padding: 12px 16px; border-right: 1px solid #ddd; }
 .commande-cell:last-child { border-right: none; }
 .commande-cell label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: #999; display: block; margin-bottom: 5px; }
@@ -5288,6 +5291,10 @@ body { font-family: 'DM Sans', sans-serif; color: #16181D; background: #fff; pad
     <label>Mode de transport</label>
     <div class="val"><span class="transport">${TRANSPORT_LABEL[d.transport]||d.transport||'—'}</span></div>
   </div>
+  ${d.transporteur ? `<div class="commande-cell">
+    <label>Transporteur</label>
+    <div class="val">${escapeHtml(d.transporteur)}</div>
+  </div>` : ''}
 </div>
 
 <div class="produit-section">
@@ -6718,6 +6725,7 @@ function exportDossierPDF() {
       <div class="field"><label>Structure</label><span>${d.structure||'—'}</span></div>
       <div class="field"><label>Options</label><span>${d.options||'—'}</span></div>
       <div class="field"><label>Transport</label><span>${TRANSPORT_LABEL[d.transport]||d.transport||'—'}</span></div>
+      ${d.transporteur&&d.transport!=='enlvt'?`<div class="field"><label>Transporteur</label><span>${escapeHtml(d.transporteur)}</span></div>`:''}
       <div class="field"><label>Date livraison</label><span>${fmt(d.dateLivraison)}</span></div>
       <div class="field"><label>Date pose</label><span>${fmt(d.datePose)||'—'}</span></div>
       <div class="field"><label>Devis</label><span>${DEVIS_LABEL[d.devis]||d.devis||'—'}</span></div>
@@ -6921,10 +6929,11 @@ function dosProgressBar(d) {
   // une pastille rouge permanente sans rapport avec une vraie incomplétude du dossier.
   if (!['admin','verif'].includes(d.statut)) return bar;
   const checks = [
-    {k:'Transport',  ok: !!d.transport},
-    {k:'Structure',  ok: !!d.structure},
-    {k:'Dimensions', ok: !!(d.largeur||d.longueur||d.surface)},
-    {k:'Documents',  ok: (d.documents||[]).length > 0},
+    {k:'Transport',    ok: !!d.transport},
+    {k:'Transporteur', ok: !(d.transport==='livraison'||d.transport==='liv_pose') || !!d.transporteur},
+    {k:'Structure',    ok: !!d.structure},
+    {k:'Dimensions',   ok: !!(d.largeur||d.longueur||d.surface)},
+    {k:'Documents',    ok: (d.documents||[]).length > 0},
   ];
   const missing = checks.filter(c => !c.ok);
   const chips = missing.length === 0
