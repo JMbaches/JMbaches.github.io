@@ -1662,10 +1662,35 @@ function App() {
   const isEmbedded = useMemo(() => new URLSearchParams(window.location.search).get('embedded') === '1', []);
   const _prevCh = useRef(chantiers);
 
+  // File de suppressions en attente écrite par l'app de gestion (index.html::queuePlanningDelete)
+  // dans localStorage (même origine, partagé avec cette iframe) — PAS un postMessage direct : en
+  // usage réel mono-onglet, le bouton "Supprimer" (vue Dossiers) et cette iframe (vue Planning) ne
+  // sont JAMAIS montés en même temps dans le même onglet navigateur (main-content ne montre qu'une
+  // vue à la fois), donc un postMessage envoyé au moment de la suppression n'a personne pour le
+  // recevoir — confirmé en conditions réelles (dossier de test supprimé pendant que Planning était
+  // ouvert : JMBACH_DELETE jamais reçu, jmb_chantiers_v1 gardait le chantier). Cette file survit à
+  // la fermeture/réouverture de l'onglet Planning ET à un rechargement complet de la page.
+  function applyPendingPlanningDeletes() {
+    try {
+      const raw = localStorage.getItem('jmb_planning_pending_deletes');
+      if (!raw) return;
+      const pending = JSON.parse(raw);
+      if (!Array.isArray(pending) || !pending.length) return;
+      setChantiers(prev => prev.filter(c => !pending.includes(c.externalId)));
+      localStorage.removeItem('jmb_planning_pending_deletes');
+    } catch (e) { /* file corrompue ou absente — pas bloquant */ }
+  }
+
   // Bridge postMessage ↔ app principale JM Bâches
   useEffect(() => {
     if (!isEmbedded) return;
     window.parent.postMessage({ type: 'JMBACH_READY' }, '*');
+    applyPendingPlanningDeletes();
+    // Cas multi-onglets : un autre onglet peut supprimer un dossier pendant que celui-ci reste
+    // ouvert sur Planning — l'événement `storage` natif se déclenche dans CET onglet dès que
+    // l'autre écrit la clé (jamais dans l'onglet qui écrit lui-même, donc pas de boucle).
+    const onStorage = (e) => { if (e.key === 'jmb_planning_pending_deletes' && e.newValue) applyPendingPlanningDeletes(); };
+    window.addEventListener('storage', onStorage);
     const handler = (e) => {
       if (!e.data) return;
       if (e.data.type === 'JMBACH_REMOVE') {
@@ -1675,7 +1700,9 @@ function App() {
       }
       // JMBACH_DELETE : le dossier n'existe plus DU TOUT côté app de gestion (suppression
       // définitive) — contrairement à JMBACH_REMOVE (ne nécessite plus de pose, mais le dossier
-      // existe toujours), on retire le chantier entièrement au lieu de l'archiver.
+      // existe toujours), on retire le chantier entièrement au lieu de l'archiver. En pratique
+      // c'est surtout applyPendingPlanningDeletes() (localStorage) qui fait le travail — ce
+      // handler couvre le cas rare où un postMessage arrive quand même (ex. multi-onglets).
       if (e.data.type === 'JMBACH_DELETE') {
         const ids = e.data.ids || [];
         if (ids.length) setChantiers(prev => prev.filter(c => !ids.includes(c.externalId)));
@@ -1688,6 +1715,7 @@ function App() {
         return;
       }
       if (e.data.type !== 'JMBACH_INIT') return;
+      applyPendingPlanningDeletes();
       if (e.data.binomes && e.data.binomes.length > 0) {
         setBinomes(e.data.binomes);
       }
@@ -1733,7 +1761,7 @@ function App() {
       }
     };
     window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
+    return () => { window.removeEventListener('message', handler); window.removeEventListener('storage', onStorage); };
   }, [isEmbedded]);
 
   // Sync ref + envoyer JMBACH_UPDATE quand le planning change

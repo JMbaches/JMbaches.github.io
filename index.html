@@ -7022,6 +7022,24 @@ function clearApiKeyModal() {
   if(status) { status.textContent = 'Clé supprimée'; status.style.color = 'var(--ink-faint)'; }
 }
 
+// File de suppressions à répercuter dans l'app planning embarquée (localStorage, PAS un
+// postMessage direct) — voir supprimerDossier/confirmResetDossiers pour le pourquoi : dans
+// l'usage réel mono-onglet, la vue Dossiers (seul endroit d'où on peut supprimer) et l'iframe
+// Planning ne coexistent JAMAIS dans le même main-content, donc un postMessage direct au moment
+// de la suppression n'a personne pour le recevoir. localStorage est partagé par la même origine,
+// y compris avec l'iframe planning.html (même domaine) — celle-ci lit cette file à son montage
+// et à chaque resynchronisation (voir planning.html, applyPendingDeletes) et retire les chantiers
+// correspondants pour de bon, quel que soit l'onglet dans lequel on se trouvait au moment de la
+// suppression.
+function queuePlanningDelete(ids) {
+  if (!ids || !ids.length) return;
+  try {
+    const raw = localStorage.getItem('jmb_planning_pending_deletes');
+    const pending = raw ? JSON.parse(raw) : [];
+    const merged = [...new Set([...pending, ...ids])];
+    localStorage.setItem('jmb_planning_pending_deletes', JSON.stringify(merged));
+  } catch (e) { console.error('[queuePlanningDelete] erreur localStorage:', e); }
+}
 function confirmResetDossiers() {
   if (!can('reset_dossiers')) { showToast('Permission refusée'); return; }
   const n = dossiers.length;
@@ -7051,7 +7069,8 @@ Vous allez supprimer ${n} dossier${n>1?'s':''} définitivement.
       await batch.commit();
     }
     dossiers = [];
-    // Même répercussion planning que supprimerDossier (voir commentaire là-bas) — best-effort.
+    // Même répercussion planning que supprimerDossier (voir queuePlanningDelete).
+    queuePlanningDelete(allDos.map(d => d.id));
     const planFrame = document.getElementById('planning-ia-frame');
     if (planFrame && planFrame.contentWindow) planFrame.contentWindow.postMessage({ type: 'JMBACH_DELETE', ids: allDos.map(d => d.id) }, '*');
     showToast(`${allDos.length} dossier${allDos.length>1?'s':''} supprimé${allDos.length>1?'s':''}`);
@@ -7077,12 +7096,14 @@ async function supprimerDossier(dosId, e) {
     }
     dossiers = dossiers.filter(x => x.id !== dosId);
     notifications = notifications.filter(x => x.dosId !== dosId);
-    // Répercuter la suppression dans l'app planning embarquée si elle est ouverte — même pattern
-    // que la sortie du planning sur reclassement (setDosField, JMBACH_REMOVE), mais un type de
-    // message distinct (JMBACH_DELETE) car ici le dossier n'existe plus du tout : le chantier doit
-    // être retiré pour de bon côté planning, pas juste archivé comme pour un simple "ne nécessite
-    // plus de pose". Best-effort (comme JMBACH_REMOVE) : ne fait rien si l'onglet Planning n'est
-    // pas ouvert au moment de la suppression.
+    // Répercuter la suppression dans l'app planning embarquée — voir queuePlanningDelete ci-dessus
+    // pour pourquoi un simple postMessage ne suffit pas (le bouton Supprimer n'existe que dans la
+    // vue Dossiers, jamais en même temps que l'iframe Planning dans le même onglet navigateur ;
+    // même quand il existerait, renderDos() juste après le détruit avant que le message asynchrone
+    // n'ait pu être livré — vérifié en conditions réelles, confirmé par la persistance de
+    // jmb_chantiers_v1). Le postMessage reste envoyé en best-effort (cas multi-onglets), la
+    // file localStorage est le mécanisme qui marche réellement pour l'usage réel (mono-onglet).
+    queuePlanningDelete([dosId]);
     const planFrame = document.getElementById('planning-ia-frame');
     if (planFrame && planFrame.contentWindow) planFrame.contentWindow.postMessage({ type: 'JMBACH_DELETE', ids: [dosId] }, '*');
     showToast(`Dossier ${dosId} supprimé`);
