@@ -418,8 +418,7 @@ function renderAtelierGrand() {
               ${!isBacheDossier(d)?`<button class="btn btn-ghost" onclick="openFicheAccessoire('${d.id}')" style="font-size:12px;padding:7px 12px"><i class="ti ti-puzzle"></i> Fiche accessoire</button>`:''}
               ${isBacheDossier(d)
                 ? `<button class="btn btn-secondary" onclick="openChecklist('${d.id}')" style="font-size:12px;padding:7px 12px"><i class="ti ti-list-check"></i> Checklist</button>`
-                : `<button class="btn btn-secondary" onclick="openChecklist('${d.id}','acc')" style="font-size:12px;padding:7px 12px"><i class="ti ti-list-check"></i> Checklist Accessoires${checklistComplete(d,'acc')?' ✓':''}</button>
-                   <button class="btn btn-secondary" onclick="openChecklist('${d.id}','axetab')" style="font-size:12px;padding:7px 12px"><i class="ti ti-list-check"></i> Checklist Axe/Tablier${checklistComplete(d,'axetab')?' ✓':''}</button>`}
+                : `<button class="btn btn-secondary" onclick="openChecklist('${d.id}','acc')" style="font-size:12px;padding:7px 12px"><i class="ti ti-list-check"></i> Checklist Accessoires${checklistComplete(d,'acc')?' ✓':''}</button>`}
               ${atelierPosteActionsHtml(d,'lg')}
             </div>
           </div>

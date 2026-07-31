@@ -31,6 +31,19 @@ const PD_DEFAULT_FOLDERS = ['Bon de commande', 'Facture', 'Fiche de côte', 'Fic
 // l'utilisateur (2026-07-22). Compléter si d'autres codes apparaissent.
 const BOUCHON_LABELS = { TRSP: 'Transparent' };
 
+// Largeur bassin depuis un code LAM — chiffre(s) en fin de code (LAM350→3.50m, LAM45→4.5m,
+// LAM4→4m, LAMPOL4→4m). Partagé entre la largeur globale du dossier (1ère ligne LAM, comportement
+// historique inchangé) et la largeur PAR LIGNE dans lamesDetail (ajoutée le 2026-07-31 : signalé
+// par l'utilisateur, une ligne supplémentaire — escalier/décroché — peut couvrir une largeur
+// différente du bassin principal, et sans elle le décompte stock manuel à l'atelier ne sait pas
+// quelle référence (famille de largeur) aller chercher pour cette ligne).
+function lameCodeToLargeur(code) {
+  const m = /^LAM[A-Z]*([0-9]+)/.exec(code || '');
+  if (!m) return '';
+  const n = parseInt(m[1], 10);
+  return String(m[1].length >= 3 ? n / 100 : m[1].length === 2 ? n / 10 : n);
+}
+
 // ─── Parser PDF Mégao ────────────────────────────────────────────────────────
 // Format réel : tableau de codes produits (VRSIL80S, LAM350, TRSPVR5…)
 // Infos client dans le bloc Contact (colonne gauche)
@@ -185,7 +198,8 @@ function parseMegaoText(text) {
     // Longueur PAR LIGNE (pas la somme globale) : seulement quand l'unité est ML (une ligne UN/M2/
     // PCS — rare, ex. lames d'escalier vendues à l'unité — n'a pas de longueur en mètres à en tirer).
     const longueur = m[3] && m[3].toUpperCase() === 'ML' ? m[4].replace(',', '.') : '';
-    return { type: codeType, couleur: c, couleurBouchon: cb, decroche, lameEscalier, longueur };
+    const largeur = lameCodeToLargeur(m[1]);
+    return { type: codeType, couleur: c, couleurBouchon: cb, decroche, lameEscalier, longueur, largeur };
   }
   const lameInfoAll = lamAllM.map(deriveLameInfo);
   // Ligne canonique = la 1ère ligne qui n'est ni décroché ni escalier s'il y en a une, sinon la
@@ -213,7 +227,7 @@ function parseMegaoText(text) {
   // l'UI d'édition existante, qui ne connaît que {type, couleur, longueur}.
   const lamesDetail = lameInfoAll.length > 1 ? lameInfoAll.map(li => ({
     type: li.type, couleur: li.couleur, couleurBouchon: li.couleurBouchon,
-    decroche: li.decroche, lameEscalier: li.lameEscalier, longueur: li.longueur,
+    decroche: li.decroche, lameEscalier: li.lameEscalier, longueur: li.longueur, largeur: li.largeur,
   })) : undefined;
 
   // Moteur : suffixe du code VR après le préfixe de structure (VRSIL80S → 80S)
@@ -243,13 +257,10 @@ function parseMegaoText(text) {
   const piedOptionM = text.match(/^(ACVRPIEDANT|ACVRMOUVANT)\s*([A-Z][a-zÀ-ÿé].+)/m);
   if (piedOptionM) pieds = 'Anthracite Granulé';
 
-  // Largeur depuis le code LAM — chiffre(s) à la fin du code (LAM350→3.50m, LAM45→4.5m, LAM4→4m, LAMPOL4→4m)
-  const lamCodeM = text.match(/^LAM[A-Z]*([0-9]+)/m);
-  let largeur = '';
-  if (lamCodeM) {
-    const n = parseInt(lamCodeM[1]);
-    largeur = String(lamCodeM[1].length >= 3 ? n / 100 : lamCodeM[1].length === 2 ? n / 10 : n);
-  }
+  // Largeur depuis le code LAM de la 1ère ligne (comportement historique inchangé) — voir
+  // lameCodeToLargeur ci-dessus, partagée avec la largeur par ligne de lamesDetail.
+  const lamCodeM = text.match(/^LAM[A-Z0-9]+/m);
+  const largeur = lamCodeM ? lameCodeToLargeur(lamCodeM[0]) : '';
 
   // Longueur : somme des quantités ML de toutes les refs LAM
   // [\s\S]*? pour gérer le cas où ML est sur la ligne suivante (LAMPOL4, etc.)

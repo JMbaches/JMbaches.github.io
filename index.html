@@ -3927,14 +3927,15 @@ function ficheLigneLameExtraHtml(idx, li) {
       <option value="Polycarbonate"${type==='Polycarbonate'?' selected':''}>Polycarbonate</option>
     </select>
     <input value="${escapeHtml(li.couleur||'')}" onchange="setFicheLameExtra(${idx},'couleur',this.value)" style="flex:1;width:auto" placeholder="Couleur (ex: Blanc)">
-    <input type="number" min="0" step="0.01" value="${li.longueur!=null&&li.longueur!==''?li.longueur:''}" onchange="setFicheLameExtra(${idx},'longueur',this.value)" style="flex:0 0 120px;width:120px" placeholder="Long. (m)">
+    <input type="number" min="0" step="0.01" value="${li.largeur!=null&&li.largeur!==''?li.largeur:''}" onchange="setFicheLameExtra(${idx},'largeur',this.value)" style="flex:0 0 110px;width:110px" placeholder="Larg. (m)">
+    <input type="number" min="0" step="0.01" value="${li.longueur!=null&&li.longueur!==''?li.longueur:''}" onchange="setFicheLameExtra(${idx},'longueur',this.value)" style="flex:0 0 110px;width:110px" placeholder="Long. (m)">
     <button type="button" class="btn btn-ghost btn-sm" title="Retirer cette ligne" onclick="retirerFicheLigneLameExtra(${idx})"><i class="ti ti-trash"></i></button>
   </div>`;
 }
 function renderFicheLamesExtra(d) {
   const extra = Array.isArray(d.lamesDetail) ? d.lamesDetail.slice(1) : [];
   return `<div style="margin-top:10px;background:#FEF3C7;border:1px solid #FCD34D;border-radius:var(--radius);padding:10px 12px;font-size:12px;color:#92400E">
-    <div style="font-weight:600;margin-bottom:8px"><i class="ti ti-alert-triangle"></i> Lignes de lames supplémentaires (ex: escalier, décroché — chacune avec sa propre matière/couleur/longueur)</div>
+    <div style="font-weight:600;margin-bottom:8px"><i class="ti ti-alert-triangle"></i> Lignes de lames supplémentaires (ex: escalier, décroché — chacune avec sa propre matière/couleur/largeur/longueur)</div>
     ${extra.map((li,i)=>ficheLigneLameExtraHtml(i,li)).join('')}
     <button type="button" class="btn btn-secondary btn-sm" onclick="ajouterFicheLigneLameExtra()"><i class="ti ti-plus"></i> Ajouter une ligne</button>
   </div>`;
@@ -3945,7 +3946,7 @@ function ajouterFicheLigneLameExtra() {
     // Pas encore de lamesDetail : on part de la ligne 0 actuelle (typeLame/lames) pour ne rien perdre.
     d.lamesDetail = [{ type: d.typeLame||'PVC', couleur: d.lames||'' }];
   }
-  d.lamesDetail.push({ type:'PVC', couleur:'', longueur: undefined });
+  d.lamesDetail.push({ type:'PVC', couleur:'', longueur: undefined, largeur: undefined });
   logHistory(currentDosId,'modification','Ligne de lame ajoutée','');
   renderFiche();
 }
@@ -3959,7 +3960,7 @@ function retirerFicheLigneLameExtra(idx) {
 function setFicheLameExtra(idx, field, value) {
   const d=dossiers.find(x=>x.id===currentDosId); if(!d || !Array.isArray(d.lamesDetail) || !d.lamesDetail[idx+1]) return;
   const old=d.lamesDetail[idx+1][field];
-  const v = field==='longueur' ? (parseFloat(value)||undefined) : value;
+  const v = (field==='longueur'||field==='largeur') ? (parseFloat(value)||undefined) : value;
   d.lamesDetail[idx+1][field]=v;
   if(old!==v) logHistory(currentDosId,'modification',`Ligne de lame ${idx+2} : "${field}" modifié`,old?`Avant : ${old}`:'');
 }
@@ -4718,7 +4719,7 @@ function cloturerDossier(type) {
 // plusieurs segments de lames différents (tablier principal + escalier, décroché...), chacun avec
 // sa propre matière/couleur/longueur. Demandé par l'utilisateur (2026-07-28) pour pouvoir saisir ça
 // manuellement, pas seulement le recevoir du parseur Mégao (qui, lui, ne capture pas la longueur).
-function ligneLameHtml(type, couleur, longueur) {
+function ligneLameHtml(type, couleur, longueur, largeur) {
   const t = type === 'Polycarbonate' ? 'Polycarbonate' : 'PVC';
   return `<div class="ligne-lame-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
     <select class="ligne-lame-type" style="flex:0 0 150px;width:150px">
@@ -4726,14 +4727,15 @@ function ligneLameHtml(type, couleur, longueur) {
       <option value="Polycarbonate" ${t==='Polycarbonate'?'selected':''}>Polycarbonate</option>
     </select>
     <input class="ligne-lame-couleur" style="flex:1;width:auto" placeholder="Couleur (ex: Blanc)" value="${escapeHtml(couleur||'')}">
-    <input class="ligne-lame-longueur" type="number" min="0" step="0.01" style="flex:0 0 120px;width:120px" placeholder="Long. (m)" value="${longueur !== undefined && longueur !== null && longueur !== '' ? longueur : ''}">
+    <input class="ligne-lame-largeur" type="number" min="0" step="0.01" style="flex:0 0 110px;width:110px" placeholder="Larg. (m)" value="${largeur !== undefined && largeur !== null && largeur !== '' ? largeur : ''}">
+    <input class="ligne-lame-longueur" type="number" min="0" step="0.01" style="flex:0 0 110px;width:110px" placeholder="Long. (m)" value="${longueur !== undefined && longueur !== null && longueur !== '' ? longueur : ''}">
     <button type="button" class="btn btn-ghost btn-sm" title="Retirer cette ligne" onclick="retirerLigneLame(this)"><i class="ti ti-trash"></i></button>
   </div>`;
 }
-function ajouterLigneLame(type, couleur, longueur) {
+function ajouterLigneLame(type, couleur, longueur, largeur) {
   const c = document.getElementById('lames-lignes');
   if (!c) return;
-  c.insertAdjacentHTML('beforeend', ligneLameHtml(type, couleur, longueur));
+  c.insertAdjacentHTML('beforeend', ligneLameHtml(type, couleur, longueur, largeur));
   majBoutonsLigneLame();
 }
 function retirerLigneLame(btn) {
@@ -4746,20 +4748,21 @@ function majBoutonsLigneLame() {
   const rows = document.querySelectorAll('#lames-lignes .ligne-lame-row');
   rows.forEach(r => { const b = r.querySelector('button'); if (b) b.style.visibility = rows.length > 1 ? 'visible' : 'hidden'; });
 }
-// rows = [{type, couleur, longueur}] — vide ou absent = 1 ligne neuve vierge (nouveau dossier),
-// sinon préremplit depuis les données du parseur Mégao (fillFormFromMegao).
+// rows = [{type, couleur, longueur, largeur}] — vide ou absent = 1 ligne neuve vierge (nouveau
+// dossier), sinon préremplit depuis les données du parseur Mégao (fillFormFromMegao).
 function resetLignesLames(rows) {
   const c = document.getElementById('lames-lignes');
   if (!c) return;
   c.innerHTML = '';
-  (rows && rows.length ? rows : [{ type: 'PVC', couleur: '', longueur: '' }])
-    .forEach(r => ajouterLigneLame(r.type, r.couleur, r.longueur));
+  (rows && rows.length ? rows : [{ type: 'PVC', couleur: '', longueur: '', largeur: '' }])
+    .forEach(r => ajouterLigneLame(r.type, r.couleur, r.longueur, r.largeur));
 }
 function lireLignesLames() {
   return [...document.querySelectorAll('#lames-lignes .ligne-lame-row')].map(r => ({
     type: r.querySelector('.ligne-lame-type').value,
     couleur: r.querySelector('.ligne-lame-couleur').value.trim(),
     longueur: parseFloat(r.querySelector('.ligne-lame-longueur').value) || undefined,
+    largeur: parseFloat(r.querySelector('.ligne-lame-largeur').value) || undefined,
   }));
 }
 
@@ -4986,6 +4989,17 @@ async function parseMegaoPDFLocal(file) {
   // Transparent), quand ce n'est pas déjà un nom de couleur en clair (ex. "B.Noir") — confirmé
   // par l'utilisateur (2026-07-22). Compléter si d'autres codes apparaissent.
   const BOUCHON_LABELS = { TRSP: 'Transparent' };
+  // Largeur bassin depuis un code LAM/LAMPOL — chiffre(s) en fin de code (LAM350→3.50m, LAM45→4.5m,
+  // LAM4→4m, LAMPOL4→4m). Même helper que scripts/megao-sync.js, partagée entre la largeur globale
+  // du dossier (1ère ligne LAM) et la largeur PAR LIGNE de lamesDetail (ajoutée le 2026-07-31 : une
+  // ligne supplémentaire — escalier/décroché — peut couvrir une largeur différente du bassin
+  // principal, signalé par l'utilisateur comme manquant pour sortir la bonne référence de stock).
+  function lameCodeToLargeur(code) {
+    const m = /^LAM(?:POL)?([0-9]+)/.exec(code || '');
+    if (!m) return '';
+    const n = parseInt(m[1], 10);
+    return String(m[1].length >= 3 ? n / 100 : m[1].length === 2 ? n / 10 : n);
+  }
   // Dérive {type, couleur, couleurBouchon} pour UN produit LAM — factorisé pour être appliqué à
   // chaque ligne trouvée (lamProdsAll), pas seulement la 1ère (même fix que scripts/megao-sync.js).
   function deriveLameInfoFromProd(p) {
@@ -5027,7 +5041,8 @@ async function parseMegaoPDFLocal(file) {
     // (2026-07-30) : `p.unit`/`p.qte` sont déjà disponibles ici (productRe les capture), pas
     // besoin d'une 2e regex dédiée comme côté serveur.
     const longueur = p.unit === 'ML' ? String(p.qte) : '';
-    return { type: codeType, couleur: c, couleurBouchon: cb, decroche, lameEscalier, longueur };
+    const largeur = lameCodeToLargeur(p.code);
+    return { type: codeType, couleur: c, couleurBouchon: cb, decroche, lameEscalier, longueur, largeur };
   }
   const lameInfoAll = lamProdsAll.map(deriveLameInfoFromProd);
   // Ligne canonique = la 1ère ligne qui n'est ni décroché ni escalier s'il y en a une, sinon la
@@ -5049,7 +5064,7 @@ async function parseMegaoPDFLocal(file) {
   // scripts/megao-sync.js, même forme que lignesLames (saisie manuelle) pour rester compatible.
   const lamesDetail = lameInfoAll.length > 1 ? lameInfoAll.map(li => ({
     type: li.type, couleur: li.couleur, couleurBouchon: li.couleurBouchon,
-    decroche: li.decroche, lameEscalier: li.lameEscalier, longueur: li.longueur,
+    decroche: li.decroche, lameEscalier: li.lameEscalier, longueur: li.longueur, largeur: li.largeur,
   })) : undefined;
 
   // Moteur : suffixe du code VR après le préfixe de structure (VRSIL80S → 80S)
@@ -5062,13 +5077,11 @@ async function parseMegaoPDFLocal(file) {
   const alimM     = vrBlock.match(/\b(\d{2,3})\s*V\b/i);
   const alim      = alimM ? alimM[1] + 'V' : '';
 
-  // Largeur depuis le code LAM/LAMPOL (LAM350→3.50m, LAM45→4.5m, LAM4→4m, LAMPOL4→4m)
+  // Largeur depuis le code LAM/LAMPOL (LAM350→3.50m, LAM45→4.5m, LAM4→4m, LAMPOL4→4m) — voir
+  // lameCodeToLargeur (partagée avec la largeur par ligne de lamesDetail, cf. deriveLameInfoFromProd
+  // plus bas, même helper que scripts/megao-sync.js).
   const lamCodeM = lamProd ? lamProd.code.match(/^LAM(?:POL)?([0-9]+)/) : null;
-  let largeur = '';
-  if (lamCodeM) {
-    const n = parseInt(lamCodeM[1]);
-    largeur = String(lamCodeM[1].length >= 3 ? n / 100 : lamCodeM[1].length === 2 ? n / 10 : n);
-  }
+  const largeur = lamCodeM ? lameCodeToLargeur(lamProd.code) : '';
 
   // Longueur depuis la quantité ML sur la ligne LAM (mètres linéaires = longueur bassin)
   const lamQtyM = text.match(/^LAM[0-9]+.+?ML\s+([\d,]+)/m);
@@ -5484,7 +5497,7 @@ function saveDossier() {
     contraintes:document.getElementById('f-contraintes').value,
     structure,options:document.getElementById(isBache ? 'f-options-bache' : 'f-options').value,
     lames:lignesLames[0]?.couleur||'',couleurBouchon:document.getElementById('f-couleurBouchon')?.value||'',
-    lamesDetail: lignesLames.some(l => l.couleur || l.longueur) ? lignesLames : null,
+    lamesDetail: lignesLames.some(l => l.couleur || l.longueur || l.largeur) ? lignesLames : null,
     decroche: document.getElementById('f-decroche')?.value === '1',
     lameEscalier: document.getElementById('f-lameEscalier')?.value === '1',
     pieds:document.getElementById('f-pieds').value,
