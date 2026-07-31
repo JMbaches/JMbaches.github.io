@@ -302,8 +302,22 @@ async function main() {
       }
       console.log(`Bilan : ${stats.enrichi} enrichis, ${stats.inchange} déjà à jour, ${stats.absent} dossier(s) introuvable(s)`);
 
-      await imap.messageDelete([uid], { uid: true });
-      console.log(`Email d'enrichissement supprimé`);
+      // Tant qu'au moins 1 commande de cet email est "introuvable" (dossier pas encore créé côté
+      // megao-sync.js), on NE supprime PAS l'email — on le laisse non lu pour qu'il soit retenté
+      // au prochain run (5 min plus tard). Avant ce fix, l'email était supprimé quoi qu'il arrive :
+      // comme la VM (megao_enrich_vm.py) ne renvoie une commande que si son contenu a changé
+      // depuis le dernier envoi, une commande "introuvable" qui ne change plus ensuite n'était
+      // JAMAIS retentée — son enrichissement était perdu en silence (confirmé sur les logs
+      // GitHub Actions réels : 13 pertes en 24h). Réessayer le contenu déjà enrichi ne fait rien
+      // de mal (enrichirDossier compare au contenu existant et redevient "déjà à jour").
+      // Compromis assumé : si un dossier n'est jamais créé, cet email reste indéfiniment non lu —
+      // pas de plafond de rétentative, acceptable au volume actuel (quelques emails/jour).
+      if (stats.absent === 0) {
+        await imap.messageDelete([uid], { uid: true });
+        console.log(`Email d'enrichissement supprimé`);
+      } else {
+        console.log(`Email laissé non lu (${stats.absent} commande(s) introuvable(s)) — retenté au prochain run`);
+      }
     }
 
     console.log(`[${new Date().toISOString()}] Enrichissement terminé`);
