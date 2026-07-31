@@ -1673,6 +1673,14 @@ function App() {
         if (ids.length) setChantiers(prev => prev.map(c => ids.includes(c.externalId) ? { ...c, archived: true, scheduledDate: '', scheduledBinome: '', status: 'reporte' } : c));
         return;
       }
+      // JMBACH_DELETE : le dossier n'existe plus DU TOUT côté app de gestion (suppression
+      // définitive) — contrairement à JMBACH_REMOVE (ne nécessite plus de pose, mais le dossier
+      // existe toujours), on retire le chantier entièrement au lieu de l'archiver.
+      if (e.data.type === 'JMBACH_DELETE') {
+        const ids = e.data.ids || [];
+        if (ids.length) setChantiers(prev => prev.filter(c => !ids.includes(c.externalId)));
+        return;
+      }
       if (e.data.type === 'JMBACH_REQUEST_UPDATE') {
         const toSend = _prevCh.current.filter(c => c.externalId)
           .map(c => ({ externalId: c.externalId, scheduledDate: c.scheduledDate || '', scheduledBinome: c.scheduledBinome || '', status: c.status }));

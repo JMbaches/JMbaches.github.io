@@ -7051,6 +7051,9 @@ Vous allez supprimer ${n} dossier${n>1?'s':''} définitivement.
       await batch.commit();
     }
     dossiers = [];
+    // Même répercussion planning que supprimerDossier (voir commentaire là-bas) — best-effort.
+    const planFrame = document.getElementById('planning-ia-frame');
+    if (planFrame && planFrame.contentWindow) planFrame.contentWindow.postMessage({ type: 'JMBACH_DELETE', ids: allDos.map(d => d.id) }, '*');
     showToast(`${allDos.length} dossier${allDos.length>1?'s':''} supprimé${allDos.length>1?'s':''}`);
     if (typeof refreshCurrentView === 'function') refreshCurrentView();
   };
@@ -7074,6 +7077,14 @@ async function supprimerDossier(dosId, e) {
     }
     dossiers = dossiers.filter(x => x.id !== dosId);
     notifications = notifications.filter(x => x.dosId !== dosId);
+    // Répercuter la suppression dans l'app planning embarquée si elle est ouverte — même pattern
+    // que la sortie du planning sur reclassement (setDosField, JMBACH_REMOVE), mais un type de
+    // message distinct (JMBACH_DELETE) car ici le dossier n'existe plus du tout : le chantier doit
+    // être retiré pour de bon côté planning, pas juste archivé comme pour un simple "ne nécessite
+    // plus de pose". Best-effort (comme JMBACH_REMOVE) : ne fait rien si l'onglet Planning n'est
+    // pas ouvert au moment de la suppression.
+    const planFrame = document.getElementById('planning-ia-frame');
+    if (planFrame && planFrame.contentWindow) planFrame.contentWindow.postMessage({ type: 'JMBACH_DELETE', ids: [dosId] }, '*');
     showToast(`Dossier ${dosId} supprimé`);
     renderDos();
   } catch (err) {
