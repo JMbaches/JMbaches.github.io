@@ -609,9 +609,16 @@ function toggleChkModal(dosId,type,ri,val) {
   saveData();
   const kind = type==='verif_acc' ? 'acc' : (type==='verif_axetab' ? 'axetab' : undefined);
   renderChecklistBody(dosId, kind);
-  // Rafraîchir la barre de progression sur la carte + les boutons d'avancement grevés/actifs
+  // Rafraîchir la carte/liste sous la modale (barre de progression, boutons d'avancement/
+  // "Marquer stocké" grevés ou actifs) — sans ça le bouton restait affiché tel qu'au moment de
+  // l'ouverture de la modale jusqu'au prochain rechargement de page (bug réel trouvé en testant
+  // la checklist Axe/Tablier à l'emballage en conditions réelles, 2026-07-30 : "Marquer stocké"
+  // ne réapparaissait qu'après F5, alors que côté Atelier le rafraîchissement marchait déjà).
   if(currentTab==='atelier_grand') renderAtelierGrand();
   else if(currentTab==='atelier') renderAtelier();
+  else if(currentTab==='emballage_view' && typeof renderEmballage==='function') renderEmballage();
+  else if(currentTab==='emballage_grand' && typeof renderEmballageGrand==='function') renderEmballageGrand();
+  else if(currentTab==='stocke_liste' && typeof renderStockeListe==='function') renderStockeListe();
 }
 function setChkModal(dosId,type,ri,field,value) {
   const d=dossiers.find(x=>x.id===dosId); if(!d) return;
