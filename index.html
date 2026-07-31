@@ -4577,6 +4577,15 @@ async function changerStatutDossier(d, newStatut, logSuffix) {
     d.atelierTablierFait = false;
     d.atelierAxeFait = false;
   }
+  // Date d'entrée en atelier (2026-07-30) : d.statutChangedAt est générique et écrasé à CHAQUE
+  // changement de statut ultérieur (utilisé aussi par emballage.js pour "depuis combien de
+  // temps") — une fois le dossier passé en emballage, l'ancienneté en atelier serait perdue.
+  // Champ dédié, fixé une seule fois à l'entrée réelle en production (volets ET bâches), jamais
+  // réécrasé ensuite — sert de clé de tri FIFO pour les dossiers sans semaine de fabrication
+  // assignée (voir filtrerSemaineAtelier, atelier.js).
+  if (newStatut === 'production' && prev !== 'production') {
+    d.dateEntreeAtelier = nowISO();
+  }
   d.statut = newStatut; d.statutChangedAt = nowISO();
   logHistory(d.id,'statut',`Statut changé${logSuffix?' '+logSuffix:''} : ${STATUT_LABEL[prev]} → ${STATUT_LABEL[newStatut]}`);
   pushNotif('statut:'+newStatut,d.id,d);

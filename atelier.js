@@ -158,10 +158,35 @@ async function terminerPosteAxe(dosId, e) {
   showToast(`✓ Axe prêt — ${d.client} envoyé en emballage`);
   rerenderAtelierCourant();
 }
+// Filtre "semaine courante" de l'atelier (2026-07-30) : ne montre QUE les dossiers dont la
+// semaine de fabrication souhaitée (d.dateFab, lundi ISO — même calcul que optionsSemainesFab
+// côté index.html/getWeekDates de planning.js, partagé globalement) est la semaine en cours OU
+// une semaine passée (dossier en retard, jamais fini à temps — décision utilisateur : reste
+// visible plutôt que caché indéfiniment tant que personne ne le réassigne à la main). Une fois
+// ce stock épuisé (aucun dossier prioritaire restant), bascule sur les dossiers SANS semaine
+// assignée (certains volets n'ont pas besoin d'être priorisés sur une semaine précise), triés
+// par date d'ENTRÉE EN ATELIER croissante (le plus vieux en premier, FIFO) — pas par date de
+// livraison comme le tri auto habituel de getSortedProd(), qui ne s'applique qu'aux dossiers
+// prioritaires (tous ont une dateFab, comparable entre eux).
+// Retourne { list, mode } — mode='semaine' (dateFab déjà comparable, tri auto habituel OK) ou
+// mode='anciennete' (déjà triée ici par dateEntreeAtelier, à NE PAS re-trier par dateFab/
+// dateLivraison qui seraient tous vides pour ce lot).
+function filtrerSemaineAtelier(prod) {
+  const lundiCourant = toISODate(getWeekDates(0)[0]);
+  const prioritaires = prod.filter(d => d.dateFab && d.dateFab <= lundiCourant);
+  if (prioritaires.length) return { list: prioritaires, mode: 'semaine' };
+  const sansSemaine = prod.filter(d => !d.dateFab).sort((a, b) => {
+    const aD = a.dateEntreeAtelier || '', bD = b.dateEntreeAtelier || '';
+    return aD < bD ? -1 : aD > bD ? 1 : 0;
+  });
+  return { list: sansSemaine, mode: 'anciennete' };
+}
 function renderAtelier() {
-  const prod=filteredDossiers(dossiers.filter(d=>d.statut==='production')).filter(matchesTypeFilter).filter(d=>dossierVisibleAuPoste(d));
+  const prodBase=filteredDossiers(dossiers.filter(d=>d.statut==='production')).filter(matchesTypeFilter).filter(d=>dossierVisibleAuPoste(d));
+  const { list: prod, mode } = filtrerSemaineAtelier(prodBase);
   const mc=document.getElementById('main-content');
-  const header=`<div class="section-header"><div class="section-title">Commandes à fabriquer</div><div style="display:flex;align-items:center;gap:10px">${typeFilterSelectHtml('renderAtelier')}<span style="font-size:13px;color:var(--ink-faint)">${prod.length} en cours</span></div></div>`;
+  const modeNote = mode==='anciennete' ? `<span style="font-size:12px;color:var(--teal);font-weight:600" title="Aucun dossier prioritaire cette semaine — dossiers sans semaine assignée, du plus ancien au plus récent">· Sans priorité (par ancienneté)</span>` : '';
+  const header=`<div class="section-header"><div class="section-title">Commandes à fabriquer</div><div style="display:flex;align-items:center;gap:10px">${typeFilterSelectHtml('renderAtelier')}<span style="font-size:13px;color:var(--ink-faint)">${prod.length} en cours</span>${modeNote}</div></div>`;
   if(!prod.length){mc.innerHTML=header+`<div class="empty-state"><i class="ti ti-tools"></i>Aucune commande en production pour le moment</div>`;return;}
   mc.innerHTML=`${header}
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px">
@@ -198,7 +223,17 @@ function renderAtelier() {
   </div>`;
 }
 function getSortedProd() {
-  const prod = filteredDossiers(dossiers.filter(d => d.statut === 'production')).filter(matchesTypeFilter).filter(d=>dossierVisibleAuPoste(d));
+  const prodBase = filteredDossiers(dossiers.filter(d => d.statut === 'production')).filter(matchesTypeFilter).filter(d=>dossierVisibleAuPoste(d));
+  const { list: prod, mode } = filtrerSemaineAtelier(prodBase);
+  // En mode 'anciennete' (aucun dossier prioritaire cette semaine), filtrerSemaineAtelier a déjà
+  // trié par dateEntreeAtelier — ne pas laisser le tri auto ci-dessous retomber sur dateLivraison
+  // (qui n'a aucun rapport avec l'ancienneté en atelier). L'ordre manuel (drag&drop) reste
+  // possible dans les 2 modes : il opère sur `prod`, déjà le bon sous-ensemble filtré par semaine.
+  if (mode === 'anciennete') {
+    const manualIds = atelierOrder.filter(id => prod.find(d => d.id === id));
+    const unordered = prod.filter(d => !manualIds.includes(d.id)); // déjà trié par dateEntreeAtelier
+    return [...manualIds.map(id => prod.find(d => d.id === id)), ...unordered].filter(Boolean);
+  }
   // Appliquer l'ordre manuel si existant, sinon tri auto : URGENT > date livraison
   const manualIds = atelierOrder.filter(id => prod.find(d => d.id === id));
   const unordered = prod.filter(d => !manualIds.includes(d.id));
