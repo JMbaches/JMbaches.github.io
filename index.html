@@ -3082,17 +3082,29 @@ function openFiche(id) {
 // déjà en cours de remplissage. L'ancienne page générique "verif" (VERIF_ROWS, avant 2026-07-30),
 // si présente sur un vieux dossier déjà clôturé, n'est PAS supprimée (historique de contrôle
 // qualité conservé) — les 2 nouvelles s'ajoutent simplement à côté pour les dossiers volets.
+// Retourne true si au moins une page a été ajoutée (pour que l'appelant sache s'il doit
+// persister — voir plus bas checklistComplete/renderAtelierGrand, appelés bien plus souvent que
+// renderFiche() : sans ça, un dossier dont la fiche n'a jamais été ouverte affichait le bouton
+// "Accessoires prêts" DÉBLOQUÉ à tort — checklistComplete() traitait "pas de page trouvée" comme
+// "rien à vérifier" au lieu de créer la page manquante avant de juger (bug réel trouvé en testant
+// en conditions réelles sur le dossier 121068, 2026-07-30 : jamais ouvert depuis le déploiement,
+// donc toujours ['commande','verif'], jamais ['verif_acc','verif_axetab']).
 function ensureVoletChecklistPages(d) {
-  if (!d || isBacheDossier(d)) return;
+  if (!d || isBacheDossier(d)) return false;
   const family = voletChecklistFamily(d);
-  if (!family) return;
+  if (!family) return false;
   if (!d.pages) d.pages = [];
+  let changed = false;
   if (family !== 'tablier_seul' && !d.pages.some(p => p.type === 'verif_acc')) {
     d.pages.push({ type: 'verif_acc', label: 'Vérif. Accessoires', checks: {}, rows: checklistAccessoiresRows(d) });
+    changed = true;
   }
   if (!d.pages.some(p => p.type === 'verif_axetab')) {
     d.pages.push({ type: 'verif_axetab', label: 'Vérif. Axe/Tablier', checks: {}, rows: checklistAxeTablierRows(d) });
+    changed = true;
   }
+  if (changed && typeof saveData === 'function') saveData();
+  return changed;
 }
 function renderFiche() {
   const d=dossiers.find(x=>x.id===currentDosId); if(!d) return;

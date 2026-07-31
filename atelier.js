@@ -333,6 +333,7 @@ function renderAtelierGrand() {
       // (bâches : toujours l'unique page "verif" générique ; volets : Accessoires tant que ce
       // poste n'est pas fait, puis Axe/Tablier — cf. atelierEtapeActuelle, checklistPageType).
       const ckType = isBacheDossier(d) ? 'verif' : checklistPageType(d, atelierEtapeActuelle(d)==='accessoires' ? 'acc' : 'axetab');
+      if (!isBacheDossier(d) && typeof ensureVoletChecklistPages==='function') ensureVoletChecklistPages(d);
       const ckPage = d.pages?.find(p => p.type===ckType);
       const chk = ckPage?.checks || {};
       const rows = ckPage?.rows || [];
@@ -516,10 +517,16 @@ function checklistPageType(d, kind) {
   if (isBacheDossier(d)) return 'verif';
   return kind === 'acc' ? 'verif_acc' : 'verif_axetab';
 }
-// Complète (ou n'existe pas — rien à vérifier à cette étape, ex. poste Accessoires pour un
-// dossier "Tablier seul") = ne bloque rien. Utilisé pour griser les boutons d'avancement.
+// Complète (ou n'existe vraiment pas pour cette famille — ex. poste Accessoires pour un dossier
+// "Tablier seul") = ne bloque rien. Utilisé pour griser les boutons d'avancement.
+// ensureVoletChecklistPages() d'abord : un dossier dont la fiche n'a jamais été ouverte (import
+// Mégao direct, jamais consulté avant d'arriver à l'atelier) n'a pas encore ses pages verif_acc/
+// verif_axetab — sans cet appel, "pas de page trouvée" serait à tort interprété comme "rien à
+// vérifier" et le bouton d'avancement resterait débloqué (bug réel trouvé en conditions réelles
+// sur le dossier 121068, 2026-07-30).
 function checklistComplete(d, kind) {
   if (isBacheDossier(d)) return true;
+  if (typeof ensureVoletChecklistPages === 'function') ensureVoletChecklistPages(d);
   const type = checklistPageType(d, kind);
   const p = d.pages?.find(pg => pg.type === type);
   if (!p || !p.rows || !p.rows.length) return true;
