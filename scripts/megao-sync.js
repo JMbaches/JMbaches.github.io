@@ -116,6 +116,14 @@ function parseMegaoText(text) {
   const vrDesig = vrM ? vrM[2].replace(/\s*\n\s*/g, ' ').trim() : '';
   const vrCode  = vrM ? vrM[1] : '';
   const vrText  = (vrCode + ' ' + vrDesig).toLowerCase();
+  // X-Trem en version déplaçable : ligne d'OPTION distincte (VRXTREMM, "Option structure XTrem
+  // Roll en déplacable...") en plus du code de structure de base (VRXTREM7/8, capté par vrM/vrText
+  // ci-dessus) — les deux lignes coexistent dans le même bon de commande, cf. dossier réel 117966.
+  // Confirmé par l'utilisateur (2026-07-30) : se monte/se checke comme un Mouv&Roll (même postes/
+  // checklist atelier), pas comme un X-Trem Roll classique (fallback par défaut ci-dessous, même
+  // famille que Silver) — d'où un libellé structure distinct contenant "Mouv" pour que
+  // voletChecklistFamily() (index.html) route correctement SANS avoir besoin d'un champ à part.
+  const isXtremMouv = vrAllM.some(m => /^VRXTREMM/.test(m[1]));
   const STRUCT_MAP = [
     { k: ['silver roll','vrsil'],           v: 'Volet hors-sol Silver Roll' },
     { k: ['golden roll','solaire','vrsol'],  v: 'Volet hors-sol solaire Golden Roll' },
@@ -125,7 +133,7 @@ function parseMegaoText(text) {
     { k: ['subwater total','vrsubt'],       v: 'Volet immergé Subwater Total' },
     { k: ['subwater','vrsub'],              v: 'Volet immergé Subwater' },
   ];
-  const structure = STRUCT_MAP.find(m => m.k.some(k => vrText.includes(k)))?.v
+  const structure = (isXtremMouv ? 'Volet déplaçable X-Trem Mouv' : STRUCT_MAP.find(m => m.k.some(k => vrText.includes(k)))?.v)
                  || vrDesig
                  || (/tablier\s+seul/i.test(text) ? 'Tablier seul' : '');
   // Le marqueur de quantité n'est plus dans lamM[2] (exclu par la regex ci-dessus) — reste juste

@@ -1100,6 +1100,7 @@ a:focus-visible, button:focus-visible,
                 <option>Volet hors-sol solaire Golden Roll</option>
                 <option>Volet hors-sol avec coffre</option>
                 <option>Volet hors-sol grand bassin X-Trem Roll</option>
+                <option>Volet déplaçable X-Trem Mouv</option>
                 <option>Volet déplaçable Mouv&Roll</option>
               </optgroup>
               <optgroup label="Volets immergés">
@@ -3361,7 +3362,7 @@ ${d.autres?`<div class="box danger" style="margin-top:8px"><div class="box-label
 
 function renderPageCommande(d, p) { p = p || {};
   const tr=d.transport||'';
-  const STRUCTS=['Volet hors-sol Silver Roll','Volet hors-sol solaire Golden Roll','Volet hors-sol avec coffre','Volet hors-sol grand bassin X-Trem Roll','Volet déplaçable Mouv&Roll','Volet immergé Subwater','Volet immergé Subwater Total','SAV / réglage volet','Remplacement tablier / lames','Métrage / repérage','Tablier seul','Banc avec structure intégrée (bassin maxi 5mx10m)'];
+  const STRUCTS=['Volet hors-sol Silver Roll','Volet hors-sol solaire Golden Roll','Volet hors-sol avec coffre','Volet hors-sol grand bassin X-Trem Roll','Volet déplaçable X-Trem Mouv','Volet déplaçable Mouv&Roll','Volet immergé Subwater','Volet immergé Subwater Total','SAV / réglage volet','Remplacement tablier / lames','Métrage / repérage','Tablier seul','Banc avec structure intégrée (bassin maxi 5mx10m)'];
   // Si la structure réelle du dossier n'est dans AUCUNE des options ci-dessus (valeur imprévue,
   // ex. saisie manuelle ou future variante Mégao), on l'ajoute quand même en tête de liste — sinon
   // le <select> retombe silencieusement sur la 1ère option (aucun <option> "selected") et affiche
@@ -4953,6 +4954,12 @@ async function parseMegaoPDFLocal(file) {
 
   // Structure : correspondance avec les options du select
   const vrText = ((vrProd ? vrProd.code : '') + ' ' + (vrProd ? vrProd.desig : '')).toLowerCase();
+  // X-Trem en version déplaçable (option VRXTREMM, ligne distincte du code de structure de base
+  // VRXTREM7/8) — même fix/même raison que scripts/megao-sync.js (2026-07-30, confirmé par
+  // l'utilisateur, dossier réel 117966) : se monte/se checke comme un Mouv&Roll, pas un X-Trem
+  // Roll classique — libellé structure distinct contenant "Mouv" pour router correctement dans
+  // voletChecklistFamily() sans champ à part.
+  const isXtremMouv = products.some(p => /^VRXTREMM/.test(p.code));
   const STRUCT_MAP = [
     { k: ['silver roll','vrsil'],           v: 'Volet hors-sol Silver Roll' },
     { k: ['golden roll','solaire','vrsol'],  v: 'Volet hors-sol solaire Golden Roll' },
@@ -4962,7 +4969,7 @@ async function parseMegaoPDFLocal(file) {
     { k: ['subwater total','vrsubt'],       v: 'Volet immergé Subwater Total' },
     { k: ['subwater','vrsub'],              v: 'Volet immergé Subwater' },
   ];
-  const structure = STRUCT_MAP.find(m => m.k.some(k => vrText.includes(k)))?.v || (vrProd ? vrProd.desig : '');
+  const structure = (isXtremMouv ? 'Volet déplaçable X-Trem Mouv' : STRUCT_MAP.find(m => m.k.some(k => vrText.includes(k)))?.v) || (vrProd ? vrProd.desig : '');
   // Codes abrégés Mégao pour la couleur de bouchon (motif "B.<code>", ex. "B.TRSP" = Bouchon
   // Transparent), quand ce n'est pas déjà un nom de couleur en clair (ex. "B.Noir") — confirmé
   // par l'utilisateur (2026-07-22). Compléter si d'autres codes apparaissent.
