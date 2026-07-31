@@ -89,7 +89,9 @@ function renderEmballage() {
             <button class="btn btn-secondary" style="justify-content:center;font-size:12px" onclick="printFeuilLivraison('${d.id}')"><i class="ti ti-printer"></i> Feuille livraison</button>
             <button class="btn btn-ghost" style="justify-content:center;font-size:12px;color:var(--red);border-color:#F09595" onclick="signalerManquant('${d.id}')"><i class="ti ti-alert-triangle"></i> Manquant</button>
           </div>
-          <button class="btn btn-primary" onclick="avancerDos('${d.id}',event)" style="width:100%;justify-content:center;margin-top:8px"><i class="ti ti-archive"></i> Marquer stocké</button>
+          ${(!isBacheDossier(d) && typeof checklistComplete==='function' && !checklistComplete(d,'axetab'))
+            ? `<button class="btn btn-secondary" onclick="openChecklist('${d.id}','axetab')" style="width:100%;justify-content:center;margin-top:8px;color:var(--amber);border-color:#FCD34D" title="La checklist Axe/Tablier doit être complète avant de marquer stocké"><i class="ti ti-list-check"></i> Compléter la checklist</button>`
+            : `<button class="btn btn-primary" onclick="avancerDos('${d.id}',event)" style="width:100%;justify-content:center;margin-top:8px"><i class="ti ti-archive"></i> Marquer stocké</button>`}
         </div>
       </div>`;
     }).join('')}

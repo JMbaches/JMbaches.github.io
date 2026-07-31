@@ -3,9 +3,10 @@
    Module autonome pour l'onglet Atelier (liste + grand écran, vue
    fabrication détaillée, checklist de vérification avant expédition).
    Dépend de variables/fonctions globales définies dans index.html
-   (dossiers, currentTab, atelierOrder, VERIF_ROWS, VERIF_EXP, can,
-   logHistory, saveData, showToast, fmt, isUrgent, tempsStatut,
-   tempsStatutColor, filteredDossiers, avancerDos, openModal, closeModal)
+   (dossiers, currentTab, atelierOrder, VERIF_ROWS_BACHE, VERIF_EXP,
+   ensureVoletChecklistPages, can, logHistory, saveData, showToast, fmt,
+   isUrgent, tempsStatut, tempsStatutColor, filteredDossiers, avancerDos,
+   openModal, closeModal)
    — fonctionne car tous les <script> classiques partagent le même
    scope lexical global du document (voir mémoire projet : piège
    let/window).
@@ -107,6 +108,12 @@ function atelierPosteActionsHtml(d, size, onclickPrefix) {
   const etape = atelierEtapeActuelle(d);
   if (etape === 'accessoires') {
     if (poste && poste !== 'accessoires') return '';
+    // Bloqué tant que la checklist Accessoires n'est pas à 100% Oui (2026-07-30, décision
+    // utilisateur : "on ne doit pas pouvoir avancer le dossier tant qu'elle n'a pas été remplie").
+    // checklistComplete renvoie vrai s'il n'y a rien à checker à ce poste (ex. "Tablier seul").
+    if (!checklistComplete(d, 'acc')) {
+      return `<button class="${btnClass}" style="${btnStyle}" onclick="${onclickPrefix}openChecklist('${d.id}','acc')" title="Complète la checklist Accessoires pour pouvoir avancer"><i class="ti ti-list-check"></i> Compléter la checklist</button>`;
+    }
     return `<button class="${btnClass}" style="${btnStyle}" onclick="${onclickPrefix}terminerPosteAccessoires('${d.id}',event)"><i class="ti ti-check"></i> Accessoires prêts</button>`;
   }
   if (etape === 'tablier') {
@@ -123,6 +130,9 @@ function atelierPosteActionsHtml(d, size, onclickPrefix) {
 async function terminerPosteAccessoires(dosId, e) {
   if (e) e.stopPropagation();
   const d = dossiers.find(x => x.id === dosId); if (!d || isBacheDossier(d)) return;
+  // Garde défensive : le bouton n'est déjà rendu qu'une fois la checklist complète
+  // (atelierPosteActionsHtml), mais on protège aussi contre un appel direct.
+  if (!checklistComplete(d, 'acc')) { showToast('⛔ Checklist Accessoires incomplète'); return; }
   d.atelierAccessoiresFait = true;
   logHistory(d.id, 'statut', `Atelier — poste accessoires validé, envoyé au poste tablier`);
   saveData();
@@ -284,11 +294,17 @@ function renderAtelierGrand() {
   <div class="stagger" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:18px">
     ${sorted.map((d, idx) => {
       const urg = isUrgent(d);
-      const chk = d.pages?.find(p => p.type==='verif')?.checks || {};
-      const rows = d.pages?.find(p => p.type==='verif')?.rows || VERIF_ROWS;
+      // Checklist affichée sur la carte = celle qui bloque RÉELLEMENT l'avancement à l'instant T
+      // (bâches : toujours l'unique page "verif" générique ; volets : Accessoires tant que ce
+      // poste n'est pas fait, puis Axe/Tablier — cf. atelierEtapeActuelle, checklistPageType).
+      const ckType = isBacheDossier(d) ? 'verif' : checklistPageType(d, atelierEtapeActuelle(d)==='accessoires' ? 'acc' : 'axetab');
+      const ckPage = d.pages?.find(p => p.type===ckType);
+      const chk = ckPage?.checks || {};
+      const rows = ckPage?.rows || [];
       const done = Object.values(chk).filter(c => c.oui).length;
-      const total = rows.length + VERIF_EXP.length;
-      const pct = total > 0 ? Math.round(done/total*100) : 0;
+      const withExp = ckType==='verif'||ckType==='verif_axetab';
+      const total = rows.length + (withExp ? VERIF_EXP.length : 0);
+      const pct = total > 0 ? Math.round(done/total*100) : 100;
       const pos = idx + 1;
       const posColor = pos===1 ? 'var(--red)' : pos===2 ? 'var(--amber)' : 'var(--ink-faint)';
       const posBg = pos===1 ? 'var(--red-light)' : pos===2 ? 'var(--amber-light)' : 'var(--bg)';
@@ -364,7 +380,10 @@ function renderAtelierGrand() {
             <div style="display:flex;gap:7px;flex-wrap:wrap">
               <button class="btn btn-ghost" onclick="openVueFab('${d.id}')" style="font-size:12px;padding:7px 12px"><i class="ti ti-eye"></i> Vue fab.</button>
               ${!isBacheDossier(d)?`<button class="btn btn-ghost" onclick="openFicheAccessoire('${d.id}')" style="font-size:12px;padding:7px 12px"><i class="ti ti-puzzle"></i> Fiche accessoire</button>`:''}
-              <button class="btn btn-secondary" onclick="openChecklist('${d.id}')" style="font-size:12px;padding:7px 12px"><i class="ti ti-list-check"></i> Checklist</button>
+              ${isBacheDossier(d)
+                ? `<button class="btn btn-secondary" onclick="openChecklist('${d.id}')" style="font-size:12px;padding:7px 12px"><i class="ti ti-list-check"></i> Checklist</button>`
+                : `<button class="btn btn-secondary" onclick="openChecklist('${d.id}','acc')" style="font-size:12px;padding:7px 12px"><i class="ti ti-list-check"></i> Checklist Accessoires${checklistComplete(d,'acc')?' ✓':''}</button>
+                   <button class="btn btn-secondary" onclick="openChecklist('${d.id}','axetab')" style="font-size:12px;padding:7px 12px"><i class="ti ti-list-check"></i> Checklist Axe/Tablier${checklistComplete(d,'axetab')?' ✓':''}</button>`}
               ${atelierPosteActionsHtml(d,'lg')}
             </div>
           </div>
@@ -455,9 +474,27 @@ function openVueFab(dosId) {
   openModal('modal-vue-fab');
 }
 
-function openChecklist(dosId) {
+// kind : 'acc' (checklist Accessoires) | 'axetab' (checklist Axe/Tablier) | undefined pour un
+// dossier bâches (page "verif" générique unique, inchangée — cf. atelierEtapeActuelle/checklists
+// numériques par poste 2026-07-30, volets uniquement).
+function checklistPageType(d, kind) {
+  if (isBacheDossier(d)) return 'verif';
+  return kind === 'acc' ? 'verif_acc' : 'verif_axetab';
+}
+// Complète (ou n'existe pas — rien à vérifier à cette étape, ex. poste Accessoires pour un
+// dossier "Tablier seul") = ne bloque rien. Utilisé pour griser les boutons d'avancement.
+function checklistComplete(d, kind) {
+  if (isBacheDossier(d)) return true;
+  const type = checklistPageType(d, kind);
+  const p = d.pages?.find(pg => pg.type === type);
+  if (!p || !p.rows || !p.rows.length) return true;
+  const chk = p.checks || {};
+  return p.rows.every((_, ri) => chk[ri]?.oui);
+}
+function openChecklist(dosId, kind) {
   const d=dossiers.find(x=>x.id===dosId); if(!d) return;
-  document.getElementById('checklist-title').textContent=`Checklist — ${d.client}`;
+  const titres = { acc:'Checklist Accessoires', axetab:'Checklist Axe / Tablier' };
+  document.getElementById('checklist-title').textContent = isBacheDossier(d) ? `Checklist — ${d.client}` : `${titres[kind]||'Checklist'} — ${d.client}`;
   document.getElementById('checklist-sub').textContent=`${d.id} · ${d.structure||'—'}`;
   const btnWrap=document.getElementById('checklist-fabrique-btn');
   if (d.statut==='production') {
@@ -467,22 +504,31 @@ function openChecklist(dosId) {
   } else {
     btnWrap.innerHTML = '';
   }
-  renderChecklistBody(dosId);
+  renderChecklistBody(dosId, kind);
   openModal('modal-checklist');
 }
-function renderChecklistBody(dosId) {
+function renderChecklistBody(dosId, kind) {
   const d=dossiers.find(x=>x.id===dosId); if(!d) return;
-  let p=d.pages?.find(pg=>pg.type==='verif');
-  if(!p){
+  const type = checklistPageType(d, kind);
+  if (!isBacheDossier(d) && typeof ensureVoletChecklistPages === 'function') ensureVoletChecklistPages(d);
+  let p=d.pages?.find(pg=>pg.type===type);
+  if(!p && isBacheDossier(d)){
     d.pages=d.pages||[];
-    p={type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]};
+    p={type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS_BACHE]};
     d.pages.push(p);
   }
-  const rows=p.rows||[...VERIF_ROWS];
+  if (!p) {
+    // Volet sans checklist à cette étape (ex. "Tablier seul" au poste Accessoires) — rien à cocher.
+    document.getElementById('checklist-progress').innerHTML = '';
+    document.getElementById('checklist-body').innerHTML = `<div class="empty-state" style="padding:30px 16px"><i class="ti ti-circle-check"></i>Rien à vérifier pour ce dossier à cette étape</div>`;
+    return;
+  }
+  const withExp = type==='verif'||type==='verif_axetab';
+  const rows=p.rows||[];
   const chk=p.checks||{};
   const done=Object.values(chk).filter(c=>c.oui).length;
-  const total=rows.length+VERIF_EXP.length;
-  const pct=total>0?Math.round(done/total*100):0;
+  const total=rows.length+(withExp?VERIF_EXP.length:0);
+  const pct=total>0?Math.round(done/total*100):100;
   document.getElementById('checklist-progress').innerHTML=`
     <div style="display:flex;align-items:center;gap:10px">
       <div style="flex:1;height:6px;background:var(--bg);border-radius:3px;overflow:hidden;border:1px solid var(--border)">
@@ -490,34 +536,46 @@ function renderChecklistBody(dosId) {
       </div>
       <span style="font-weight:600;color:${pct===100?'var(--green)':'var(--ink)'}">${done}/${total}</span>
     </div>`;
-  const makeRow=(row,ri,section)=>{
+  const makeRow=(row,ri)=>{
     const s=chk[ri]||{};
-    return `<div style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--border);${s.oui?'background:var(--green-light);':''}transition:background .15s">
+    return `<div style="display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--border);${s.oui?'background:var(--green-light);':''}transition:background .15s">
       <div style="flex:1;font-size:14px;font-weight:${s.oui?'600':'400'};color:${s.oui?'var(--green)':'var(--ink)'}">${row}</div>
-      <div style="display:flex;gap:6px">
-        <button onclick="toggleChkModal('${dosId}',${ri},'oui')" style="width:36px;height:36px;border-radius:var(--radius);border:1.5px solid ${s.oui?'var(--green)':'var(--border)'};background:${s.oui?'var(--green-light)':'transparent'};font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .1s">✓</button>
-        <button onclick="toggleChkModal('${dosId}',${ri},'non')" style="width:36px;height:36px;border-radius:var(--radius);border:1.5px solid ${s.non?'var(--red)':'var(--border)'};background:${s.non?'var(--red-light)':'transparent'};font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .1s">✗</button>
+      <input class="mini-inp" placeholder="Qté" value="${s.qte||''}" style="width:56px;flex-shrink:0" onchange="setChkModal('${dosId}','${type}',${ri},'qte',this.value)">
+      <input class="mini-inp" placeholder="Opérateur" value="${s.init||''}" style="width:90px;flex-shrink:0" onchange="setChkModal('${dosId}','${type}',${ri},'init',this.value)">
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button onclick="toggleChkModal('${dosId}','${type}',${ri},'oui')" style="width:36px;height:36px;border-radius:var(--radius);border:1.5px solid ${s.oui?'var(--green)':'var(--border)'};background:${s.oui?'var(--green-light)':'transparent'};font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .1s">✓</button>
+        <button onclick="toggleChkModal('${dosId}','${type}',${ri},'non')" style="width:36px;height:36px;border-radius:var(--radius);border:1.5px solid ${s.non?'var(--red)':'var(--border)'};background:${s.non?'var(--red-light)':'transparent'};font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .1s">✗</button>
       </div>
     </div>`;
   };
   document.getElementById('checklist-body').innerHTML=`
     <div style="padding:8px 16px;background:var(--bg);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint)">Fabrication</div>
     ${rows.map((r,i)=>makeRow(r,i)).join('')}
-    <div style="padding:8px 16px;background:var(--bg);border-bottom:1px solid var(--border);border-top:1px solid var(--border);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint)">Vérification avant expédition</div>
-    ${VERIF_EXP.map((r,i)=>makeRow(r,rows.length+i)).join('')}`;
+    ${withExp ? `<div style="padding:8px 16px;background:var(--bg);border-bottom:1px solid var(--border);border-top:1px solid var(--border);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint)">Vérification avant expédition</div>
+    ${VERIF_EXP.map((r,i)=>makeRow(r,rows.length+i)).join('')}` : ''}`;
 }
-function toggleChkModal(dosId,ri,type) {
+function toggleChkModal(dosId,type,ri,val) {
   const d=dossiers.find(x=>x.id===dosId); if(!d) return;
-  let p=d.pages?.find(pg=>pg.type==='verif');
+  let p=d.pages?.find(pg=>pg.type===type);
   if(!p) return;
   if(!p.checks) p.checks={};
   const c=p.checks[ri]||{};
-  if(type==='oui'){c.oui=!c.oui;if(c.oui)c.non=false;}
+  if(val==='oui'){c.oui=!c.oui;if(c.oui)c.non=false;}
   else{c.non=!c.non;if(c.non)c.oui=false;}
   p.checks[ri]=c;
-  logHistory(dosId,'vérification',`Checklist — "${p.rows?p.rows[ri]||ri:ri}" : ${type.toUpperCase()}`);
+  logHistory(dosId,'vérification',`Checklist — "${p.rows?p.rows[ri]||ri:ri}" : ${val.toUpperCase()}`);
   saveData();
-  renderChecklistBody(dosId);
-  // Rafraîchir la barre de progression sur la carte
+  const kind = type==='verif_acc' ? 'acc' : (type==='verif_axetab' ? 'axetab' : undefined);
+  renderChecklistBody(dosId, kind);
+  // Rafraîchir la barre de progression sur la carte + les boutons d'avancement grevés/actifs
   if(currentTab==='atelier_grand') renderAtelierGrand();
+  else if(currentTab==='atelier') renderAtelier();
+}
+function setChkModal(dosId,type,ri,field,value) {
+  const d=dossiers.find(x=>x.id===dosId); if(!d) return;
+  const p=d.pages?.find(pg=>pg.type===type); if(!p) return;
+  if(!p.checks) p.checks={};
+  if(!p.checks[ri]) p.checks[ri]={};
+  p.checks[ri][field]=value;
+  saveData();
 }

@@ -1581,7 +1581,253 @@ const NOTIF_RULES = [
   {trigger:'commentaire',       targets:['direction','admin'],  icon:'ti-message',      bg:'#EEEDFE',c:'#3C3489', title:d=>`Note ajoutée`,                        body:(d,det)=>`${d.client} — "${(det||'').slice(0,50)}"`},
   {trigger:'fiche_technique',   targets:['ouvrier'],            icon:'ti-file-description', bg:'#FAEEDA',c:'#633806', title:d=>`Fiche de fabrication disponible`,      body:d=>`${d.client} — ${d.structure||'—'} · Prête pour fabrication`},
 ];
-const VERIF_ROWS = ['Rayons','Pans coupés','Lames coupées','Lames finies','Axe','Contre axe + rails','Découpe ESC en équerre','Découpe ESC en lisse','Poutre + cornière','Cloison','Caillebotis'];
+// ── Checklists numériques de production (volets), 2026-07-30 ──────────────────────────────────
+// Remplacent l'ancien VERIF_ROWS (générique, identique pour toutes les gammes) par 2 checklists
+// alignées sur les postes atelier (voir atelierEtapeActuelle, atelier.js) — Oui/Non/Qté/Opérateur
+// par ligne comme les 4 fiches papier 2025 (Silver/Immergé/Immergé total/Mouv), transcrites avec
+// l'utilisateur. Besoin exprimé : "on a besoin des quantités pour savoir ce qu'on a vraiment
+// envoyé" — pas qu'un contrôle qualité Oui/Non, un relevé de ce qui est réellement sorti/monté.
+//   1. Checklist ACCESSOIRES (poste Accessoires) : alimentation/télécommande/options + spécifique
+//      immergé (caillebotis/mur/poutre/flasques). Bloque "Accessoires prêts" tant qu'incomplète.
+//   2. Checklist AXE+TABLIER (vue à l'Emballage — pas de checklist séparée aux Axes, decision
+//      utilisateur : "l'emballage et les axes sont au même endroit... pas besoin de checklist aux
+//      axes") : structure axe/moteur/serrure + tablier/lames/découpe/escalier. Bloque
+//      l'avancement en emballage tant qu'incomplète.
+// Rows = simples chaînes (comme l'ancien VERIF_ROWS) avec la quantité de référence "papier" dans
+// le libellé (ex. "Vis Penture (×5)") — la valeur RÉELLEMENT constatée va dans p.checks[ri].qte
+// (déjà supporté par le schéma existant setChk/toggleChk, voir renderPageVerif). Sections listant
+// un choix de couleur/référence sur la fiche papier (ex. 9 couleurs de pieds) sont compressées en
+// UNE ligne de confirmation plutôt que répétées — impraticable à cocher une par une et l'app a
+// déjà la couleur choisie ailleurs sur la fiche (d.pieds/d.lames/d.couleurBouchon).
+// Mapping gamme dossier → famille : voir voletChecklistFamily() plus bas. Cas incertains (Golden
+// Roll/coffre/Banc mappés sur 'silver' faute de commande réelle pour trancher, voir CLAUDE.md et
+// mémoire projet "checklists atelier volets") — à corriger si un jour ça ne convient pas.
+const CHECKLIST_ACCESSOIRES = {
+  silver: [
+    'Alimentation Électrique — Coffret 24V',
+    'Alimentation Électrique — Coffret Easy Plug 24V',
+    'Alimentation Électrique — Coffret 24V Électrolyseur',
+    'Alimentation — Coffret OXEO',
+    'Alimentation Solaire — Panneau solaire',
+    'Alimentation Solaire — Régulateur',
+    'Alimentation Solaire — Batterie 12V (×2)',
+    'Alimentation Solaire — Cordon batterie (×1)',
+    'Alimentation Solaire — Chargeur 24V',
+    'Alimentation Solaire — Contrôleur de charge',
+    'Alimentation Batterie — Batterie 12V (×2)',
+    'Alimentation Batterie — Cordon batterie (×1)',
+    'Alimentation Batterie — Chargeur 24V',
+    'Alimentation Batterie — Contrôleur de charge',
+    'Kit Batterie Amovible — Batterie 24V (×2)',
+    'Kit Batterie Amovible — Chargeur',
+    'Kit Batterie Amovible — Indicateur batterie',
+    'Kit Batterie Amovible — Porte-fusible',
+    'Télécommande Classique — Récepteur (×1)',
+    'Télécommande Classique — Émetteur (×2)',
+    'Télécommande Bluetooth',
+    'Prise 220V',
+    'Attaches sous margelles — Alu plat 9010 + vis (×5)',
+    'Attaches sous margelles — Vis penture (×10)',
+    'Attaches sous margelles — Chevilles 8x40 (×10)',
+    'Ailette pour débordement',
+  ],
+  immerge: [
+    'Alimentation Électrique — Coffret V2.2',
+    'Alimentation Électrique — Coffret 4000/4020',
+    'Alimentation — Coffret OXEO',
+    'Télécommande Classique — Récepteur',
+    'Télécommande Classique — Émetteur',
+    'Télécommande Bluetooth',
+    'Attaches sous margelles — Alu plat 9010 + vis (×3)',
+    'Attaches sous margelles — Vis penture (×6)',
+    'Attaches sous margelles — Chevilles 8x40 (×6)',
+    'Caillebotis — Couleur/essence conforme (PVC/Robinier/IPE)',
+    'Cloison pour mur — Nombre de lames (6m)',
+    'Cloison pour mur — Couleur conforme',
+    'Cloison pour mur — Jambes mur PVC (×2)',
+    'Cloison pour mur — Visserie M6x40 (×4)',
+    'Cloison pour mur — Barre de renfort',
+    'Poutre + cornière 40x40 — Couleur conforme',
+    'Poutre + cornière 40x40 — Sabot couleur poutre',
+    'Poutre + cornière 40x40 — Bouchons 100x100',
+    'Cornière 60x60 — Tirefonds M8',
+    'Cornière 60x60 — Chevilles M10',
+    'Équerre télescopique — Sur arase / sur bassin (préciser)',
+    'Équerre télescopique — Plat plastique',
+    'Flasque ×2 — Visseries avec sabots',
+    'Flasque ×2 — Passe câble',
+    'Flasque ×2 — Scellement chimique',
+    'Équerres pour flasques (×2 + visserie ×12)',
+    'Équerres pour sabots (×2 + visserie ×8)',
+  ],
+  immerge_total: [
+    'Alimentation Électrique — Coffret V2.2',
+    'Alimentation Électrique — Coffret 4000/4020',
+    'Alimentation — Coffret OXEO',
+    'Télécommande Classique — Récepteur',
+    'Télécommande Classique — Émetteur',
+    'Télécommande Bluetooth',
+    'Attaches sous margelles — Alu plat 9010 + vis (×5)',
+    'Attaches sous margelles — Vis penture (×10)',
+    'Attaches sous margelles — Chevilles 8x40 (×10)',
+    'Caillebotis — Couleur/essence conforme (PVC/Robinier/IPE/Leste)',
+    'Cloison pour mur — Nombre de lames (6m)',
+    'Cloison pour mur — Couleur conforme',
+    'Cloison pour mur — Jambes mur (×2)',
+    'Cloison pour mur — Visserie M6x40 (×4)',
+    'Cloison pour mur — Barre de renfort',
+    'Poutre — Sabots INOX',
+    'Poutre — Pièce 3D + visseries',
+    'Flasque — Visseries « U » ×2 (4 vis écrou)',
+    'Flasque — Passe câble ×2',
+    'Flasque — Colle + scellement chimique',
+    'Contre-poids tube — Nombre de sangles/vis conforme',
+  ],
+  mouv: [
+    'Alimentation Électrique — Coffret 24V',
+    'Alimentation Électrique — Coffret Easy Plug 24V',
+    'Alimentation Électrique — Coffret 24V Électrolyseur',
+    'Alimentation — Coffret OXEO',
+    'Alimentation Solaire — Panneau solaire',
+    'Alimentation Solaire — Régulateur',
+    'Alimentation Solaire — Batterie 12V (×2)',
+    'Alimentation Solaire — Cordon batterie (×1)',
+    'Alimentation Solaire — Chargeur 24V',
+    'Alimentation Solaire — Contrôleur de charge',
+    'Alimentation Batterie — Batterie 12V (×2)',
+    'Alimentation Batterie — Cordon batterie (×1)',
+    'Alimentation Batterie — Chargeur 24V',
+    'Alimentation Batterie — Contrôleur de charge',
+    'Kit Batterie Amovible — Batterie 24V (×2)',
+    'Kit Batterie Amovible — Chargeur',
+    'Kit Batterie Amovible — Indicateur batterie',
+    'Kit Batterie Amovible — Porte-fusible',
+    'Télécommande Classique — Récepteur (×1)',
+    'Télécommande Classique — Émetteur (×2)',
+    'Télécommande Bluetooth',
+    'Attaches sous margelles — Alu plat 9010 + vis (×5)',
+    'Attaches sous margelles — Vis penture (×10)',
+    'Attaches sous margelles — Chevilles 8x40 (×10)',
+  ],
+};
+const CHECKLIST_AXE = {
+  silver: [
+    'Axe — Dimension (140) / Diamètre (200) conforme',
+    'Palier',
+    'Pieds ×2 — Couleur conforme',
+    'Visserie axe — Chevilles 10x50 (×8)',
+    'Visserie axe — Tirefonds 8x60 (×8)',
+    'Visserie axe — Rondelles M8 (×8)',
+    'Palier 140 — Visserie 10x50 (×4)',
+    'Support « U » Palier — Visserie M8x50 (×1) + M10x20 (×2)',
+    'Support « U » Palier — Bite + bague + 2 vis',
+    'Support « U » Moteur — Visserie M8x50 (×1) + M10x20 (×2)',
+    'Support « U » Moteur — Bague moteur + 2 vis',
+    'Moteur — Référence conforme',
+    'Serrure à clé — Nombre',
+    'Serrure à clé — Clés (×2)',
+    'Serrure à clé — Contacteurs (×2)',
+    'Sangles d\'axe — Vis 4.8x25 (×3)',
+    'Sangles d\'axe — Rondelle L6 (×3)',
+    'Clips de sécurité — Vis Penture (×5)',
+    'Clips de sécurité — Chevilles 8x40 (×5)',
+  ],
+  immerge: [
+    'Axe — Dimension / Diamètre 140-200 conforme',
+    'Axe — Palier',
+    'Axe — Graisse',
+    'Axe — Vis (×3) + rondelles (×3)',
+    'Contre-poids (×3) + sangles (×3)',
+    'Moteur — Référence conforme (120S / 300+)',
+    'Serrure à clé — Boîte à clé + 2 clés',
+    'Serrure à clé — Contacteurs (×2)',
+    'Serrure à clé — Boîte de relais + Wago',
+    'Clips de sécurité — Vis Penture (×3)',
+    'Clips de sécurité — Chevilles 8x40 (×3)',
+  ],
+  immerge_total: [
+    'Axe — Dimension / Diamètre 140 conforme',
+    'Axe — Palier 140 + Palier 200',
+    'Axe — Graisse',
+    'Axe — Vis (×3) + rondelles (×3)',
+    'Moteur — Référence conforme (120S / 300+)',
+    'Serrure à clé — Boîte à clé + clés (×2)',
+    'Serrure à clé — Contacteurs (×2)',
+    'Serrure à clé — Boîte de relais + Wago',
+    'Clips de sécurité — Vis Penture (×5)',
+    'Clips de sécurité — Chevilles 8x40 (×5)',
+  ],
+  mouv: [
+    'Axe — Dimension (140) / Diamètre (200) conforme',
+    'Palier',
+    'Contre-axe — Dimension/couleur conforme',
+    'Pieds ×2 — Couleur conforme',
+    'Palier — Visserie 10x50 (×4)',
+    'Support « U » Palier/Moteur — Visserie + bague conforme',
+    'Support ×2 — Cache 10x10 (×4) + Cache 8x8 (×2) + Visserie M8x20 (×16)',
+    'Rails — Rails 3ml (×2)',
+    'Rails — Chevilles M6 (×30) + Vis 4x35 (×30)',
+    'Rails — Butées (×4) + Vis butées (×8)',
+    'Roues — Roue (×4) + Visserie M8x20 (×8)',
+    'Roues — Molettes freins (×2)',
+    'Moteur — Référence conforme',
+    'Serrure à clé — Clés (×2)',
+    'Serrure à clé — Contacteurs (×2)',
+    'Sangles d\'axe — Vis 4.8x25 (×3) + Rondelle L6 (×3)',
+    'Clips de sécurité — Vis Penture (×5)',
+    'Clips de sécurité — Chevilles 8x40 (×5)',
+  ],
+  tablier_seul: [],
+};
+// Section TABLIER — identique mot pour mot dans les 4 fiches papier, donc UNE seule liste
+// partagée par toutes les gammes (y compris "Tablier seul", qui n'a que celle-ci). Les lignes
+// Escalier ne sont ajoutées que si le dossier a effectivement un escalier (d.escalier renseigné).
+const CHECKLIST_TABLIER = [
+  'Lames PVC — Couleur conforme (Blanc/Sable/Gris foncé)',
+  'Rallonges utilisées (dimension)',
+  'Lames Polycarbonate — Coloris conforme',
+  'Bouchons Poly — Coloris conforme',
+  'Lames coupées (dimension)',
+  'Lames finies (dimension)',
+  'Rayons / Pans coupés — Découpe',
+  'Rayons / Pans coupés — Finition (équerre ou lisse/en forme)',
+  'Clips de sécurité tablier — Nombre',
+  'Clips de sécurité tablier — Coloris conforme',
+  'Sangles d\'axe tablier — Nombre',
+];
+const CHECKLIST_ESCALIER = [
+  'Escalier — Découpe (en forme / en équerre)',
+  'Escalier — Finition (équerre ou lisse/en forme)',
+  'Escalier — Type conforme (Romans/Droit/Trapèze)',
+  'Escalier — Nombre de lames conforme à la commande',
+];
+// Gamme du dossier → famille de checklist. Golden Roll/avec coffre/Banc mappés sur 'silver' (même
+// famille hors-sol, axe/palier/serrure identiques) faute de checklist dédiée ET de commande réelle
+// pour trancher plus finement à ce jour (0 commande Golden Roll/coffre, voir mémoire projet) — à
+// corriger si un jour ça ne convient pas. SAV/Métrage/structure vide → null (pas de checklist,
+// ce ne sont pas des fabrications neuves).
+function voletChecklistFamily(d) {
+  if (isBacheDossier(d)) return null;
+  const s = d.structure || '';
+  if (/immerg[ée].*total|subwater\s*total/i.test(s)) return 'immerge_total';
+  if (/immerg[ée]|subwater/i.test(s)) return 'immerge';
+  if (/mouv/i.test(s)) return 'mouv';
+  if (/tablier\s+seul|remplacement\s+tablier/i.test(s)) return 'tablier_seul';
+  if (/silver|x-?trem|coffre|golden|solaire|banc/i.test(s)) return 'silver';
+  return null;
+}
+function checklistAccessoiresRows(d) {
+  const f = voletChecklistFamily(d);
+  return f ? (CHECKLIST_ACCESSOIRES[f] || []) : [];
+}
+function checklistAxeTablierRows(d) {
+  const f = voletChecklistFamily(d);
+  if (!f) return [];
+  const axe = CHECKLIST_AXE[f] || [];
+  const tablier = [...CHECKLIST_TABLIER];
+  if (d.escalier) tablier.push(...CHECKLIST_ESCALIER);
+  return [...axe, ...tablier];
+}
 // Contenu deviné (pas confirmé avec l'atelier bâches) — à ajuster une fois validé.
 const VERIF_ROWS_BACHE = ['Dimensions bâche conformes bassin','Coloris conforme commande','Découpes (aspi/escalier) conformes','Enrouleur conforme','Œillets/finitions','Contrôle qualité soudures','Emballage complet'];
 // Catalogue des vrais modèles de bâches (repris de configurateur-baches.html, projet séparé
@@ -1703,38 +1949,38 @@ let users = []; // Rempli par Firestore au chargement
 const INITIAL_DOSSIERS=[
   {id:'D-2024-001',client:'M. Bertrand',tel:'06 12 34 56 78',email:'bertrand@mail.fr',contact:'M. Bertrand',adresse:'14 rue des Acacias',cp:'42000',ville:'Saint-Étienne',contraintes:'',structure:'Volet hors-sol Silver Roll',options:'Motorisation, Télécommande',lames:'Gris',pieds:'7016/Gris',alim:'24V',moteur:'120BD newton',ht:2800,tva:20,ref:'DEV-2024-001',devisStatut:'accepte',dateFrom:'2024-06-01',dateTo:'2024-06-15',dateLivraison:'2024-06-10',transport:'liv_pose',remarques:'',autres:'',needPose:true,poseDate:'',statut:'nouveau',createdBy:'u3',
    history:[{id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'01/06/2024 à 09:00'}],
-   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
+   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[]}]},
   {id:'D-2024-002',client:'Mme Durand',tel:'04 77 00 11 22',email:'durand@mail.fr',contact:'Mme Durand',adresse:'8 allée des Roses',cp:'42100',ville:'Saint-Étienne',contraintes:'Portail code 4521',structure:'Volet hors-sol solaire Golden Roll',options:'Motorisation solaire',lames:'Beige',pieds:'Beige',alim:'Solaire',moteur:'Moteur solaire',ht:3600,tva:20,ref:'DEV-2024-002',devisStatut:'accepte',dateFrom:'2024-06-02',dateTo:'2024-06-20',dateLivraison:'2024-06-12',transport:'liv_pose',remarques:'Piscine côté jardin, accès par portillon latéral',autres:'',needPose:true,poseDate:'',statut:'admin',createdBy:'u3',
    history:[
      {id:2,type:'statut',action:'Passé en traitement admin',detail:'',user:'u2',at:'02/06/2024 à 10:00'},
      {id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'01/06/2024 à 14:30'}],
-   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
+   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[]}]},
   {id:'D-2024-003',client:'SARL Piscines du Forez',tel:'04 77 55 66 77',email:'contact@piscinesforez.fr',contact:'M. Jacquet',adresse:'Zone Artisanale Nord',cp:'42160',ville:'Andrézieux-Bouthéon',contraintes:'',structure:'Volet immergé Subwater',options:'Motorisation, Niche de logement',lames:'Blanc',pieds:'Blanc',alim:'12V',moteur:'80BD newton',ht:5200,tva:20,ref:'DEV-2024-003',devisStatut:'accepte',dateFrom:'2024-06-03',dateTo:'2024-06-25',dateLivraison:'2024-06-14',transport:'liv_pose',remarques:'Bassin en L — mesures sur plan fourni',autres:'Prévenir le client 48h avant la pose',statut:'production',createdBy:'u3',
    history:[
      {id:3,type:'statut',action:'Passé en production',detail:'',user:'u2',at:'03/06/2024 à 11:00'},
      {id:2,type:'statut',action:'Passé en traitement admin',detail:'',user:'u2',at:'02/06/2024 à 09:00'},
      {id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'01/06/2024 à 11:00'}],
-   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
+   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[]}]},
   {id:'D-2024-004',client:'M. Renaud',tel:'06 11 22 33 44',email:'renaud@mail.fr',contact:'M. Renaud',adresse:'45 rue des Lilas',cp:'42100',ville:'Saint-Étienne',contraintes:'Prévenir 48h avant',structure:'Volet immergé Subwater Total',options:'Motorisation, Éclairage intégré, Niche de logement',lames:'Bleu',pieds:'Blanc',alim:'12V',moteur:'80BD newton',ht:6800,tva:20,ref:'DEV-2024-004',devisStatut:'accepte',dateFrom:'2024-06-04',dateTo:'2024-06-30',dateLivraison:'2024-06-18',transport:'liv_pose',remarques:'Fabrication tablier sur gabarit — bassin atypique',autres:'URGENT — client prioritaire',statut:'production',createdBy:'u3',
    history:[
      {id:3,type:'statut',action:'Passé en production',detail:'',user:'u2',at:'04/06/2024 à 08:00'},
      {id:2,type:'commentaire',action:'Note ajoutée',detail:'Client prioritaire — délai serré',user:'u3',at:'03/06/2024 à 16:00'},
      {id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'02/06/2024 à 10:00'}],
-   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
+   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[]}]},
   {id:'D-2024-005',client:'Mme Perrin',tel:'06 98 76 54 32',email:'perrin@mail.fr',contact:'Mme Perrin',adresse:'12 chemin du Moulin',cp:'42170',ville:'Saint-Just-Saint-Rambert',contraintes:'',structure:'Volet hors-sol avec coffre',options:'Motorisation, Habillage coffre',lames:'Anthracite',pieds:'Anthracite',alim:'220V',moteur:'100BD newton',ht:3200,tva:20,ref:'DEV-2024-005',devisStatut:'accepte',dateFrom:'2024-06-05',dateTo:'2024-06-20',dateLivraison:'2024-06-15',transport:'liv_pose',remarques:'',autres:'',needPose:true,poseDate:'',statut:'emballage',createdBy:'u3',
    history:[
      {id:4,type:'statut',action:'Passé en emballage',detail:'',user:'u5',at:'05/06/2024 à 15:00'},
      {id:3,type:'vérification',action:'Grille vérification complétée',detail:'Tous les éléments validés',user:'u5',at:'05/06/2024 à 14:00'},
      {id:2,type:'statut',action:'Passé en production',detail:'',user:'u2',at:'03/06/2024 à 09:00'},
      {id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'02/06/2024 à 11:00'}],
-   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
+   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[]}]},
   {id:'D-2024-006',client:'M. Faure',tel:'04 77 33 44 55',email:'faure@mail.fr',contact:'M. Faure',adresse:'3 impasse du Château',cp:'42270',ville:'Saint-Priest-en-Jarez',contraintes:'Sonnette portail',structure:'Volet déplaçable Mouv&Roll',options:'Télécommande',lames:'Blanc',pieds:'Blanc',alim:'24V',moteur:'80BD newton',ht:2400,tva:20,ref:'DEV-2024-006',devisStatut:'accepte',dateFrom:'2024-06-03',dateTo:'2024-06-18',dateLivraison:'2024-06-13',transport:'enlvt',remarques:'',autres:'',statut:'stocké',createdBy:'u3',
    history:[
      {id:4,type:'statut',action:'Stocké — prêt à expédier',detail:'',user:'u9',at:'05/06/2024 à 17:00'},
      {id:3,type:'statut',action:'Passé en emballage',detail:'',user:'u5',at:'04/06/2024 à 16:00'},
      {id:2,type:'statut',action:'Passé en production',detail:'',user:'u2',at:'02/06/2024 à 14:00'},
      {id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'01/06/2024 à 15:00'}],
-   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
+   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[]}]},
   {id:'D-2024-007',client:'SCI Les Platanes',tel:'04 77 88 99 00',email:'contact@sciplatanes.fr',contact:'M. Monnier',adresse:'Route de Firminy',cp:'42700',ville:'Firminy',contraintes:'',structure:'Volet hors-sol Silver Roll',options:'Motorisation, Télécommande, Habillage coffre',lames:'Gris anthracite',pieds:'Gris anthracite',alim:'24V',moteur:'120BD newton',ht:3100,tva:20,ref:'DEV-2024-007',devisStatut:'paye',dateFrom:'2024-05-20',dateTo:'2024-06-05',dateLivraison:'2024-06-03',transport:'liv_pose',remarques:'',autres:'',needPose:true,poseDate:'2024-06-03',statut:'posé',createdBy:'u3',
    history:[
      {id:5,type:'statut',action:'Dossier clôturé — Posé',detail:'',user:'u2',at:'03/06/2024 à 18:00'},
@@ -1742,18 +1988,18 @@ const INITIAL_DOSSIERS=[
      {id:3,type:'statut',action:'Passé en emballage',detail:'',user:'u5',at:'31/05/2024 à 15:00'},
      {id:2,type:'statut',action:'Passé en production',detail:'',user:'u2',at:'28/05/2024 à 09:00'},
      {id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'20/05/2024 à 10:00'}],
-   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
+   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[]}]},
   {id:'D-2024-008',client:'M. Aubert',tel:'06 44 55 66 77',email:'aubert@mail.fr',contact:'M. Aubert',adresse:'27 boulevard Carnot',cp:'42000',ville:'Saint-Étienne',contraintes:'',structure:'SAV / réglage volet',options:'',lames:'',pieds:'',alim:'',moteur:'',ht:280,tva:20,ref:'DEV-2024-008',devisStatut:'accepte',dateFrom:'2024-06-06',dateTo:'2024-06-10',dateLivraison:'2024-06-08',transport:'liv_pose',remarques:'Volet Silver Roll posé il y a 2 ans — problème de fin de course',autres:'',statut:'admin',createdBy:'u6',
    history:[
      {id:2,type:'statut',action:'Passé en traitement admin',detail:'',user:'u2',at:'06/06/2024 à 09:00'},
      {id:1,type:'création',action:'Dossier créé — SAV',detail:'',user:'u6',at:'05/06/2024 à 16:30'}],
-   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
+   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[]}]},
   {id:'D-2024-009',client:'M. Girard',tel:'06 77 88 99 00',email:'girard@mail.fr',contact:'M. Girard',adresse:'5 rue du Parc',cp:'42300',ville:'Roanne',contraintes:'Chien dans la propriété',structure:'Volet hors-sol grand bassin X-Trem Roll',options:'Motorisation, Télécommande',lames:'Blanc',pieds:'Blanc',alim:'24V',moteur:'150BD newton',ht:3400,tva:20,ref:'DEV-2024-009',devisStatut:'en_attente',dateFrom:'2024-06-10',dateTo:'2024-06-30',dateLivraison:'2024-06-20',transport:'liv_pose',remarques:'Grand bassin 12m — X-Trem Roll obligatoire',autres:'Prévenir pour le chien',needPose:true,poseDate:'',statut:'nouveau',createdBy:'u3',
    history:[{id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'05/06/2024 à 11:00'}],
-   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
+   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[]}]},
   {id:'D-2024-010',client:'Camping Le Soleil',tel:'04 77 11 22 33',email:'contact@campingsoleil.fr',contact:'Mme Rousseau',adresse:'Route des Gorges',cp:'43300',ville:'Langeac',contraintes:'Accès par chemin — véhicule utilitaire nécessaire',structure:'Volet immergé Subwater',options:'Motorisation',lames:'Gris',pieds:'Gris',alim:'220V',moteur:'80BD newton',ht:4900,tva:20,ref:'DEV-2024-010',devisStatut:'accepte',dateFrom:'2024-06-15',dateTo:'2024-07-15',dateLivraison:'2024-07-01',transport:'liv_pose',remarques:'Piscine extérieure camping — 8x4m',autres:'Accès par chemin étroit — prévoir véhicule adapté',needPose:true,poseDate:'',statut:'nouveau',createdBy:'u3',
    history:[{id:1,type:'création',action:'Dossier créé',detail:'',user:'u3',at:'05/06/2024 à 14:00'}],
-   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS]}]},
+   pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[]}]},
 ];
 let dossiers=[]; // Rempli par Firestore au chargement
 const INITIAL_NOTIFICATIONS = [
@@ -2826,9 +3072,33 @@ function openFiche(id) {
   setPresence(id);
   renderFiche();
 }
+// Garantit l'existence des 2 checklists volet (Accessoires + Axe/Tablier) sur `d` — appelé au
+// chargement de la fiche ET depuis les points de blocage atelier/emballage (un dossier importé
+// depuis Mégao n'a jamais eu sa fiche ouverte avant d'arriver en production). Migration paresseuse
+// pour les 162 dossiers volets déjà existants (pas de backfill Firestore nécessaire) : les rows
+// sont figées dans la page au moment de sa création, comme pour l'ancien VERIF_ROWS — un ajustement
+// ultérieur du mapping/contenu des checklists n'affecte donc que les NOUVELLES pages, pas celles
+// déjà en cours de remplissage. L'ancienne page générique "verif" (VERIF_ROWS, avant 2026-07-30),
+// si présente sur un vieux dossier déjà clôturé, n'est PAS supprimée (historique de contrôle
+// qualité conservé) — les 2 nouvelles s'ajoutent simplement à côté pour les dossiers volets.
+function ensureVoletChecklistPages(d) {
+  if (!d || isBacheDossier(d)) return;
+  const family = voletChecklistFamily(d);
+  if (!family) return;
+  if (!d.pages) d.pages = [];
+  if (family !== 'tablier_seul' && !d.pages.some(p => p.type === 'verif_acc')) {
+    d.pages.push({ type: 'verif_acc', label: 'Vérif. Accessoires', checks: {}, rows: checklistAccessoiresRows(d) });
+  }
+  if (!d.pages.some(p => p.type === 'verif_axetab')) {
+    d.pages.push({ type: 'verif_axetab', label: 'Vérif. Axe/Tablier', checks: {}, rows: checklistAxeTablierRows(d) });
+  }
+}
 function renderFiche() {
   const d=dossiers.find(x=>x.id===currentDosId); if(!d) return;
-  if(!d.pages||!d.pages.length) d.pages=[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:isBacheDossier(d)?[...VERIF_ROWS_BACHE]:[...VERIF_ROWS]}];
+  if(!d.pages||!d.pages.length) d.pages=isBacheDossier(d)
+    ? [{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS_BACHE]}]
+    : [{type:'commande',label:'Fiche commande',checks:{}}];
+  ensureVoletChecklistPages(d);
   const mc=document.getElementById('main-content');
   const p=d.pages[currentPageIdx];
   const tabs=d.pages.map((pg,i)=>`<button class="page-tab${i===currentPageIdx?' active':''}" onclick="switchPage(${i})">${pg.label}</button>`).join('');
@@ -2921,7 +3191,7 @@ function renderFiche() {
 }
 function renderPage(d,p) {
   if(p.type==='commande') return isBacheDossier(d) ? renderPageCommandeBache(d,p) : renderPageCommande(d,p);
-  if(p.type==='verif') return renderPageVerif(d,p);
+  if(p.type==='verif'||p.type==='verif_acc'||p.type==='verif_axetab') return renderPageVerif(d,p);
   if(p.type==='notes') return renderPageNotes(p);
   if(p.type==='expedition') return renderPageExp(d,p);
   return '';
@@ -3485,22 +3755,28 @@ function renderPageCommandeBache(d, p) { p = p || {};
   </div>`;
 }
 function renderPageVerif(d,p) {
-  const rows=p.rows||[...VERIF_ROWS]; const chk=p.checks||{};
+  const rows=p.rows||[];
+  // VERIF_EXP (contrôle avant expédition, "Longueur"/"Colis") ne s'ajoute qu'aux checklists qui
+  // précèdent réellement une expédition : la grille bâche générique et la checklist volet
+  // Axe/Tablier (vue à l'Emballage — la dernière avant stockage/envoi). Pas pour la checklist
+  // Accessoires (poste intermédiaire, rien à expédier à ce stade).
+  const withExp = p.type!=='verif_acc';
+  const chk=p.checks||{};
   const makeRow=(row,ri)=>{const s=chk[ri]||{};return`<tr>
     <td>${row}</td>
     <td><button class="check-btn${s.oui?' oui':''}" onclick="toggleChk('${d.id}',${currentPageIdx},${ri},'oui')">${s.oui?'✓':''}</button><button class="check-btn${s.non?' non':''}" onclick="toggleChk('${d.id}',${currentPageIdx},${ri},'non')">${s.non?'✗':''}</button></td>
     <td><input class="mini-inp" value="${s.qte||''}" style="width:50px" onchange="setChk('${d.id}',${currentPageIdx},${ri},'qte',this.value)"></td>
     <td><input class="mini-inp" value="${s.dim||''}" onchange="setChk('${d.id}',${currentPageIdx},${ri},'dim',this.value)"></td>
-    <td><input class="mini-inp" value="${s.init||''}" style="width:40px;text-align:center" onchange="setChk('${d.id}',${currentPageIdx},${ri},'init',this.value)"></td>
+    <td><input class="mini-inp" value="${s.init||''}" style="width:70px;text-align:center" onchange="setChk('${d.id}',${currentPageIdx},${ri},'init',this.value)"></td>
   </tr>`};
   return `<div class="card">
     <div class="card-hd"><span class="card-title">Grille de vérification — ${d.id} · ${d.client}</span></div>
     <table class="verif-table">
-      <thead><tr><th style="width:45%">Désignation</th><th style="width:100px">Oui / Non</th><th>Qté</th><th>Dim.</th><th>Initiale</th></tr></thead>
+      <thead><tr><th style="width:45%">Désignation</th><th style="width:100px">Oui / Non</th><th>Qté</th><th>Dim.</th><th>Opérateur</th></tr></thead>
       <tbody>
         ${rows.map((r,i)=>makeRow(r,i)).join('')}
-        <tr class="verif-sec-row"><td colspan="5">Vérification avant expédition</td></tr>
-        ${VERIF_EXP.map((r,i)=>makeRow(r,rows.length+i)).join('')}
+        ${withExp ? `<tr class="verif-sec-row"><td colspan="5">Vérification avant expédition</td></tr>
+        ${VERIF_EXP.map((r,i)=>makeRow(r,rows.length+i)).join('')}` : ''}
       </tbody>
     </table>
     <div style="padding:10px 14px;border-top:1px solid var(--border)">
@@ -3690,15 +3966,16 @@ function addPage(type) {
   const d=dossiers.find(x=>x.id===currentDosId); if(!d) return;
   const labels={commande:'Fiche commande',verif:'Vérification atelier',notes:'Notes',expedition:'Expédition'};
   const n=d.pages.filter(p=>p.type===type).length;
-  d.pages.push({type,label:labels[type]+(n>0?' '+(n+1):''),checks:{},rows:type==='verif'?(isBacheDossier(d)?[...VERIF_ROWS_BACHE]:[...VERIF_ROWS]):undefined});
+  d.pages.push({type,label:labels[type]+(n>0?' '+(n+1):''),checks:{},rows:type==='verif'?(isBacheDossier(d)?[...VERIF_ROWS_BACHE]:[]):undefined});
   currentPageIdx=d.pages.length-1;
   closeModal('modal-page-type'); saveData(); renderFiche();
 }
 function addVerifRow() {
   const d=dossiers.find(x=>x.id===currentDosId); if(!d) return;
-  const p=d.pages[currentPageIdx]; if(!p||p.type!=='verif') return;
+  const p=d.pages[currentPageIdx];
+  if(!p||!['verif','verif_acc','verif_axetab'].includes(p.type)) return;
   const name=prompt('Désignation de la ligne :'); if(!name) return;
-  if(!p.rows) p.rows=isBacheDossier(d)?[...VERIF_ROWS_BACHE]:[...VERIF_ROWS];
+  if(!p.rows) p.rows=[];
   p.rows.push(name); saveData(); renderFiche();
 }
 // ---- DOCUMENTS DOSSIER (Firebase Storage) ----
@@ -4374,6 +4651,15 @@ async function avancerDos(id,e) {
     else { openModalCloture(id,'dos'); return; }
   } else {
     next=getNextStatut(d);
+  }
+  // Emballage → Stocké (volets) : bloqué tant que la checklist Axe/Tablier n'est pas à 100% Oui
+  // (2026-07-30, même principe que le poste Accessoires — "on ne doit pas pouvoir avancer le
+  // dossier tant qu'elle n'a pas été remplie"). checklistComplete renvoie vrai s'il n'y a rien à
+  // checker (bâches, ou famille sans checklist axe/tablier — n'arrive pas en pratique ici).
+  if (d.statut==='emballage' && next==='stocké' && typeof checklistComplete==='function' && !checklistComplete(d,'axetab')) {
+    showToast('⛔ Checklist Axe/Tablier incomplète — à finir avant de marquer stocké');
+    if (typeof openChecklist==='function') openChecklist(id,'axetab');
+    return;
   }
   if (!(await changerStatutDossier(d, next))) return;
   saveData();
@@ -5221,8 +5507,9 @@ function saveDossier() {
     autres:document.getElementById('f-autres').value,
     statut:'admin',statutChangedAt:nowISO(),createdBy:currentUser.id,
     history:[{id:Date.now(),type:'création',action:'Dossier créé',detail:'',user:currentUser.id,at:now()}],
-    pages:[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:isBache?[...VERIF_ROWS_BACHE]:[...VERIF_ROWS]}]
+    pages:isBache?[{type:'commande',label:'Fiche commande',checks:{}},{type:'verif',label:'Vérification atelier',checks:{},rows:[...VERIF_ROWS_BACHE]}]:[{type:'commande',label:'Fiche commande',checks:{}}]
   };
+  if (!isBache) ensureVoletChecklistPages(d);
   dossiers.unshift(d);
   pushNotif('statut:admin',id,d);
   saveData(); closeModal('modal-dossier'); openFiche(id);

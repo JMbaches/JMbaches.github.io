@@ -140,6 +140,44 @@ les 2 listes `JM_POSE_DEPTS`/`AKENA_POSE_DEPTS` doivent rester identiques aux 2 
 - Le statut de livraison (expédié→livré→**posé**) reste inchangé pour une pose Azenco (transport
   reste `'liv_pose'`, la pose a bien lieu, mais par Azenco) — seul le PLANNING JM l'exclut.
 
+### 8. Checklists numériques de production volets (2026-07-30)
+Remplacent totalement l'ancien `VERIF_ROWS` (générique, une seule checklist Oui/Non identique pour
+toutes les gammes) par **2 checklists par dossier volet**, transcrites des 4 fiches papier atelier
+2025 (Silver/Immergé/Immergé total/Mouv, voir mémoire projet `project_checklists_atelier_volets`),
+alignées sur les postes (section 6 ci-dessus) — Oui/Non/**Qté**/**Opérateur** par ligne (besoin
+exprimé : "on a besoin des quantités pour savoir ce qu'on a vraiment envoyé", pas qu'un contrôle
+qualité). `VERIF_ROWS_BACHE` inchangé — les bâches gardent l'ancienne page `verif` unique.
+- **Checklist Accessoires** (`d.pages` type `verif_acc`) — alimentation/télécommande/options +
+  spécifique immergé (caillebotis/mur/poutre/flasques). Bloque le bouton "Accessoires prêts"
+  (`checklistComplete(d,'acc')`, atelier.js) tant qu'elle n'est pas à 100% Oui.
+- **Checklist Axe+Tablier** (type `verif_axetab`) — vue à l'**Emballage** (pas de checklist
+  séparée aux Axes, décision utilisateur : "l'emballage et les axes sont au même endroit... pas
+  besoin de checklist aux axes") : structure axe/moteur/serrure + tablier/lames/découpe, + les
+  lignes Escalier (`CHECKLIST_ESCALIER`) si `d.escalier` est renseigné. Bloque `avancerDos()`
+  (index.html) au passage emballage→stocké tant qu'incomplète — gate posé dans `avancerDos` lui-
+  même (pas juste le bouton) pour couvrir tous les appelants.
+- Rows = simples chaînes avec la quantité de référence "papier" dans le libellé (ex. "Vis Penture
+  (×5)") ; la valeur réellement constatée va dans `p.checks[ri].qte`/`.init` (opérateur) — réutilise
+  le schéma déjà existant de la page imprimable `renderPageVerif`/`setChk`/`toggleChk`, juste
+  jamais exposé avant dans le modal checklist atelier (`toggleChkModal`/`setChkModal`, qui prennent
+  maintenant `(dosId, pageType, ri, ...)` et plus `(dosId, ri, ...)` — signature changée).
+- **Mapping gamme → famille** (`voletChecklistFamily()`, index.html) : Silver/X-Trem/Golden
+  Roll/coffre/Banc → `silver` (même famille hors-sol) ; Mouv&Roll → `mouv` ; Immergé Subwater →
+  `immerge` ; Immergé Subwater Total → `immerge_total` ; Tablier seul/Remplacement tablier →
+  `tablier_seul` (pas de checklist Accessoires, seulement la partie Tablier partagée) ; SAV/
+  Métrage/structure vide → `null` (pas de checklist, pas une fabrication neuve).
+  ⚠️ Golden Roll/coffre/Banc mappés sur `silver` **par défaut, pas confirmé** (0 commande réelle
+  au moment de la décision) — si ça ne convient pas un jour, redemander à l'utilisateur plutôt que
+  deviner (voir mémoire projet).
+- Les rows sont **figées dans la page au moment de sa création** (comme l'ancien VERIF_ROWS) —
+  `ensureVoletChecklistPages(d)` (index.html) crée les 2 pages manquantes de façon **paresseuse**
+  (au chargement de la fiche ET aux points de blocage atelier/emballage), pas de backfill Firestore
+  nécessaire pour les 162 dossiers volets déjà existants. Un ajustement ultérieur du contenu des
+  checklists n'affecte donc que les nouvelles pages créées après coup.
+- D'anciennes pages `type:'verif'` (VERIF_ROWS, avant ce jour) restant sur de vieux dossiers déjà
+  clôturés ne sont PAS supprimées (historique de contrôle qualité conservé) — les 2 nouvelles
+  s'ajoutent simplement à côté pour les dossiers volets.
+
 ## Ce qui est délibérément désactivé / limité (ne pas "corriger" sans en parler)
 - `config/stock.decompteAutoActif = false` en prod : le décompte auto de stock à
   l'entrée en production est câblé et testé bout en bout, mais **désactivé
