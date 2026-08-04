@@ -5614,21 +5614,25 @@ function importerFicheTechnique(dosId, input) {
   reader.readAsDataURL(file);
 }
 
-// Retrouve la fiche de fabrication d'un dossier : le document le plus récent du dossier
-// "Fiche de fabrication" du porte-document (déposé automatiquement par la fiche de calcul,
-// ou à la main), avec repli sur l'ancien champ ficheTechniqueB64 des dossiers pas encore
-// migrés. ⚠ C'est LA source de vérité pour l'atelier : l'ancien champ est vidé par la
+// Retrouve TOUTES les fiches de fabrication d'un dossier (dossier "Fiche de fabrication" du
+// porte-document — déposées automatiquement par la fiche de calcul, ou à la main), triées de la
+// plus ancienne à la plus récente, avec repli sur l'ancien champ ficheTechniqueB64 des dossiers
+// pas encore migrés. ⚠ C'est LA source de vérité pour l'atelier : l'ancien champ est vidé par la
 // migration d'openPorteDoc, et le nouveau flux (jmb:pdf) ne le remplit jamais — tester
 // ficheTechniqueB64 directement fait disparaître les fiches à l'atelier.
-function getFicheFabrication(d){
-  if(!d) return null;
+function getFichesFabrication(d){
+  if(!d) return [];
   const docs=(d.documents||[]).filter(x=>x&&x.folder==='Fiche de fabrication'&&x.url);
-  if(docs.length){
-    const ts=x=>{const n=parseInt(x.id,10);return isNaN(n)?0:n;}; // les id commencent par Date.now()
-    return docs.reduce((a,b)=>ts(a)>=ts(b)?a:b);
-  }
-  if(d.ficheTechniqueB64) return {name:d.ficheTechniqueNom||'fiche-technique.pdf',url:d.ficheTechniqueB64};
-  return null;
+  const ts=x=>{const n=parseInt(x.id,10);return isNaN(n)?0:n;}; // les id commencent par Date.now()
+  if(docs.length) return [...docs].sort((a,b)=>ts(a)-ts(b));
+  if(d.ficheTechniqueB64) return [{name:d.ficheTechniqueNom||'fiche-technique.pdf',url:d.ficheTechniqueB64}];
+  return [];
+}
+// Compat : la plus récente seule (badges atelier, notifications — voir atelier.js pour la
+// navigation entre plusieurs fiches dans la modale "Vue fab.").
+function getFicheFabrication(d){
+  const fiches=getFichesFabrication(d);
+  return fiches.length?fiches[fiches.length-1]:null;
 }
 
 function voirFicheTechnique(dosId) {

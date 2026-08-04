@@ -427,8 +427,54 @@ function renderAtelierGrand() {
     }).join('')}
   </div>`;
 }
+// Position courante dans la modale "Vue fab." quand un dossier a plusieurs fiches de
+// fabrication (voir _vfFicheBlock/_vfNavFiche ci-dessous) — remise à la plus récente à chaque
+// nouvelle ouverture (dosId différent), conservée lors d'une simple navigation flèche (même dosId).
+let _vfFicheDosId = null, _vfFicheIdx = 0;
+
+// Rendu du bloc "Fiche de fabrication" de la modale "Vue fab." — même style de flèches
+// prev/suivant + compteur "n/total" que la navigation entre dossiers (index.html, fiche client).
+function _vfFicheBlock(d) {
+  const fiches = getFichesFabrication(d);
+  if (!fiches.length) {
+    return `
+      <div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:var(--radius);padding:14px 18px">
+        <div style="font-size:14px;color:#92400E"><i class="ti ti-clock" style="vertical-align:-1px;margin-right:6px"></i>Fiche de fabrication en attente</div>
+      </div>`;
+  }
+  if (_vfFicheIdx > fiches.length - 1) _vfFicheIdx = fiches.length - 1;
+  if (_vfFicheIdx < 0) _vfFicheIdx = 0;
+  const fiche = fiches[_vfFicheIdx];
+  const nav = fiches.length > 1 ? `
+      <div style="display:flex;align-items:center;gap:6px">
+        <button class="btn btn-ghost btn-sm" title="Fiche précédente" ${_vfFicheIdx===0?'disabled':''} onclick="_vfNavFiche('${d.id}',-1)" style="padding:4px 7px"><i class="ti ti-chevron-left"></i></button>
+        <span style="font-size:11px;color:var(--ink-faint)">${_vfFicheIdx+1}/${fiches.length}</span>
+        <button class="btn btn-ghost btn-sm" title="Fiche suivante" ${_vfFicheIdx===fiches.length-1?'disabled':''} onclick="_vfNavFiche('${d.id}',1)" style="padding:4px 7px"><i class="ti ti-chevron-right"></i></button>
+      </div>` : '';
+  return `
+    <div style="margin-top:6px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;row-gap:6px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint)"><i class="ti ti-file-type-pdf" style="color:var(--red)"></i> Fiche de fabrication</div>
+        ${nav}
+      </div>
+      <iframe src="${fiche.url}" style="width:100%;height:520px;border:1px solid var(--border);border-radius:var(--radius)"></iframe>
+    </div>`;
+}
+// Ré-ouvre la modale sur le même dossier avec l'index déplacé — même mécanisme que les autres
+// re-rendus de ce fichier (pas de patch DOM partiel), _vfFicheDosId inchangé donc l'index posé
+// ici survit au garde de remise à zéro en haut de openVueFab.
+function _vfNavFiche(dosId, delta) {
+  _vfFicheIdx += delta;
+  openVueFab(dosId);
+}
+
 function openVueFab(dosId) {
   const d = dossiers.find(x => x.id === dosId); if (!d) return;
+  if (dosId !== _vfFicheDosId) {
+    _vfFicheDosId = dosId;
+    const fiches = getFichesFabrication(d);
+    _vfFicheIdx = fiches.length ? fiches.length - 1 : 0;
+  }
   const urg = isUrgent(d);
   const retard = d.dateLivraison && d.dateLivraison < new Date().toISOString().split('T')[0];
   const specs = [
@@ -493,14 +539,7 @@ function openVueFab(dosId) {
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:6px"><i class="ti ti-ruler"></i> Notes métreur</div>
         <div style="font-size:16px;color:var(--ink);line-height:1.6;white-space:pre-wrap">${d.notesMetreur}</div>
       </div>` : ''}
-      ${(()=>{const fiche=getFicheFabrication(d);return fiche ? `
-      <div style="margin-top:6px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:10px"><i class="ti ti-file-type-pdf" style="color:var(--red)"></i> Fiche de fabrication</div>
-        <iframe src="${fiche.url}" style="width:100%;height:520px;border:1px solid var(--border);border-radius:var(--radius)"></iframe>
-      </div>` : `
-      <div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:var(--radius);padding:14px 18px">
-        <div style="font-size:14px;color:#92400E"><i class="ti ti-clock" style="vertical-align:-1px;margin-right:6px"></i>Fiche de fabrication en attente</div>
-      </div>`})()}
+      ${_vfFicheBlock(d)}
     </div>`;
 
   document.getElementById('vf-footer-btns').innerHTML = isBacheDossier(d)
