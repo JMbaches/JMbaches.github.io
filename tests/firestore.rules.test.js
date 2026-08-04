@@ -60,6 +60,7 @@ async function main() {
     await db.collection('users').doc('inactive1').set({ active: false, role: 'admin', perms: ['users'] });
     await db.collection('users').doc('noperm1').set({ active: true, role: 'ouvrier', perms: [] });
     await db.collection('users').doc('ouvrier1').set({ active: true, role: 'ouvrier', perms: ['view_prod', 'adv_prod', 'atelier_grand'] });
+    await db.collection('users').doc('commercial1').set({ active: true, role: 'commercial', perms: ['view_all', 'create', 'edit', 'suivi'] });
 
     await db.collection('dossiers').doc('D1').set({ statut: 'admin' });
     await db.collection('notifications').doc('N1').set({ text: 'x', read: { admin1: true } });
@@ -87,6 +88,12 @@ async function main() {
   await check('peut modifier son propre profil (champ neutre)', as('noperm1').collection('users').doc('noperm1').set({ active: true, role: 'ouvrier', perms: [], name: 'Nouveau nom' }), 'succeed');
   await check('ne peut pas modifier son propre role', as('noperm1').collection('users').doc('noperm1').set({ active: true, role: 'admin', perms: [] }), 'fail');
   await check("ne peut pas modifier le profil d'un autre", as('noperm1').collection('users').doc('viewer1').set({ active: true, role: 'metreur', perms: ['metreur'], name: 'x' }), 'fail');
+
+  // -- Fix 2026-08-04 : hasPerm('create') retiré de la création de compte --
+  // ("Créer des dossiers" n'a rien à voir avec la gestion de comptes — admin/commercial/sav
+  // l'ont tous par défaut sans avoir 'users' ; avant ce fix, n'importe lequel de ces comptes
+  // pouvait créer un compte 'direction' via un appel Firestore direct : escalade de privilèges).
+  await check("hasPerm('create') seul (sans 'users') NE PEUT PAS créer user — escalade de privilèges", as('commercial1').collection('users').doc('new2').set({ active: true, role: 'direction', perms: ['users', 'view_all'] }), 'fail');
 
   // ============================ dossiers ==============================
   console.log('\n-- dossiers --');
@@ -134,6 +141,17 @@ async function main() {
   await check('peut supprimer son propre message', as('viewer1').collection('messages').doc('M-ok').delete(), 'succeed');
   await check("ne peut pas supprimer le message d'un autre", as('viewer1').collection('messages').doc('M-general').delete(), 'fail');
   await check('direction peut supprimer le message de quelqu\'un d\'autre', as('direction1').collection('messages').doc('M-general').delete(), 'succeed');
+
+  // -- Fix 2026-08-04 : whitelist de champs sur update (readBy uniquement) --
+  // Avant ce fix, l'auteur pouvait modifier N'IMPORTE QUEL champ après création (convId vers une
+  // conv privée dont il n'est pas membre, from pour usurper quelqu'un d'autre) — et marquer "lu"
+  // le message d'un AUTRE échouait pour tout non-auteur/non-direction (chat.js ne fait pourtant
+  // jamais que ça). M-priv : convId='priv_noperm1_viewer1', from='noperm1'.
+  await check("l'auteur NE PEUT PLUS changer convId sur son propre message (fuite vers une autre conv)", as('noperm1').collection('messages').doc('M-priv').update({ convId: 'general' }), 'fail');
+  await check("l'auteur NE PEUT PLUS usurper 'from' via update", as('noperm1').collection('messages').doc('M-priv').update({ from: 'direction1' }), 'fail');
+  await check('[FIX] un membre non-auteur peut marquer le message d\'un autre comme lu', as('viewer1').collection('messages').doc('M-priv').update({ readBy: ['viewer1'] }), 'succeed');
+  await check('l\'auteur peut toujours marquer son propre message comme lu', as('noperm1').collection('messages').doc('M-priv').update({ readBy: ['noperm1'] }), 'succeed');
+  await check("un non-membre ne peut pas marquer readBy sur une conv privée qui n'est pas la sienne", as('admin1').collection('messages').doc('M-priv').update({ readBy: ['admin1'] }), 'fail');
 
   // =============================== meta ================================
   console.log('\n-- meta --');

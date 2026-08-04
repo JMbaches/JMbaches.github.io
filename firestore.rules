@@ -62,8 +62,14 @@ service cloud.firestore {
       // (nécessaire au démarrage — le layer charge toute la collection users)
       allow get, list: if active();
 
-      // Création : gestionnaires de comptes OU utilisateurs avec droit 'create'
-      allow create: if active() && (hasPerm('users') || hasPerm('create'));
+      // Création : gestionnaires de comptes UNIQUEMENT.
+      // ⚠️ [Fix 2026-08-04] hasPerm('create') ("Créer des dossiers", sans rapport avec la
+      // gestion de comptes) était inclus ici par erreur — admin/commercial/sav l'ont tous par
+      // défaut sans avoir 'users'. L'UI (users.js) ne montre l'écran de création de compte que
+      // si can('users'), mais cette règle autorisait n'importe quel compte avec 'create' à
+      // appeler l'API Firestore directement pour créer un compte 'direction' avec tous les
+      // droits — escalade de privilèges complète. Aucun flux légitime ne dépend de 'create' ici.
+      allow create: if active() && hasPerm('users');
 
       // Suppression : gestionnaires de comptes uniquement
       allow delete: if active() && hasPerm('users');
@@ -106,8 +112,20 @@ service cloud.firestore {
       }
       allow read:   if active() && estMembreConv(resource.data.convId);
       allow create: if active() && estMembreConv(request.resource.data.convId) && request.resource.data.from == request.auth.uid;
-      allow update, delete: if active()
-        && (resource.data.from == request.auth.uid || isDirection());
+      // ⚠️ [Fix 2026-08-04] L'ancienne règle update (auteur OU direction, SANS restriction de
+      // champ) autorisait l'auteur d'un message à modifier N'IMPORTE QUEL champ après création —
+      // y compris `convId` (vers une conversation privée dont il n'est pas membre) et `from`
+      // (usurpation d'un autre utilisateur), sans jamais revérifier estMembreConv() au moment de
+      // l'update. chat.js n'utilise pourtant .update() QUE pour ajouter son propre uid à `readBy`
+      // (arrayUnion, jamais d'autre champ) — d'où la whitelist stricte ci-dessous, même schéma
+      // que la règle notifications déjà en place juste au-dessus dans ce fichier. Corrige aussi
+      // un vrai bug fonctionnel au passage : l'ancienne règle exigeait resource.data.from ==
+      // request.auth.uid pour TOUT update, donc marquer "lu" le message d'un AUTRE échouait
+      // silencieusement (chat.js:96, .catch(()=>{})) pour tout non-auteur/non-direction — cassé
+      // en pratique pour la quasi-totalité des messages reçus.
+      allow update: if active() && estMembreConv(resource.data.convId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy']);
+      allow delete: if active() && (resource.data.from == request.auth.uid || isDirection());
     }
 
     // -------- meta (config partagée : horaires, etc.) -----------------------

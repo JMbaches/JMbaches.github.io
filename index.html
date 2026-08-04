@@ -2420,7 +2420,7 @@ function buildNav() {
   if(can('vue_poseur') && currentUser.role === 'poseur') mainTabs.push({id:'poseur_view',icon:'ti-hammer',label:'Ma journée'});
   if(can('vue_poseurs_all')) mainTabs.push({id:'poseurs_direction',icon:'ti-users',label:'Poseurs'});
   if(can('horaires_poseurs')) mainTabs.push({id:'horaires',icon:'ti-clock',label:'Horaires poseurs'});
-  if(can('journal')||can('view_all')||can('view_prod')) mainTabs.push({id:'journal',icon:'ti-history',label:'Journal'});
+  if(can('journal')||can('view_all')) mainTabs.push({id:'journal',icon:'ti-history',label:'Journal'});
   mainTabs.push({id:'notifs',icon:'ti-bell',label:'Notifications',badge:cnt});
   if(can('users')) mainTabs.push({id:'users',icon:'ti-users',label:'Comptes'});
 
