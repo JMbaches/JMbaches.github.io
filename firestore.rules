@@ -39,8 +39,21 @@ service cloud.firestore {
           || hasPerm('emballage') || hasPerm('compta')   || hasPerm('planning');
     }
     function canEditDossiers() {
-      return hasPerm('edit') || hasPerm('advance') || hasPerm('adv_prod')
-          || hasPerm('planning') || hasPerm('metreur');
+      return hasPerm('edit') || hasPerm('advance') || hasPerm('planning') || hasPerm('metreur')
+          || (hasPerm('adv_prod') && onlyAtelierFieldsChanged());
+    }
+    // Champs que l'atelier (perm adv_prod SEULE, sans edit/advance/planning/metreur — donc
+    // sans effet sur les comptes qui ont aussi une de ces perms plus larges, ex. direction)
+    // peut modifier sur un dossier — whitelist établie le 2026-08-04 en lisant exhaustivement
+    // atelier.js (toutes les affectations `d.xxx =` du fichier) : c'est la seule surface
+    // d'écriture "dossiers" accessible à un compte n'ayant que adv_prod. Avant ce fix,
+    // adv_prod seul autorisait l'écriture de N'IMPORTE QUEL champ du document (l'UI ne
+    // l'exposait jamais, mais un appel Firestore direct avec ces identifiants le pouvait).
+    function onlyAtelierFieldsChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'statut', 'statutChangedAt', 'history',
+        'atelierAccessoiresFait', 'atelierTablierFait', 'atelierAxeFait', 'pages'
+      ]);
     }
 
     // -------------------------------- users ---------------------------------

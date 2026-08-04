@@ -59,6 +59,7 @@ async function main() {
     await db.collection('users').doc('viewer1').set({ active: true, role: 'metreur', perms: ['metreur'] });
     await db.collection('users').doc('inactive1').set({ active: false, role: 'admin', perms: ['users'] });
     await db.collection('users').doc('noperm1').set({ active: true, role: 'ouvrier', perms: [] });
+    await db.collection('users').doc('ouvrier1').set({ active: true, role: 'ouvrier', perms: ['view_prod', 'adv_prod', 'atelier_grand'] });
 
     await db.collection('dossiers').doc('D1').set({ statut: 'admin' });
     await db.collection('notifications').doc('N1').set({ text: 'x', read: { admin1: true } });
@@ -97,6 +98,14 @@ async function main() {
   await check('sans perm ne peut pas modifier dossier', as('noperm1').collection('dossiers').doc('D1').update({ statut: 'verif' }), 'fail');
   await check('sans droit ne peut pas supprimer dossier', as('noperm1').collection('dossiers').doc('D1').delete(), 'fail');
   await check('direction peut supprimer dossier', as('direction1').collection('dossiers').doc('D2').delete(), 'succeed');
+
+  // -- adv_prod seul (atelier) : whitelist de champs, 2026-08-04 --
+  await check("adv_prod seul peut modifier un champ atelier (statut)", as('ouvrier1').collection('dossiers').doc('D1').update({ statut: 'production' }), 'succeed');
+  await check("adv_prod seul peut modifier plusieurs champs atelier à la fois", as('ouvrier1').collection('dossiers').doc('D1').update({ atelierAccessoiresFait: true, atelierTablierFait: true, history: [{ id: 1, action: 'x' }] }), 'succeed');
+  await check("adv_prod seul NE PEUT PAS modifier un champ hors périmètre atelier (client)", as('ouvrier1').collection('dossiers').doc('D1').update({ client: 'Nouveau Client' }), 'fail');
+  await check("adv_prod seul NE PEUT PAS modifier ht/devis", as('ouvrier1').collection('dossiers').doc('D1').update({ ht: 9999 }), 'fail');
+  await check("adv_prod seul bloqué même en mélangeant un champ atelier et un champ hors périmètre", as('ouvrier1').collection('dossiers').doc('D1').update({ statut: 'production', client: 'Triche' }), 'fail');
+  await check("hasPerm('metreur') (perm plus large) reste illimité malgré la whitelist adv_prod", as('viewer1').collection('dossiers').doc('D1').update({ client: 'Nouveau Client', ht: 123 }), 'succeed');
 
   // ========================== notifications ===========================
   console.log('\n-- notifications --');
