@@ -1603,116 +1603,131 @@ const NOTIF_RULES = [
 // Mapping gamme dossier → famille : voir voletChecklistFamily() plus bas. Cas incertains (Golden
 // Roll/coffre/Banc mappés sur 'silver' faute de commande réelle pour trancher, voir CLAUDE.md et
 // mémoire projet "checklists atelier volets") — à corriger si un jour ça ne convient pas.
+// [2026-08-04] Chaque ligne porte désormais when(d) (s'affiche seulement si pertinent pour CE
+// dossier) et required (bloque l'avancement seulement si affichée ET issue d'un champ FIABLE —
+// un menu déroulant du formulaire, rempli délibérément par un humain, PAS un champ dérivé de
+// l'enrichissement Mégao qui peut rester vide même quand la pièce existe physiquement, ex.
+// d.pieds vide sur ~90% des dossiers réels avant même d'être un bug de parsing corrigé). Décision
+// utilisateur : "sur ceux où tu n'as pas de logique [fiable], ne mets pas d'obligatoire" — ces
+// lignes restent affichées (référence pour l'atelier) mais ne bloquent plus checklistComplete().
+const ALIM_ELEC_BASE = d => d.typeAlimentation === 'Electrique' && !d.gestionSel;
+const ALIM_SOLAIRE   = d => /^Solaire/.test(d.typeAlimentation || '');
+const TOUJOURS = () => true;
 const CHECKLIST_ACCESSOIRES = {
   silver: [
-    'Alimentation Électrique — Coffret 24V',
-    'Alimentation Électrique — Coffret Easy Plug 24V',
-    'Alimentation Électrique — Coffret 24V Électrolyseur',
-    'Alimentation — Coffret OXEO',
-    'Alimentation Solaire — Panneau solaire',
-    'Alimentation Solaire — Régulateur',
-    'Alimentation Solaire — Batterie 12V (×2)',
-    'Alimentation Solaire — Cordon batterie (×1)',
-    'Alimentation Solaire — Chargeur 24V',
-    'Alimentation Solaire — Contrôleur de charge',
-    'Alimentation Batterie — Batterie 12V (×2)',
-    'Alimentation Batterie — Cordon batterie (×1)',
-    'Alimentation Batterie — Chargeur 24V',
-    'Alimentation Batterie — Contrôleur de charge',
-    'Kit Batterie Amovible — Batterie 24V (×2)',
-    'Kit Batterie Amovible — Chargeur',
-    'Kit Batterie Amovible — Indicateur batterie',
-    'Kit Batterie Amovible — Porte-fusible',
-    'Télécommande Classique — Récepteur (×1)',
-    'Télécommande Classique — Émetteur (×2)',
-    'Télécommande Bluetooth',
-    'Prise 220V',
-    'Attaches sous margelles — Alu plat 9010 + vis (×5)',
-    'Attaches sous margelles — Vis penture (×10)',
-    'Attaches sous margelles — Chevilles 8x40 (×10)',
-    'Ailette pour débordement',
+    { label: 'Alimentation Électrique — Coffret 24V', when: ALIM_ELEC_BASE, required: true },
+    { label: 'Alimentation Électrique — Coffret Easy Plug 24V', when: d => d.typeAlimentation === 'EasyPlug', required: true },
+    { label: 'Alimentation Électrique — Coffret 24V Électrolyseur', when: d => d.typeAlimentation === 'Electrique' && d.gestionSel === 'Electrolyseur', required: true },
+    { label: 'Alimentation — Coffret OXEO', when: d => d.gestionSel === 'Oxeo', required: true },
+    { label: 'Alimentation Solaire — Panneau solaire', when: ALIM_SOLAIRE, required: true },
+    { label: 'Alimentation Solaire — Régulateur', when: ALIM_SOLAIRE, required: true },
+    { label: 'Alimentation Solaire — Batterie 12V (×2)', when: ALIM_SOLAIRE, required: true },
+    { label: 'Alimentation Solaire — Cordon batterie (×1)', when: ALIM_SOLAIRE, required: true },
+    { label: 'Alimentation Solaire — Chargeur 24V', when: ALIM_SOLAIRE, required: true },
+    { label: 'Alimentation Solaire — Contrôleur de charge', when: ALIM_SOLAIRE, required: true },
+    { label: 'Alimentation Batterie — Batterie 12V (×2)', when: d => d.typeAlimentation === 'Batterie', required: true },
+    { label: 'Alimentation Batterie — Cordon batterie (×1)', when: d => d.typeAlimentation === 'Batterie', required: true },
+    { label: 'Alimentation Batterie — Chargeur 24V', when: d => d.typeAlimentation === 'Batterie', required: true },
+    { label: 'Alimentation Batterie — Contrôleur de charge', when: d => d.typeAlimentation === 'Batterie', required: true },
+    { label: 'Kit Batterie Amovible — Batterie 24V (×2)', when: d => d.typeAlimentation === 'Batterie 6ah', required: true },
+    { label: 'Kit Batterie Amovible — Chargeur', when: d => d.typeAlimentation === 'Batterie 6ah', required: true },
+    { label: 'Kit Batterie Amovible — Indicateur batterie', when: d => d.typeAlimentation === 'Batterie 6ah', required: true },
+    { label: 'Kit Batterie Amovible — Porte-fusible', when: d => d.typeAlimentation === 'Batterie 6ah', required: true },
+    { label: 'Télécommande Classique — Récepteur (×1)', when: d => d.telecommande === 'Classique', required: true },
+    { label: 'Télécommande Classique — Émetteur (×2)', when: d => d.telecommande === 'Classique', required: true },
+    { label: 'Télécommande Bluetooth', when: d => d.telecommande === 'Bluetooth', required: true },
+    { label: 'Prise 220V', when: TOUJOURS, required: false },
+    { label: 'Attaches sous margelles — Alu plat 9010 + vis (×5)', when: TOUJOURS, required: false },
+    { label: 'Attaches sous margelles — Vis penture (×10)', when: TOUJOURS, required: false },
+    { label: 'Attaches sous margelles — Chevilles 8x40 (×10)', when: TOUJOURS, required: false },
+    { label: 'Ailette pour débordement', when: d => d.ailetteDebordement === 'Oui', required: true },
   ],
   immerge: [
-    'Alimentation Électrique — Coffret V2.2',
-    'Alimentation Électrique — Coffret 4000/4020',
-    'Alimentation — Coffret OXEO',
-    'Télécommande Classique — Récepteur',
-    'Télécommande Classique — Émetteur',
-    'Télécommande Bluetooth',
-    'Attaches sous margelles — Alu plat 9010 + vis (×3)',
-    'Attaches sous margelles — Vis penture (×6)',
-    'Attaches sous margelles — Chevilles 8x40 (×6)',
-    'Caillebotis — Couleur/essence conforme (PVC/Robinier/IPE)',
-    'Cloison pour mur — Nombre de lames (6m)',
-    'Cloison pour mur — Couleur conforme',
-    'Cloison pour mur — Jambes mur PVC (×2)',
-    'Cloison pour mur — Visserie M6x40 (×4)',
-    'Cloison pour mur — Barre de renfort',
-    'Poutre + cornière 40x40 — Couleur conforme',
-    'Poutre + cornière 40x40 — Sabot couleur poutre',
-    'Poutre + cornière 40x40 — Bouchons 100x100',
-    'Cornière 60x60 — Tirefonds M8',
-    'Cornière 60x60 — Chevilles M10',
-    'Équerre télescopique — Sur arase / sur bassin (préciser)',
-    'Équerre télescopique — Plat plastique',
-    'Flasque ×2 — Visseries avec sabots',
-    'Flasque ×2 — Passe câble',
-    'Flasque ×2 — Scellement chimique',
-    'Équerres pour flasques (×2 + visserie ×12)',
-    'Équerres pour sabots (×2 + visserie ×8)',
+    { label: 'Alimentation Électrique — Coffret V2.2', when: d => d.typeAlimentation === 'Electrique', required: false },
+    { label: 'Alimentation Électrique — Coffret 4000/4020', when: d => d.typeAlimentation === 'Electrique', required: false },
+    { label: 'Alimentation — Coffret OXEO', when: d => d.gestionSel === 'Oxeo', required: true },
+    { label: 'Télécommande Classique — Récepteur', when: d => d.telecommande === 'Classique', required: true },
+    { label: 'Télécommande Classique — Émetteur', when: d => d.telecommande === 'Classique', required: true },
+    { label: 'Télécommande Bluetooth', when: d => d.telecommande === 'Bluetooth', required: true },
+    { label: 'Attaches sous margelles — Alu plat 9010 + vis (×3)', when: TOUJOURS, required: false },
+    { label: 'Attaches sous margelles — Vis penture (×6)', when: TOUJOURS, required: false },
+    { label: 'Attaches sous margelles — Chevilles 8x40 (×6)', when: TOUJOURS, required: false },
+    { label: 'Caillebotis — Couleur/essence conforme (PVC/Robinier/IPE)', when: d => !!d.caillebotisChoix, required: true },
+    { label: 'Cloison pour mur — Nombre de lames (6m)', when: d => !!(d.murHauteur || d.murCouleur), required: true },
+    { label: 'Cloison pour mur — Couleur conforme', when: d => !!(d.murHauteur || d.murCouleur), required: true },
+    { label: 'Cloison pour mur — Jambes mur PVC (×2)', when: d => !!(d.murHauteur || d.murCouleur), required: true },
+    { label: 'Cloison pour mur — Visserie M6x40 (×4)', when: d => !!(d.murHauteur || d.murCouleur), required: true },
+    { label: 'Cloison pour mur — Barre de renfort', when: d => !!(d.murHauteur || d.murCouleur), required: true },
+    { label: 'Poutre + cornière 40x40 — Couleur conforme', when: TOUJOURS, required: false },
+    { label: 'Poutre + cornière 40x40 — Sabot couleur poutre', when: TOUJOURS, required: false },
+    { label: 'Poutre + cornière 40x40 — Bouchons 100x100', when: TOUJOURS, required: false },
+    { label: 'Cornière 60x60 — Tirefonds M8', when: d => d.corniere6060 === 'Oui', required: true },
+    { label: 'Cornière 60x60 — Chevilles M10', when: d => d.corniere6060 === 'Oui', required: true },
+    { label: 'Équerre télescopique — Sur arase / sur bassin (préciser)', when: d => !!d.equerresRenfort, required: true },
+    { label: 'Équerre télescopique — Plat plastique', when: d => !!d.equerresRenfort, required: true },
+    { label: 'Flasque ×2 — Visseries avec sabots', when: d => d.flasqueMurale === 'Oui', required: true },
+    { label: 'Flasque ×2 — Passe câble', when: d => d.flasqueMurale === 'Oui', required: true },
+    { label: 'Flasque ×2 — Scellement chimique', when: d => d.flasqueMurale === 'Oui', required: true },
+    { label: 'Équerres pour flasques (×2 + visserie ×12)', when: TOUJOURS, required: false },
+    { label: 'Équerres pour sabots (×2 + visserie ×8)', when: TOUJOURS, required: false },
   ],
   immerge_total: [
-    'Alimentation Électrique — Coffret V2.2',
-    'Alimentation Électrique — Coffret 4000/4020',
-    'Alimentation — Coffret OXEO',
-    'Télécommande Classique — Récepteur',
-    'Télécommande Classique — Émetteur',
-    'Télécommande Bluetooth',
-    'Attaches sous margelles — Alu plat 9010 + vis (×5)',
-    'Attaches sous margelles — Vis penture (×10)',
-    'Attaches sous margelles — Chevilles 8x40 (×10)',
-    'Caillebotis — Couleur/essence conforme (PVC/Robinier/IPE/Leste)',
-    'Cloison pour mur — Nombre de lames (6m)',
-    'Cloison pour mur — Couleur conforme',
-    'Cloison pour mur — Jambes mur (×2)',
-    'Cloison pour mur — Visserie M6x40 (×4)',
-    'Cloison pour mur — Barre de renfort',
-    'Poutre — Sabots INOX',
-    'Poutre — Pièce 3D + visseries',
-    'Flasque — Visseries « U » ×2 (4 vis écrou)',
-    'Flasque — Passe câble ×2',
-    'Flasque — Colle + scellement chimique',
-    'Contre-poids tube — Nombre de sangles/vis conforme',
+    { label: 'Alimentation Électrique — Coffret V2.2', when: d => d.typeAlimentation === 'Electrique', required: false },
+    { label: 'Alimentation Électrique — Coffret 4000/4020', when: d => d.typeAlimentation === 'Electrique', required: false },
+    { label: 'Alimentation — Coffret OXEO', when: d => d.gestionSel === 'Oxeo', required: true },
+    { label: 'Télécommande Classique — Récepteur', when: d => d.telecommande === 'Classique', required: true },
+    { label: 'Télécommande Classique — Émetteur', when: d => d.telecommande === 'Classique', required: true },
+    { label: 'Télécommande Bluetooth', when: d => d.telecommande === 'Bluetooth', required: true },
+    { label: 'Attaches sous margelles — Alu plat 9010 + vis (×5)', when: TOUJOURS, required: false },
+    { label: 'Attaches sous margelles — Vis penture (×10)', when: TOUJOURS, required: false },
+    { label: 'Attaches sous margelles — Chevilles 8x40 (×10)', when: TOUJOURS, required: false },
+    { label: 'Caillebotis — Couleur/essence conforme (PVC/Robinier/IPE/Leste)', when: d => !!d.caillebotisChoix, required: true },
+    { label: 'Cloison pour mur — Nombre de lames (6m)', when: d => !!(d.murHauteur || d.murCouleur), required: true },
+    { label: 'Cloison pour mur — Couleur conforme', when: d => !!(d.murHauteur || d.murCouleur), required: true },
+    { label: 'Cloison pour mur — Jambes mur (×2)', when: d => !!(d.murHauteur || d.murCouleur), required: true },
+    { label: 'Cloison pour mur — Visserie M6x40 (×4)', when: d => !!(d.murHauteur || d.murCouleur), required: true },
+    { label: 'Cloison pour mur — Barre de renfort', when: d => !!(d.murHauteur || d.murCouleur), required: true },
+    { label: 'Poutre — Sabots INOX', when: TOUJOURS, required: false },
+    { label: 'Poutre — Pièce 3D + visseries', when: TOUJOURS, required: false },
+    { label: 'Flasque — Visseries « U » ×2 (4 vis écrou)', when: d => d.flasqueMurale === 'Oui', required: true },
+    { label: 'Flasque — Passe câble ×2', when: d => d.flasqueMurale === 'Oui', required: true },
+    { label: 'Flasque — Colle + scellement chimique', when: d => d.flasqueMurale === 'Oui', required: true },
+    { label: 'Contre-poids tube — Nombre de sangles/vis conforme', when: TOUJOURS, required: false },
   ],
   mouv: [
-    'Alimentation Électrique — Coffret 24V',
-    'Alimentation Électrique — Coffret Easy Plug 24V',
-    'Alimentation Électrique — Coffret 24V Électrolyseur',
-    'Alimentation — Coffret OXEO',
-    'Alimentation Solaire — Panneau solaire',
-    'Alimentation Solaire — Régulateur',
-    'Alimentation Solaire — Batterie 12V (×2)',
-    'Alimentation Solaire — Cordon batterie (×1)',
-    'Alimentation Solaire — Chargeur 24V',
-    'Alimentation Solaire — Contrôleur de charge',
-    'Alimentation Batterie — Batterie 12V (×2)',
-    'Alimentation Batterie — Cordon batterie (×1)',
-    'Alimentation Batterie — Chargeur 24V',
-    'Alimentation Batterie — Contrôleur de charge',
-    'Kit Batterie Amovible — Batterie 24V (×2)',
-    'Kit Batterie Amovible — Chargeur',
-    'Kit Batterie Amovible — Indicateur batterie',
-    'Kit Batterie Amovible — Porte-fusible',
-    'Télécommande Classique — Récepteur (×1)',
-    'Télécommande Classique — Émetteur (×2)',
-    'Télécommande Bluetooth',
-    'Attaches sous margelles — Alu plat 9010 + vis (×5)',
-    'Attaches sous margelles — Vis penture (×10)',
-    'Attaches sous margelles — Chevilles 8x40 (×10)',
+    { label: 'Alimentation Électrique — Coffret 24V', when: ALIM_ELEC_BASE, required: true },
+    { label: 'Alimentation Électrique — Coffret Easy Plug 24V', when: d => d.typeAlimentation === 'EasyPlug', required: true },
+    { label: 'Alimentation Électrique — Coffret 24V Électrolyseur', when: d => d.typeAlimentation === 'Electrique' && d.gestionSel === 'Electrolyseur', required: true },
+    { label: 'Alimentation — Coffret OXEO', when: d => d.gestionSel === 'Oxeo', required: true },
+    { label: 'Alimentation Solaire — Panneau solaire', when: ALIM_SOLAIRE, required: true },
+    { label: 'Alimentation Solaire — Régulateur', when: ALIM_SOLAIRE, required: true },
+    { label: 'Alimentation Solaire — Batterie 12V (×2)', when: ALIM_SOLAIRE, required: true },
+    { label: 'Alimentation Solaire — Cordon batterie (×1)', when: ALIM_SOLAIRE, required: true },
+    { label: 'Alimentation Solaire — Chargeur 24V', when: ALIM_SOLAIRE, required: true },
+    { label: 'Alimentation Solaire — Contrôleur de charge', when: ALIM_SOLAIRE, required: true },
+    { label: 'Alimentation Batterie — Batterie 12V (×2)', when: d => d.typeAlimentation === 'Batterie', required: true },
+    { label: 'Alimentation Batterie — Cordon batterie (×1)', when: d => d.typeAlimentation === 'Batterie', required: true },
+    { label: 'Alimentation Batterie — Chargeur 24V', when: d => d.typeAlimentation === 'Batterie', required: true },
+    { label: 'Alimentation Batterie — Contrôleur de charge', when: d => d.typeAlimentation === 'Batterie', required: true },
+    { label: 'Kit Batterie Amovible — Batterie 24V (×2)', when: d => d.typeAlimentation === 'Batterie 6ah', required: true },
+    { label: 'Kit Batterie Amovible — Chargeur', when: d => d.typeAlimentation === 'Batterie 6ah', required: true },
+    { label: 'Kit Batterie Amovible — Indicateur batterie', when: d => d.typeAlimentation === 'Batterie 6ah', required: true },
+    { label: 'Kit Batterie Amovible — Porte-fusible', when: d => d.typeAlimentation === 'Batterie 6ah', required: true },
+    { label: 'Télécommande Classique — Récepteur (×1)', when: d => d.telecommande === 'Classique', required: true },
+    { label: 'Télécommande Classique — Émetteur (×2)', when: d => d.telecommande === 'Classique', required: true },
+    { label: 'Télécommande Bluetooth', when: d => d.telecommande === 'Bluetooth', required: true },
+    { label: 'Attaches sous margelles — Alu plat 9010 + vis (×5)', when: TOUJOURS, required: false },
+    { label: 'Attaches sous margelles — Vis penture (×10)', when: TOUJOURS, required: false },
+    { label: 'Attaches sous margelles — Chevilles 8x40 (×10)', when: TOUJOURS, required: false },
   ],
 };
+// Lignes structurelles (axe/palier/moteur/serrure...) présentes sur TOUS les dossiers d'une
+// famille — aucun champ dossier ne permet de savoir "s'applique ou pas" comme pour les
+// accessoires optionnels ci-dessus, donc `required:false` partout ici (décision utilisateur,
+// 2026-08-04) : toujours affichées pour référence, ne bloquent plus l'avancement.
+const notRequired = labels => labels.map(label => ({ label, when: TOUJOURS, required: false }));
 const CHECKLIST_AXE = {
-  silver: [
+  silver: notRequired([
     'Axe — Dimension (140) / Diamètre (200) conforme',
     'Palier',
     'Pieds ×2 — Couleur conforme',
@@ -1732,8 +1747,8 @@ const CHECKLIST_AXE = {
     'Sangles d\'axe — Rondelle L6 (×3)',
     'Clips de sécurité — Vis Penture (×5)',
     'Clips de sécurité — Chevilles 8x40 (×5)',
-  ],
-  immerge: [
+  ]),
+  immerge: notRequired([
     'Axe — Dimension / Diamètre 140-200 conforme',
     'Axe — Palier',
     'Axe — Graisse',
@@ -1745,8 +1760,8 @@ const CHECKLIST_AXE = {
     'Serrure à clé — Boîte de relais + Wago',
     'Clips de sécurité — Vis Penture (×3)',
     'Clips de sécurité — Chevilles 8x40 (×3)',
-  ],
-  immerge_total: [
+  ]),
+  immerge_total: notRequired([
     'Axe — Dimension / Diamètre 140 conforme',
     'Axe — Palier 140 + Palier 200',
     'Axe — Graisse',
@@ -1757,8 +1772,8 @@ const CHECKLIST_AXE = {
     'Serrure à clé — Boîte de relais + Wago',
     'Clips de sécurité — Vis Penture (×5)',
     'Clips de sécurité — Chevilles 8x40 (×5)',
-  ],
-  mouv: [
+  ]),
+  mouv: notRequired([
     'Axe — Dimension (140) / Diamètre (200) conforme',
     'Palier',
     'Contre-axe — Dimension/couleur conforme',
@@ -1777,31 +1792,34 @@ const CHECKLIST_AXE = {
     'Sangles d\'axe — Vis 4.8x25 (×3) + Rondelle L6 (×3)',
     'Clips de sécurité — Vis Penture (×5)',
     'Clips de sécurité — Chevilles 8x40 (×5)',
-  ],
+  ]),
   tablier_seul: [],
 };
 // Section TABLIER — identique mot pour mot dans les 4 fiches papier, donc UNE seule liste
 // partagée par toutes les gammes (y compris "Tablier seul", qui n'a que celle-ci). Les lignes
-// Escalier ne sont ajoutées que si le dossier a effectivement un escalier (d.escalier renseigné).
+// Escalier ne sont ajoutées que si le dossier a effectivement un escalier (d.escalier renseigné)
+// — signal fiable (champ texte libre rempli par un humain), donc `required:true` pour ces 4
+// lignes une fois ajoutées (contrairement au reste de cette liste, structurel donc non bloquant).
 const CHECKLIST_TABLIER = [
-  'Lames PVC — Couleur conforme (Blanc/Sable/Gris foncé)',
-  'Rallonges utilisées (dimension)',
-  'Lames Polycarbonate — Coloris conforme',
-  'Bouchons Poly — Coloris conforme',
-  'Lames coupées (dimension)',
-  'Lames finies (dimension)',
-  'Rayons / Pans coupés — Découpe',
-  'Rayons / Pans coupés — Finition (équerre ou lisse/en forme)',
-  'Clips de sécurité tablier — Nombre',
-  'Clips de sécurité tablier — Coloris conforme',
-  'Sangles d\'axe tablier — Nombre',
+  { label: 'Lames PVC — Couleur conforme (Blanc/Sable/Gris foncé)', when: d => d.typeLame === 'PVC', required: true },
+  { label: 'Rallonges utilisées (dimension)', when: TOUJOURS, required: false },
+  { label: 'Lames Polycarbonate — Coloris conforme', when: d => d.typeLame === 'Polycarbonate', required: true },
+  { label: 'Bouchons Poly — Coloris conforme', when: d => d.typeLame === 'Polycarbonate', required: true },
+  { label: 'Lames coupées (dimension)', when: TOUJOURS, required: false },
+  { label: 'Lames finies (dimension)', when: TOUJOURS, required: false },
+  { label: 'Rayons / Pans coupés — Découpe', when: TOUJOURS, required: false },
+  { label: 'Rayons / Pans coupés — Finition (équerre ou lisse/en forme)', when: TOUJOURS, required: false },
+  { label: 'Clips de sécurité tablier — Nombre', when: TOUJOURS, required: false },
+  { label: 'Clips de sécurité tablier — Coloris conforme', when: TOUJOURS, required: false },
+  { label: 'Sangles d\'axe tablier — Nombre', when: TOUJOURS, required: false },
 ];
-const CHECKLIST_ESCALIER = [
+const required = labels => labels.map(label => ({ label, when: TOUJOURS, required: true }));
+const CHECKLIST_ESCALIER = required([
   'Escalier — Découpe (en forme / en équerre)',
   'Escalier — Finition (équerre ou lisse/en forme)',
   'Escalier — Type conforme (Romans/Droit/Trapèze)',
   'Escalier — Nombre de lames conforme à la commande',
-];
+]);
 // Gamme du dossier → famille de checklist. Golden Roll/avec coffre/Banc mappés sur 'silver' (même
 // famille hors-sol, axe/palier/serrure identiques) faute de checklist dédiée ET de commande réelle
 // pour trancher plus finement à ce jour (0 commande Golden Roll/coffre, voir mémoire projet) — à
@@ -1817,17 +1835,31 @@ function voletChecklistFamily(d) {
   if (/silver|x-?trem|coffre|golden|solaire|banc/i.test(s)) return 'silver';
   return null;
 }
-function checklistAccessoiresRows(d) {
+// Toutes les listes CHECKLIST_* sont désormais des objets {label,when,required} (2026-08-04) —
+// ces 2 fonctions ne renvoient QUE les libellés des lignes pertinentes pour ce dossier (comme
+// avant, même forme de retour pour ne rien casser côté rendu/stockage p.rows), en appliquant
+// when(d). checklistRequiredLabels() ci-dessous donne séparément lesquelles bloquent l'avancement.
+function checklistAccessoiresDefs(d) {
   const f = voletChecklistFamily(d);
-  return f ? (CHECKLIST_ACCESSOIRES[f] || []) : [];
+  return f ? (CHECKLIST_ACCESSOIRES[f] || []).filter(r => r.when(d)) : [];
 }
-function checklistAxeTablierRows(d) {
+function checklistAxeTablierDefs(d) {
   const f = voletChecklistFamily(d);
   if (!f) return [];
   const axe = CHECKLIST_AXE[f] || [];
   const tablier = [...CHECKLIST_TABLIER];
   if (d.escalier) tablier.push(...CHECKLIST_ESCALIER);
-  return [...axe, ...tablier];
+  return [...axe, ...tablier].filter(r => r.when(d));
+}
+function checklistAccessoiresRows(d) {
+  return checklistAccessoiresDefs(d).map(r => r.label);
+}
+function checklistRequiredLabels(d, kind) {
+  const defs = kind === 'acc' ? checklistAccessoiresDefs(d) : checklistAxeTablierDefs(d);
+  return new Set(defs.filter(r => r.required).map(r => r.label));
+}
+function checklistAxeTablierRows(d) {
+  return checklistAxeTablierDefs(d).map(r => r.label);
 }
 // Contenu deviné (pas confirmé avec l'atelier bâches) — à ajuster une fois validé.
 const VERIF_ROWS_BACHE = ['Dimensions bâche conformes bassin','Coloris conforme commande','Découpes (aspi/escalier) conformes','Enrouleur conforme','Œillets/finitions','Contrôle qualité soudures','Emballage complet'];

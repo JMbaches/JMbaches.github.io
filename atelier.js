@@ -523,6 +523,11 @@ function checklistPageType(d, kind) {
 // verif_axetab — sans cet appel, "pas de page trouvée" serait à tort interprété comme "rien à
 // vérifier" et le bouton d'avancement resterait débloqué (bug réel trouvé en conditions réelles
 // sur le dossier 121068, 2026-07-30).
+// [2026-08-04] Ne bloque plus que sur les lignes "required" (champ dossier fiable identifié —
+// voir checklistRequiredLabels, index.html) — une checklist peut désormais être "complète" avec
+// des lignes non cochées, tant que ce sont des lignes sans logique de pertinence connue (restées
+// affichées pour référence atelier, jamais bloquantes). Décision utilisateur : mieux vaut ne pas
+// obliger à cocher une ligne qu'on ne sait pas rattacher avec certitude à ce dossier précis.
 function checklistComplete(d, kind) {
   if (isBacheDossier(d)) return true;
   if (typeof ensureVoletChecklistPages === 'function') ensureVoletChecklistPages(d);
@@ -530,7 +535,8 @@ function checklistComplete(d, kind) {
   const p = d.pages?.find(pg => pg.type === type);
   if (!p || !p.rows || !p.rows.length) return true;
   const chk = p.checks || {};
-  return p.rows.every((_, ri) => chk[ri]?.oui);
+  const requiredLabels = typeof checklistRequiredLabels === 'function' ? checklistRequiredLabels(d, kind) : null;
+  return p.rows.every((label, ri) => !requiredLabels?.has(label) || chk[ri]?.oui);
 }
 function openChecklist(dosId, kind) {
   const d=dossiers.find(x=>x.id===dosId); if(!d) return;
