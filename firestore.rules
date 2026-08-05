@@ -34,22 +34,35 @@ service cloud.firestore {
     function isDirection() {
       return role() == 'direction';
     }
+    // ⚠️ [Fix 2026-08-04] 'vue_poseur' ajoute -- un poseur pur (perm par defaut ROLE_DEFAULT_PERMS.
+    // poseur = ['vue_poseur'] uniquement) ne pouvait lire AUCUN dossier, donc l'onglet "Ma journee"
+    // (renderVuePoseur, index.html -- filtre le tableau `dossiers` en memoire sur poseDate/poseurId)
+    // restait vide en permanence : fonctionnalite prevue mais jamais reellement utilisable. Trouve
+    // en lisant le code (pas un compte reel teste, la fonctionnalite n'a jamais ete signalee cassee
+    // faute d'avoir jamais ete essayee avec un compte poseur pur).
     function canViewDossiers() {
       return hasPerm('view_all') || hasPerm('view_prod') || hasPerm('metreur')
-          || hasPerm('emballage') || hasPerm('compta')   || hasPerm('planning');
+          || hasPerm('emballage') || hasPerm('compta')   || hasPerm('planning')
+          || hasPerm('vue_poseur');
     }
     function canEditDossiers() {
       return hasPerm('edit') || hasPerm('advance') || hasPerm('planning') || hasPerm('metreur')
-          || (hasPerm('adv_prod') && onlyAtelierFieldsChanged());
+          || ((hasPerm('adv_prod') || hasPerm('emballage')) && onlyAtelierOuEmballageFieldsChanged());
     }
-    // Champs que l'atelier (perm adv_prod SEULE, sans edit/advance/planning/metreur — donc
-    // sans effet sur les comptes qui ont aussi une de ces perms plus larges, ex. direction)
-    // peut modifier sur un dossier — whitelist établie le 2026-08-04 en lisant exhaustivement
-    // atelier.js (toutes les affectations `d.xxx =` du fichier) : c'est la seule surface
-    // d'écriture "dossiers" accessible à un compte n'ayant que adv_prod. Avant ce fix,
-    // adv_prod seul autorisait l'écriture de N'IMPORTE QUEL champ du document (l'UI ne
-    // l'exposait jamais, mais un appel Firestore direct avec ces identifiants le pouvait).
-    function onlyAtelierFieldsChanged() {
+    // Champs que l'atelier ET l'emballage (perms adv_prod/emballage SEULES, sans edit/advance/
+    // planning/metreur -- donc sans effet sur les comptes qui ont aussi une de ces perms plus
+    // larges, ex. direction) peuvent modifier sur un dossier -- whitelist etablie le 2026-08-04 en
+    // lisant exhaustivement atelier.js ET emballage.js (toutes les affectations `d.xxx =`, y
+    // compris via changerStatutDossier/logHistory, seule fonction partagee que ces deux fichiers
+    // utilisent pour muter un dossier) : c'est la seule surface d'ecriture "dossiers" accessible a
+    // un compte n'ayant NI edit/advance/planning/metreur. emballage.js ne touche en pratique QUE
+    // statut/statutChangedAt/history (deja dans la whitelist atelier) -- pas de champ
+    // supplementaire necessaire, d'ou le partage de la meme fonction plutot qu'une 2e whitelist.
+    // Avant ce fix, un compte emballage SANS adv_prod (le cas par defaut d'un nouveau compte cree
+    // via l'ecran de gestion) ne passait aucune des conditions ci-dessus et ne pouvait faire
+    // avancer AUCUN dossier -- fonctionnalite cassee pour ce cas precis (le seul compte emballage
+    // reel existant a aussi adv_prod, donc fonctionnait deja par ce biais).
+    function onlyAtelierOuEmballageFieldsChanged() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
         'statut', 'statutChangedAt', 'history',
         'atelierAccessoiresFait', 'atelierTablierFait', 'atelierAxeFait', 'pages'

@@ -61,6 +61,8 @@ async function main() {
     await db.collection('users').doc('noperm1').set({ active: true, role: 'ouvrier', perms: [] });
     await db.collection('users').doc('ouvrier1').set({ active: true, role: 'ouvrier', perms: ['view_prod', 'adv_prod', 'atelier_grand'] });
     await db.collection('users').doc('commercial1').set({ active: true, role: 'commercial', perms: ['view_all', 'create', 'edit', 'suivi'] });
+    await db.collection('users').doc('poseur2').set({ active: true, role: 'poseur', perms: ['vue_poseur'] });
+    await db.collection('users').doc('emballage1').set({ active: true, role: 'emballage', perms: ['emballage', 'emballage_grand'] });
 
     await db.collection('dossiers').doc('D1').set({ statut: 'admin' });
     await db.collection('notifications').doc('N1').set({ text: 'x', read: { admin1: true } });
@@ -113,6 +115,17 @@ async function main() {
   await check("adv_prod seul NE PEUT PAS modifier ht/devis", as('ouvrier1').collection('dossiers').doc('D1').update({ ht: 9999 }), 'fail');
   await check("adv_prod seul bloqué même en mélangeant un champ atelier et un champ hors périmètre", as('ouvrier1').collection('dossiers').doc('D1').update({ statut: 'production', client: 'Triche' }), 'fail');
   await check("hasPerm('metreur') (perm plus large) reste illimité malgré la whitelist adv_prod", as('viewer1').collection('dossiers').doc('D1').update({ client: 'Nouveau Client', ht: 123 }), 'succeed');
+
+  // -- poseur pur (vue_poseur seul) : lecture dossiers pour "Ma journée", 2026-08-04 --
+  await check("[FIX] hasPerm('vue_poseur') seul peut maintenant lire dossiers", as('poseur2').collection('dossiers').get(), 'succeed');
+  await check("hasPerm('vue_poseur') seul NE PEUT PAS modifier dossier (lecture seule)", as('poseur2').collection('dossiers').doc('D1').update({ statut: 'verif' }), 'fail');
+
+  // -- emballage pur (sans adv_prod) : même whitelist de champs que l'atelier, 2026-08-04 --
+  await check("[FIX] hasPerm('emballage') seul (sans adv_prod) peut maintenant modifier un champ atelier (statut)", as('emballage1').collection('dossiers').doc('D1').update({ statut: 'stocké' }), 'succeed');
+  // Valeur DIFFÉRENTE de celle déjà posée par le test précédent ("hasPerm('metreur')...") sur
+  // ce même D1 partagé — sinon diff() ne verrait aucun changement réel sur 'client' (déjà à
+  // "Nouveau Client") et passerait à tort la whitelist par absence de diff, pas par un vrai trou.
+  await check("hasPerm('emballage') seul NE PEUT PAS modifier un champ hors périmètre (client)", as('emballage1').collection('dossiers').doc('D1').update({ client: 'Triche Emballage' }), 'fail');
 
   // ========================== notifications ===========================
   console.log('\n-- notifications --');
