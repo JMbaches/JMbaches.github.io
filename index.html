@@ -2668,7 +2668,7 @@ function renderDashboard() {
   const prod = dossiers_.filter(d=>d.statut==='production');
   const total = dossiers_.reduce((s,d)=>s+(d.ht||0),0);
   const recentActivity = [];
-  dossiers_.forEach(d=>d.history.forEach(h=>recentActivity.push({...h,dosId:d.id,dosClient:d.client})));
+  dossiers_.forEach(d=>(d.history||[]).forEach(h=>recentActivity.push({...h,dosId:d.id,dosClient:d.client})));
   recentActivity.sort((a,b)=>b.id-a.id);
   const top5 = recentActivity.slice(0,6);
   const hour = new Date().getHours();

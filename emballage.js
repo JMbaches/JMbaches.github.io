@@ -47,7 +47,7 @@ function confirmerManquant(id) {
 
 function renderEmballage() {
   const aEmballer = dossiers.filter(d => d.statut === 'emballage').filter(matchesTypeFilter);
-  const stockes   = dossiers.filter(d => d.statut === 'stocké').filter(matchesTypeFilter);
+  const stockes   = filteredDossiers(dossiers.filter(d => d.statut === 'stocké').filter(matchesTypeFilter));
   const mc = document.getElementById('main-content');
 
   mc.innerHTML = `
@@ -68,7 +68,7 @@ function renderEmballage() {
   </div>
   <div class="stagger" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-bottom:28px">
     ${aEmballer.map(d => {
-      const manquantsExistants = d.history.filter(h => h.type==='commentaire' && h.action.includes('Manquant signalé'));
+      const manquantsExistants = (d.history||[]).filter(h => h.type==='commentaire' && h.action.includes('Manquant signalé'));
       const transportLabel = {enlvt:'Enlèvement client',liv_pose:'Livraison + Pose',livraison:'Livraison seule'}[d.transport]||d.transport;
       return `<div class="daily-card" style="border-color:#F59E0B">
         <div style="padding:14px 16px 12px;background:#FFFBEB;border-bottom:1px solid #FDE68A">
@@ -174,8 +174,8 @@ function getSortedEmballage() {
   const manualIds = emballageOrder.filter(id => emb.find(d => d.id === id));
   const unordered = emb.filter(d => !manualIds.includes(d.id));
   unordered.sort((a, b) => {
-    const aUrg = a.autres && a.autres.toLowerCase().includes('urgent') ? 0 : 1;
-    const bUrg = b.autres && b.autres.toLowerCase().includes('urgent') ? 0 : 1;
+    const aUrg = isUrgent(a) ? 0 : 1;
+    const bUrg = isUrgent(b) ? 0 : 1;
     if (aUrg !== bUrg) return aUrg - bUrg;
     return (a.dateLivraison||'9999') < (b.dateLivraison||'9999') ? -1 : 1;
   });
@@ -252,7 +252,7 @@ function renderEmballageGrand() {
       const pos = idx + 1;
       const posColor = pos===1 ? 'var(--red)' : pos===2 ? 'var(--amber)' : '#92400E';
       const posBg   = pos===1 ? 'var(--red-light)' : pos===2 ? 'var(--amber-light)' : '#FEF3C7';
-      const manquants = d.history.filter(h => h.type==='commentaire' && h.action.includes('Manquant signalé'));
+      const manquants = (d.history||[]).filter(h => h.type==='commentaire' && h.action.includes('Manquant signalé'));
       const retard = d.dateLivraison && d.dateLivraison < new Date().toISOString().split('T')[0];
       const transportLabel = {enlvt:'Enlèvement client', liv_pose:'Livraison + Pose', livraison:'Livraison seule'}[d.transport]||d.transport;
 
@@ -337,9 +337,9 @@ function renderEmballageGrand() {
               <i class="ti ti-alert-triangle"></i> Manquant
             </button>
           </div>
-          <button class="btn btn-primary" onclick="avancerDosEmballageGrand('${d.id}')" style="width:100%;justify-content:center;font-size:15px;padding:11px 0">
-            <i class="ti ti-archive"></i> Marquer stocké
-          </button>
+          ${(!isBacheDossier(d) && typeof checklistComplete==='function' && !checklistComplete(d,'axetab'))
+            ? `<button class="btn btn-secondary" onclick="openChecklist('${d.id}','axetab')" style="width:100%;justify-content:center;font-size:15px;padding:11px 0;color:var(--amber);border-color:#FCD34D" title="La checklist Axe/Tablier doit être complète avant de marquer stocké"><i class="ti ti-list-check"></i> Compléter la checklist</button>`
+            : `<button class="btn btn-primary" onclick="avancerDosEmballageGrand('${d.id}')" style="width:100%;justify-content:center;font-size:15px;padding:11px 0"><i class="ti ti-archive"></i> Marquer stocké</button>`}
 
         </div>
       </div>`;

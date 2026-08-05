@@ -1359,7 +1359,7 @@ function renderStockPieces() {
   mc.innerHTML = `
   <div class="page-header">
     <h1 style="font-size:20px;font-weight:700;letter-spacing:-.2px">Stock — Pièces détachées</h1>
-    <p>${totalProduits} produit${totalProduits>1?'s':''} · 9 catégories${totalBas>0?` · <span style="color:var(--red);font-weight:600"><i class="ti ti-alert-triangle"></i> ${totalBas} sous le seuil</span>`:''}</p>
+    <p>${totalProduits} produit${totalProduits>1?'s':''} · ${STOCK_CATEGORIES.length} catégories${totalBas>0?` · <span style="color:var(--red);font-weight:600"><i class="ti ti-alert-triangle"></i> ${totalBas} sous le seuil</span>`:''}</p>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
     ${STOCK_CATEGORIES.map(c => {
