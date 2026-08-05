@@ -38,7 +38,7 @@ function renderUsers() {
         ${u.perimetre&&u.perimetre!=='tous'?`<div style="margin-bottom:4px"><span style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--accent-light);color:var(--accent-deep);font-weight:600">${u.perimetre==='volet'?'Volets uniquement':'Bâches uniquement'}</span></div>`:''}
         ${u.posteAtelier?`<div style="margin-bottom:4px"><span style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--accent-light);color:var(--accent-deep);font-weight:600">Poste atelier : ${{accessoires:'Accessoires','tablier_pvc':'Tablier PVC','tablier_poly':'Tablier Poly',axes:'Axes'}[u.posteAtelier]||u.posteAtelier}</span></div>`:''}
         ${u.email?`<div style="font-size:11px;color:var(--ink-faint);margin-bottom:8px"><i class="ti ti-mail" style="font-size:11px;vertical-align:-1px"></i> ${u.email}</div>`:'<div style="margin-bottom:8px"></div>'}
-        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">${u.perms.map(p=>`<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--bg);border:1px solid var(--border);color:var(--ink-soft)">${permsLabel[p]||p}</span>`).join('')}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">${(u.perms||[]).map(p=>`<span style="font-size:10px;padding:1px 6px;border-radius:3px;background:var(--bg);border:1px solid var(--border);color:var(--ink-soft)">${permsLabel[p]||p}</span>`).join('')}</div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-secondary btn-sm" style="flex:1;justify-content:center" onclick="openEditUser('${u.id}')"><i class="ti ti-edit"></i> Modifier</button>
           ${!isMe?`<button class="btn ${u.active?'btn-danger':'btn-secondary'} btn-sm" onclick="toggleActive('${u.id}')">${u.active?'Désactiver':'Réactiver'}</button>`:''}
@@ -93,9 +93,10 @@ function appliquerPosteAtelier(valeur) {
   document.getElementById('u-poste-atelier-matiere').value = m ? m[1] : 'pvc';
 }
 function buildPermsGrid(current) {
+  const cur = current||[];
   document.getElementById('perms-grid').innerHTML=ALL_PERMS.map(p=>`
-    <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--radius);border:1px solid var(--border);cursor:pointer;background:${current.includes(p.id)?'var(--accent-light)':'var(--paper)'};font-size:13px">
-      <input type="checkbox" value="${p.id}"${current.includes(p.id)?' checked':''} style="width:15px;height:15px;accent-color:var(--accent);flex-shrink:0">
+    <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--radius);border:1px solid var(--border);cursor:pointer;background:${cur.includes(p.id)?'var(--accent-light)':'var(--paper)'};font-size:13px">
+      <input type="checkbox" value="${p.id}"${cur.includes(p.id)?' checked':''} style="width:15px;height:15px;accent-color:var(--accent);flex-shrink:0">
       <span style="flex:1">${p.label}</span>
     </label>`).join('');
 }

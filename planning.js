@@ -346,7 +346,7 @@ function renderEdtMonth(container) {
   const heads = JOURS.map(j=>`<div class="edt-month-head">${j}</div>`).join('');
   const dayCells = cells.map(({date,other})=>{
     const iso = toISODate(date);
-    const dosJour = dossiersEdt.filter(x=>x.needPose&&x.poseDate===iso);
+    const dosJour = dossiersEdt.filter(x=>poseComptePlanning(x)&&x.poseDate===iso);
     const todayCls = isToday(date)?' today':'';
     const otherCls = other?' other-month':'';
     return `<div class="edt-month-day${todayCls}${otherCls}"
@@ -443,7 +443,7 @@ function ouvrirAppPlanning() {
 }
 
 function exporterPourPlanning() {
-  const chantiers = dossiersScope().filter(d=>d.needPose).map(d=>({
+  const chantiers = dossiersScope().filter(d=>poseComptePlanning(d)).map(d=>({
     id: d.id,
     client: d.client,
     adresse: [d.adresse, d.cp, d.ville].filter(Boolean).join(', '),

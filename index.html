@@ -2125,7 +2125,7 @@ function tempsStatutColor(d) {
   if (j >= 2) return 'var(--amber)';
   return 'var(--ink-faint)';
 }
-function can(p) { return currentUser && currentUser.perms.includes(p); }
+function can(p) { return currentUser && (currentUser.perms||[]).includes(p); }
 function canSeeCA() { return currentUser && (currentUser.role === 'direction' || currentUser.role === 'compta'); }
 function userName(uid) { const u=users.find(x=>x.id===uid); return u?u.name:uid; }
 function statBadge(s) {
@@ -2183,7 +2183,7 @@ function pushNotif(type, dosId, d, detail='') {
   users.forEach(u=>n.read[u.id]=true);
   rule.targets.forEach(t=>{
     users.forEach(u=>{
-      const roleOk = (t==='admin'&&(u.role==='admin'||u.perms.includes('users')))||(t==='verif'&&u.role==='verif')||(t==='ouvrier'&&u.role==='ouvrier')||(t==='emballage'&&u.role==='emballage')||(t==='planning'&&u.role==='planning')||(t==='compta'&&(u.role==='compta'||u.perms.includes('users')))||(t==='direction'&&u.perms.includes('users'))||(t==='commercial'&&u.role==='commercial')||(t==='metreur'&&u.role==='metreur');
+      const _up=u.perms||[]; const roleOk = (t==='admin'&&(u.role==='admin'||_up.includes('users')))||(t==='verif'&&u.role==='verif')||(t==='ouvrier'&&u.role==='ouvrier')||(t==='emballage'&&u.role==='emballage')||(t==='planning'&&u.role==='planning')||(t==='compta'&&(u.role==='compta'||_up.includes('users')))||(t==='direction'&&_up.includes('users'))||(t==='commercial'&&u.role==='commercial')||(t==='metreur'&&u.role==='metreur');
       // Le rôle ne suffit pas : un compte scopé sur un seul type de dossier (u.perimetre) ne doit
       // jamais être notifié pour un dossier hors de son périmètre, même si son rôle matche la règle.
       if(roleOk && d && dossierDansPerimetre(d, u)) n.read[u.id]=false;
@@ -2202,6 +2202,7 @@ function updateBadge() {
 let _logHistorySaveTimer=null;
 function logHistory(dosId,type,action,detail='') {
   const d=dossiers.find(x=>x.id===dosId); if(!d) return;
+  if(!d.history) d.history=[];
   d.history.unshift({id:Date.now(),type,action,detail,user:currentUser.id,at:now()});
   // saveData REGROUPÉ : une rafale de logs (le décompte auto en émet ~7 d'affilée) ne
   // déclenche plus une sauvegarde complète + un écho onSnapshot par entrée — c'est cette
@@ -3051,7 +3052,7 @@ function renderDos() {
             ${(()=>{const t=tempsStatut(d);return t?`<div style="font-size:10px;color:${tempsStatutColor(d)};margin-top:2px;display:flex;align-items:center;gap:2px"><i class="ti ti-clock" style="font-size:10px"></i> ${t}</div>`:''})()}
           </td>
           ${canSeeCA()?`<td style="font-size:13px;font-weight:600;font-family:'JetBrains Mono',monospace">${(d.ht||0).toLocaleString('fr-FR',{minimumFractionDigits:2})} €</td>`:''}
-          <td><span style="font-size:12px;color:var(--ink-faint)">${d.history.length} action${d.history.length>1?'s':''}</span></td>
+          <td><span style="font-size:12px;color:var(--ink-faint)">${(d.history||[]).length} action${(d.history||[]).length>1?'s':''}</span></td>
           <td onclick="event.stopPropagation()">
             <div style="display:flex;gap:5px;flex-wrap:wrap">
               ${d.statut==='verif'?`<button class="btn btn-primary btn-sm" onclick="ouvrirFicheCalcul('${d.id}')" title="Ouvrir directement la fiche de calcul"><i class="ti ti-calculator"></i> Fiche de calcul</button>`:''}
@@ -3152,8 +3153,8 @@ function renderFiche() {
   const prevId = curIdx>0 ? filteredList[curIdx-1].id : null;
   const nextId = curIdx<filteredList.length-1 ? filteredList[curIdx+1].id : null;
   const HIST_LIMIT = 5;
-  const histSlice = d.history.slice(0, HIST_LIMIT);
-  const histHasMore = d.history.length > HIST_LIMIT;
+  const histSlice = (d.history||[]).slice(0, HIST_LIMIT);
+  const histHasMore = (d.history||[]).length > HIST_LIMIT;
   mc.innerHTML=`
   <div id="toast-msg" class="toast-msg"></div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;row-gap:8px" class="no-print">
@@ -3217,7 +3218,7 @@ function renderFiche() {
     <div id="page-body">${renderPage(d,p)}</div>
     <div class="no-print">
       <div class="card" style="margin-bottom:12px">
-        <div class="card-hd"><span class="card-title"><i class="ti ti-history" style="margin-right:5px"></i>Historique</span><span style="font-size:11px;color:var(--ink-faint)">${d.history.length} entrée${d.history.length>1?'s':''}</span></div>
+        <div class="card-hd"><span class="card-title"><i class="ti ti-history" style="margin-right:5px"></i>Historique</span><span style="font-size:11px;color:var(--ink-faint)">${(d.history||[]).length} entrée${(d.history||[]).length>1?'s':''}</span></div>
         <div id="hist-body" style="padding:12px">
           ${histSlice.map(h=>histItemHTML(h)).join('')}
         </div>
@@ -6796,21 +6797,21 @@ function renderCompta() {
 function deleteJournalEntry(dosId, entryId) {
   const d = dossiers.find(x => x.id === dosId);
   if (!d) return;
-  d.history = d.history.filter(h => h.id !== entryId);
+  d.history = (d.history||[]).filter(h => h.id !== entryId);
   saveData();
   renderJournal();
 }
 
 function deleteJournalUser(userId) {
   if (!confirm('Supprimer toutes les entrées de ce membre du journal ?')) return;
-  dossiers.forEach(d => { d.history = d.history.filter(h => h.user !== userId); });
+  dossiers.forEach(d => { d.history = (d.history||[]).filter(h => h.user !== userId); });
   saveData();
   renderJournal();
 }
 
 function renderJournal() {
   const all=[];
-  dossiersScope().forEach(d=>d.history.forEach(h=>all.push({...h,dosId:d.id,dosClient:d.client})));
+  dossiersScope().forEach(d=>(d.history||[]).forEach(h=>all.push({...h,dosId:d.id,dosClient:d.client})));
   all.sort((a,b)=>b.id-a.id);
   const canDelete = currentUser.role === 'direction';
 
@@ -7182,7 +7183,7 @@ function exportDossierPDF() {
   const DEVIS_LABEL = {accepte:'Accepté', paye:'Payé', en_attente:'En attente', refuse:'Refusé'};
   const now_str = new Date().toLocaleDateString('fr-FR');
 
-  const histHTML = d.history.map(h => {
+  const histHTML = (d.history||[]).map(h => {
     const e = EVT[h.type] || EVT.modification;
     const userName_h = resolveUser(h.user).name;
     return `<tr>
@@ -7273,7 +7274,7 @@ function exportDossierPDF() {
   </div>` : ''}
 
   <div class="section" style="margin-top:24px">
-    <div class="section-title">Historique des modifications (${d.history.length} entrées)</div>
+    <div class="section-title">Historique des modifications (${(d.history||[]).length} entrées)</div>
     <table>
       <thead><tr>
         <th>Date</th><th>Action</th><th>Utilisateur</th><th>Détail</th>
@@ -7922,7 +7923,7 @@ function histItemHTML(h) {
 function showAllHistory() {
   const d = dossiers.find(x => x.id === currentDosId); if (!d) return;
   const hb = document.getElementById('hist-body');
-  if (hb) hb.innerHTML = d.history.map(h => histItemHTML(h)).join('');
+  if (hb) hb.innerHTML = (d.history||[]).map(h => histItemHTML(h)).join('');
   const hm = document.getElementById('hist-more');
   if (hm) hm.style.display = 'none';
 }
