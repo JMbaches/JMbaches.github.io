@@ -1717,7 +1717,18 @@ function App() {
       if (e.data.type !== 'JMBACH_INIT') return;
       applyPendingPlanningDeletes();
       if (e.data.binomes && e.data.binomes.length > 0) {
-        setBinomes(e.data.binomes);
+        // Fusion, pas remplacement : planning.js n'a jamais connu color/phone/email (_binomesConfig
+        // côté index.html n'a que id/name/memberIds), donc un remplacement intégral effaçait à
+        // chaque sync la couleur et le téléphone/email configurés ici dans Paramètres — bug réel
+        // trouvé en audit, reproductible à chaque réouverture de l'onglet Planning. On ne prend de
+        // l'entrant que id/name/members (l'info que planning.js connaît réellement) et on garde le
+        // reste déjà configuré localement.
+        setBinomes(prev => e.data.binomes.map(incoming => {
+          const existing = prev.find(b => b.id === incoming.id);
+          return existing
+            ? { ...incoming, color: existing.color, phone: existing.phone, email: existing.email }
+            : incoming;
+        }));
       }
       if (e.data.dossiers && e.data.dossiers.length > 0) {
         setChantiers(prev => {
@@ -2670,9 +2681,12 @@ function FeuillesDeRoute({ chantiers, binomes, depot }) {
   const [optResult, setOptResult] = useState(null);
   const [returnToDepot, setReturnToDepot] = useState(true);
 
-  // Semaine (lundi→vendredi) contenant la date choisie
+  // Semaine (lundi→samedi, comme le reste de l'app — EmploiDuTemps/exportEdtToExcel couvrent déjà
+  // 6 jours) contenant la date choisie. Était limité à 5 jours (lundi→vendredi) : un chantier
+  // planifié un samedi (autorisé partout ailleurs, colonne du planning incluse) disparaissait
+  // silencieusement de la feuille de route hebdomadaire imprimée/envoyée à l'équipe — bug réel.
   const weekStart = useMemo(() => getWeekStart(parseISO(date)), [date]);
-  const weekDays = useMemo(() => Array.from({ length: 5 }, (_, i) => toISO(addDays(weekStart, i))), [weekStart]);
+  const weekDays = useMemo(() => Array.from({ length: 6 }, (_, i) => toISO(addDays(weekStart, i))), [weekStart]);
   // Chantiers planifiés de la semaine, regroupés par binôme puis par jour (triés par ordre/CP)
   const weekData = useMemo(() => {
     const bins = weekScope === 'tous' ? binomes : binomes.filter(b => b.id === binId);
@@ -2885,7 +2899,8 @@ function FeuillesDeRoute({ chantiers, binomes, depot }) {
 }
 
 function PrintSheetWeek({ weekStart, weekData, onBack }) {
-  const weekLabel = `Semaine ${getISOWeek(weekStart)} · ${weekStart.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long' })} – ${addDays(weekStart, 4).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}`;
+  // +5 (samedi), pas +4 (vendredi) : weekDays couvre maintenant 6 jours lundi→samedi, voir fix ci-dessus.
+  const weekLabel = `Semaine ${getISOWeek(weekStart)} · ${weekStart.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long' })} – ${addDays(weekStart, 5).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}`;
   return (
     <div className="pt-10 fadein">
       <div className="no-print flex gap-3 mb-6">

@@ -583,8 +583,12 @@ function computeEsc(f){
       else if(edge==='coupe') extra=(num(f.roM17b)||0)+(num(f.roM18b)||0);
     } else { // droit
       fond=(g.profG!=null? (num(f.largeur)||0) :0);          // largeur (T31)
-      if(edge==='arrondi') extra=(num(f.rGd)||0)+(num(f.rDf)||0);
-      else if(edge==='coupe') extra=(num(f.cGd2)||0)+(num(f.cDf2)||0);
+      // Le raccord de fond est au bout (fin) de l'escalier des 2 côtés — la droite utilisait déjà
+      // rDf/cDf2 (fin), mais la gauche prenait par erreur rGd/cGd2 (début) au lieu de rGf/cGf2
+      // (fin) : un bug réel quand début et fin ont des rayons/chanfreins différents (cas normal,
+      // 4 champs indépendants dans le formulaire), donnant une cote de découpe fausse du raccord.
+      if(edge==='arrondi') extra=(num(f.rGf)||0)+(num(f.rDf)||0);
+      else if(edge==='coupe') extra=(num(f.cGf2)||0)+(num(f.cDf2)||0);
     }
     const AAr=(-P.jeu + (P.surlong/2)*freeEnds) + fond + extra;
     lames.push({n:lames.length+1, T:null, X:0, AA:AAr, AB:AAr, raccord:true});
@@ -1447,7 +1451,7 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans markdown, sans texte avant o
           // Regrouper les lames identiques (même cote coupe arrondie)
           const keyL=L=>L.raccord?'R':Math.round((L.AB||0)*10)+'_'+Math.round((L.AA||0)*10);
           const groupes=[]; const seen={};
-          cEsc.lames.forEach(L=>{ const k=keyL(L); if(!seen[k]){seen[k]={...L,count:1};groupes.push(seen[k]);}else{seen[k].count++;} });
+          cEsc.lames.forEach(L=>{ const k=keyL(L); if(!seen[k]){seen[k]={...L,count:1,ns:[L.n]};groupes.push(seen[k]);}else{seen[k].count++;seen[k].ns.push(L.n);} });
           const standard=groupes.filter(g=>!g.raccord&&g.count>1);
           const speciales=groupes.filter(g=>g.raccord||g.count===1);
           const ecolsD=[{t:'Lames',w:30},{t:'Largeur nette',w:40,r:true},{t:'Cote coupe',w:40,r:true},{t:'Cote finie',w:CW-30-40-40,r:true}];
