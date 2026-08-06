@@ -2151,7 +2151,7 @@ function showToast(msg) {
 function myNotifs() {
   if(!currentUser) return [];
   const role = currentUser.role;
-  const isAdmin = currentUser.perms.includes('users');
+  const isAdmin = (currentUser.perms||[]).includes('users');
   return notifications.filter(n => {
     // Garde-fou périmètre : une notif liée à un dossier hors du périmètre du compte connecté ne
     // doit jamais apparaître, même pour un compte admin/direction — cohérent avec le fait que
@@ -3224,7 +3224,7 @@ function renderFiche() {
         </div>
         ${histHasMore?`<div id="hist-more" style="padding:6px 12px;border-top:1px solid var(--border)">
           <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" onclick="showAllHistory()">
-            <i class="ti ti-history"></i> Voir tout — ${d.history.length} entrées
+            <i class="ti ti-history"></i> Voir tout — ${(d.history||[]).length} entrées
           </button>
         </div>`:''}
         <div class="add-comment">
@@ -4306,7 +4306,7 @@ async function envoyerAuPlanning() {
   if (d.poseSecteur === 'azenco') { showToast('Pose Azenco — non planifiée par JM'); return; }
   d.needPose = true;
   if (d.statut === 'nouveau' || d.statut === 'admin') {
-    await changerStatutDossier(d, 'attente_planif', 'envoyé au planning');
+    if (!(await changerStatutDossier(d, 'attente_planif', 'envoyé au planning'))) return;
   } else {
     logHistory(currentDosId, 'planning', 'Dossier envoyé au planning (pose à planifier)');
   }

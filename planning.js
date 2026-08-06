@@ -16,7 +16,7 @@
 // Planning IA en iframe, import JSON). Appelé après CHAQUE affectation réelle de d.poseDate.
 async function _retourSaisieSiPlanifie(d) {
   if (d.statut !== 'attente_planif' || !d.poseDate) return;
-  await changerStatutDossier(d, 'admin', 'automatique après planification de la pose');
+  if (!(await changerStatutDossier(d, 'admin', 'automatique après planification de la pose'))) return;
   showToast(`${d.client} revient en Saisie — pose planifiée le ${fmt(d.poseDate)}`);
 }
 

@@ -150,7 +150,7 @@ async function stockDecompterMoteur(d) {
     debrayage = await stockDecompteFixe('autre', 'Debrayage', 1);
     uDeFixation = await stockDecompteFixe('aluminium', 'U de fixation', 1);
   }
-  return { ok:true, ref, debrayage, uDeFixation, moteurCode };
+  return { ok:true, ref, debrayage, uDeFixation, moteurCode, echecs:[debrayage,uDeFixation].filter(r=>r&&!r.ok) };
 }
 
 // Correspondance largeur bassin (cm) -> référence axe. Reprise telle quelle du logiciel Stock.exe
@@ -277,10 +277,10 @@ async function stockDecompterSanglesEtClips(d) {
   const sangleBase = SANGLE_PAR_COULEUR[couleur], clipsRef = CLIPS_PAR_COULEUR[couleur];
   if (!sangleBase || !clipsRef) return { ok:false, reason:`couleur "${couleur}" inconnue pour sangles/clips` };
   const sangleRef = sangleType === 'Longue' ? `Sangle Longue ${sangleBase.split(' ')[1]}` : sangleBase;
-  const rSangle = await stockDecompteFixe('attaches', sangleRef, 3);
-  const rClips = await stockDecompteFixe('attaches', clipsRef, 5);
+  const rSangle = { label:sangleRef, ...(await stockDecompteFixe('attaches', sangleRef, 3)) };
+  const rClips = { label:clipsRef, ...(await stockDecompteFixe('attaches', clipsRef, 5)) };
   if (!rSangle.ok && !rClips.ok) return { ok:false, reason:`sangle: ${rSangle.reason} / clips: ${rClips.reason}` };
-  return { ok:true, sangle:rSangle, clips:rClips };
+  return { ok:true, sangle:rSangle, clips:rClips, echecs:[rSangle,rClips].filter(r=>!r.ok) };
 }
 
 // Table type d'alimentation -> capot + pièces électriques. Reprise de deduire_alimentation, avec
@@ -439,7 +439,7 @@ async function stockDecompterMur(d) {
     const qteLames = largeurCm <= 300 ? 4 : 8;
     const rLame = await stockDecompteFixe('autre', ref, qteLames);
     const rJambe = await stockDecompteFixe('inox', 'Jambe immerge total', 2);
-    return { ok:true, lame:rLame, jambe:rJambe };
+    return { ok:true, lame:rLame, jambe:rJambe, echecs:[rLame,rJambe].filter(r=>!r.ok) };
   }
 
   // immerge simple : pas de repli — rien n'est décompté si un champ manque (comme le legacy).
@@ -454,7 +454,7 @@ async function stockDecompterMur(d) {
   const rLame = await stockDecompteFixe('autre', ref, qteLames);
   const refJambe = ['1m','1,25m','1,5m'].includes(d.murHauteur) ? 'Jambe de mur 1.5m' : 'Jambe de mur 2m';
   const rJambe = await stockDecompteFixe('inox', refJambe, 2);
-  return { ok:true, lame:rLame, jambe:rJambe };
+  return { ok:true, lame:rLame, jambe:rJambe, echecs:[rLame,rJambe].filter(r=>!r.ok) };
 }
 
 // Barre de renfort de mur (deduire_barre_renfort_mur) — appel INDÉPENDANT de deduire_mur dans le
@@ -504,7 +504,7 @@ async function stockDecompterCaillebotis(d) {
     const resultats = {};
     if (qte1m) resultats.r1m = await stockDecompteFixe('autre', `Lame Caillebotis ${d.caillebotisChoix} 1m`, qte1m);
     if (qte15m) resultats.r15m = await stockDecompteFixe('autre', `Lame Caillebotis ${d.caillebotisChoix} 1.5m`, qte15m);
-    return { ok:true, ...resultats };
+    return { ok:true, ...resultats, echecs:Object.values(resultats).filter(r=>!r.ok) };
   }
 
   return { ok:false, reason:`choix caillebotis "${d.caillebotisChoix}" inconnu` };
@@ -544,7 +544,7 @@ async function stockDecompterBouchons(d) {
   if (!couleurBouchon) return { ok:false, reason:`couleur de structure "${couleurBase}" inconnue pour bouchons` };
   const r80 = await stockDecompteFixe('bouchons', `Bouchon 80x80 ${couleurBouchon}`, 2);
   const r100 = await stockDecompteFixe('bouchons', `Bouchon 100x100 ${couleurBouchon}`, 4);
-  return { ok:true, r80, r100 };
+  return { ok:true, r80, r100, echecs:[r80,r100].filter(r=>!r.ok) };
 }
 
 // Fixation béton/coque (deduire_fixation, immerge simple uniquement) — "Sur Paroi" (ou non
@@ -586,7 +586,7 @@ async function stockDecompterPoutreEtSabots(d) {
   if (!d.poutreCouleur) return { ok:false, reason:'couleur de poutre non renseignée' };
   const rSabots = await stockDecompteFixe('aluminium', 'Sabot Immerge Brute', 2);
   const rPoutre = await stockDecompteFixe('aluminium', `Poutre 6m ${d.poutreCouleur}`, 1);
-  return { ok:true, sabots:rSabots, poutre:rPoutre };
+  return { ok:true, sabots:rSabots, poutre:rPoutre, echecs:[rSabots,rPoutre].filter(r=>!r.ok) };
 }
 
 // Poutre brute (deduire_poutre_brute, immerge_total uniquement) — mécanisme totalement distinct
@@ -626,6 +626,11 @@ async function stockDecompterEntreeProduction(d) {
     d.stockMoteurDecompteFait = true;
     logHistory(d.id,'stock',`Moteur décompté automatiquement : ${moteurRes.moteurCode}${moteurRes.moteurCode!==d.moteur?` (figé pour ce type de volet, moteur saisi : ${d.moteur||'—'})`:''}${moteurRes.ref.quantite<0?' — ⚠ stock passé négatif':''}`);
     showToast(moteurRes.ref.quantite<0 ? `⚠ moteur ${moteurRes.moteurCode} décompté — stock négatif (${moteurRes.ref.quantite})` : `Moteur ${moteurRes.moteurCode} décompté du stock`);
+    if (moteurRes.echecs?.length) {
+      const labels = moteurRes.echecs.map(r=>r.reason).join(', ');
+      logHistory(d.id,'stock',`Moteur — accessoire(s) non décompté(s) (introuvable) : ${labels}`);
+      showToast(`⚠ Moteur décompté, mais accessoire introuvable : ${labels}`);
+    }
   } else if (!['déjà décompté', "pas de moteur pour un tablier seul"].includes(moteurRes.reason)) {
     showToast(`⚠ Décompte stock moteur impossible : ${moteurRes.reason}`);
     logHistory(d.id,'stock',`Décompte stock moteur automatique impossible : ${moteurRes.reason}`);
@@ -645,8 +650,15 @@ async function stockDecompterEntreeProduction(d) {
   if (sanglesRes.ok) {
     d.stockSanglesDecompteFait = true;
     const okLabels = [sanglesRes.sangle, sanglesRes.clips].filter(r => r.ok).map(r => r.label);
-    logHistory(d.id,'stock',`Sangles/clips décomptés automatiquement : ${okLabels.join(', ')}`);
-    showToast(`Sangles/clips décomptés du stock (${okLabels.join(', ')})`);
+    if (okLabels.length) {
+      logHistory(d.id,'stock',`Sangles/clips décomptés automatiquement : ${okLabels.join(', ')}`);
+      showToast(`Sangles/clips décomptés du stock (${okLabels.join(', ')})`);
+    }
+    if (sanglesRes.echecs?.length) {
+      const echecLabels = sanglesRes.echecs.map(r => r.label).join(', ');
+      logHistory(d.id,'stock',`Sangles/clips — référence(s) non décomptée(s) (introuvable) : ${echecLabels}`);
+      showToast(`⚠ Sangles/clips : référence introuvable — ${echecLabels}`);
+    }
   } else if (sanglesRes.reason !== 'déjà décompté') {
     showToast(`⚠ Décompte sangles/clips impossible : ${sanglesRes.reason}`);
     logHistory(d.id,'stock',`Décompte sangles/clips automatique impossible : ${sanglesRes.reason}`);
@@ -692,7 +704,12 @@ async function stockDecompterEntreeProduction(d) {
   if (telecommandeRes.ok) {
     d.stockTelecommandeDecompteFait = true;
     const ok = telecommandeRes.resultats.filter(r=>r.ok);
+    const echecs = telecommandeRes.resultats.filter(r=>!r.ok);
     if (ok.length) { logHistory(d.id,'stock',`Télécommande décomptée automatiquement : ${ok.map(r=>r.label).join(', ')}`); showToast(`Télécommande décomptée du stock (${ok.map(r=>r.label).join(', ')})`); }
+    if (echecs.length) {
+      logHistory(d.id,'stock',`Télécommande — référence(s) non décomptée(s) (introuvable) : ${echecs.map(r=>r.label).join(', ')}`);
+      showToast(`⚠ Télécommande : référence introuvable — ${echecs.map(r=>r.label).join(', ')}`);
+    }
   } else if (!['déjà décompté','télécommande non applicable à ce type de volet','télécommande non renseignée (Non)'].includes(telecommandeRes.reason)) {
     showToast(`⚠ Décompte télécommande impossible : ${telecommandeRes.reason}`);
     logHistory(d.id,'stock',`Décompte télécommande automatique impossible : ${telecommandeRes.reason}`);
@@ -702,7 +719,12 @@ async function stockDecompterEntreeProduction(d) {
   if (gestionSelRes.ok) {
     d.stockGestionSelDecompteFait = true;
     const ok = gestionSelRes.resultats.filter(r=>r.ok);
+    const echecs = gestionSelRes.resultats.filter(r=>!r.ok);
     if (ok.length) { logHistory(d.id,'stock',`Gestion sel décomptée automatiquement : ${ok.map(r=>r.label).join(', ')}`); showToast(`Gestion sel décomptée du stock (${ok.map(r=>r.label).join(', ')})`); }
+    if (echecs.length) {
+      logHistory(d.id,'stock',`Gestion sel — référence(s) non décomptée(s) (introuvable) : ${echecs.map(r=>r.label).join(', ')}`);
+      showToast(`⚠ Gestion sel : référence introuvable — ${echecs.map(r=>r.label).join(', ')}`);
+    }
   } else if (!['déjà décompté','gestion sel non applicable à ce type de volet','gestion sel non renseignée (Non)'].includes(gestionSelRes.reason)) {
     showToast(`⚠ Décompte gestion sel impossible : ${gestionSelRes.reason}`);
     logHistory(d.id,'stock',`Décompte gestion sel automatique impossible : ${gestionSelRes.reason}`);
@@ -722,7 +744,12 @@ async function stockDecompterEntreeProduction(d) {
   if (flasqueMuraleRes.ok) {
     d.stockFlasqueMuraleDecompteFait = true;
     const ok = flasqueMuraleRes.resultats.filter(r=>r.ok);
+    const echecs = flasqueMuraleRes.resultats.filter(r=>!r.ok);
     if (ok.length) { logHistory(d.id,'stock',`Flasque murale : pièces décomptées automatiquement : ${ok.map(r=>r.label).join(', ')}`); showToast(`Flasque murale décomptée du stock (${ok.map(r=>r.label).join(', ')})`); }
+    if (echecs.length) {
+      logHistory(d.id,'stock',`Flasque murale — référence(s) non décomptée(s) (introuvable) : ${echecs.map(r=>r.label).join(', ')}`);
+      showToast(`⚠ Flasque murale : référence introuvable — ${echecs.map(r=>r.label).join(', ')}`);
+    }
   } else if (!['déjà décompté','flasque murale non applicable à ce type de volet (Silver uniquement)','flasque murale non cochée'].includes(flasqueMuraleRes.reason)) {
     showToast(`⚠ Décompte flasque murale impossible : ${flasqueMuraleRes.reason}`);
     logHistory(d.id,'stock',`Décompte flasque murale automatique impossible : ${flasqueMuraleRes.reason}`);
@@ -733,6 +760,11 @@ async function stockDecompterEntreeProduction(d) {
     d.stockMurDecompteFait = true;
     if (murRes.repli) { logHistory(d.id,'stock',`Mur non renseigné — repli sabots décompté automatiquement`); showToast('Mur non renseigné — sabots décomptés à la place (comportement legacy)'); }
     else { logHistory(d.id,'stock',`Mur décompté automatiquement : ${murRes.lame?.label||'lame'} + ${murRes.jambe?.label||'jambe'}`); showToast('Mur décompté du stock'); }
+    if (murRes.echecs?.length) {
+      const labels = murRes.echecs.map(r=>r.reason).join(', ');
+      logHistory(d.id,'stock',`Mur — référence(s) non décomptée(s) (introuvable) : ${labels}`);
+      showToast(`⚠ Mur : référence introuvable — ${labels}`);
+    }
   } else if (!['déjà décompté','mur non applicable à ce type de volet','largeur/couleur/hauteur de mur non renseignées'].includes(murRes.reason)) {
     showToast(`⚠ Décompte mur impossible : ${murRes.reason}`);
     logHistory(d.id,'stock',`Décompte mur automatique impossible : ${murRes.reason}`);
@@ -753,6 +785,11 @@ async function stockDecompterEntreeProduction(d) {
     d.stockCaillebotisDecompteFait = true;
     logHistory(d.id,'stock',`Caillebotis décompté automatiquement`);
     showToast(`Caillebotis décompté du stock`);
+    if (caillebotisRes.echecs?.length) {
+      const labels = caillebotisRes.echecs.map(r=>r.reason).join(', ');
+      logHistory(d.id,'stock',`Caillebotis — référence(s) non décomptée(s) (introuvable) : ${labels}`);
+      showToast(`⚠ Caillebotis : référence introuvable — ${labels}`);
+    }
   } else if (!['déjà décompté','caillebotis non applicable à ce type de volet','caillebotis non renseigné (Non)','largeur/profondeur du caillebotis non renseignées'].includes(caillebotisRes.reason)) {
     showToast(`⚠ Décompte caillebotis impossible : ${caillebotisRes.reason}`);
     logHistory(d.id,'stock',`Décompte caillebotis automatique impossible : ${caillebotisRes.reason}`);
@@ -773,6 +810,11 @@ async function stockDecompterEntreeProduction(d) {
     d.stockBouchonsDecompteFait = true;
     logHistory(d.id,'stock',`Bouchons décomptés automatiquement : ${bouchonsRes.r80?.label||''} + ${bouchonsRes.r100?.label||''}`);
     showToast(`Bouchons décomptés du stock`);
+    if (bouchonsRes.echecs?.length) {
+      const labels = bouchonsRes.echecs.map(r=>r.reason).join(', ');
+      logHistory(d.id,'stock',`Bouchons — référence(s) non décomptée(s) (introuvable) : ${labels}`);
+      showToast(`⚠ Bouchons : référence introuvable — ${labels}`);
+    }
   } else if (!['déjà décompté','bouchons non applicables à ce type de volet (Mouv uniquement)','couleur de structure (pieds) non renseignée'].includes(bouchonsRes.reason)) {
     showToast(`⚠ Décompte bouchons impossible : ${bouchonsRes.reason}`);
     logHistory(d.id,'stock',`Décompte bouchons automatique impossible : ${bouchonsRes.reason}`);
@@ -813,6 +855,11 @@ async function stockDecompterEntreeProduction(d) {
     d.stockPoutreDecompteFait = true;
     logHistory(d.id,'stock',`Poutre + sabots décomptés automatiquement : ${poutreRes.poutre?.label||''}`);
     showToast(`Poutre + sabots décomptés du stock`);
+    if (poutreRes.echecs?.length) {
+      const labels = poutreRes.echecs.map(r=>r.reason).join(', ');
+      logHistory(d.id,'stock',`Poutre/sabots — référence(s) non décomptée(s) (introuvable) : ${labels}`);
+      showToast(`⚠ Poutre/sabots : référence introuvable — ${labels}`);
+    }
   } else if (!['déjà décompté','poutre/sabots non applicables à ce type de volet (immergé simple uniquement)','couleur de poutre non renseignée'].includes(poutreRes.reason)) {
     showToast(`⚠ Décompte poutre/sabots impossible : ${poutreRes.reason}`);
     logHistory(d.id,'stock',`Décompte poutre/sabots automatique impossible : ${poutreRes.reason}`);

@@ -151,9 +151,13 @@ async function terminerPosteTablier(dosId, e) {
 async function terminerPosteAxe(dosId, e) {
   if (e) e.stopPropagation();
   const d = dossiers.find(x => x.id === dosId); if (!d || isBacheDossier(d)) return;
+  // Garde AVANT toute mutation : changerStatutDossier() peut bloquer la transition (cf. les
+  // règles fiche de calcul / pose non validée) — si elle échoue il ne faut ni marquer le poste
+  // fait, ni logger "envoi en emballage", ni afficher un toast de succès mensonger. Même
+  // contrat que avancerFiche()/avancerDos() dans index.html.
+  if (!(await changerStatutDossier(d, 'emballage', '(atelier — dernier poste : axes)'))) return;
   d.atelierAxeFait = true;
   logHistory(d.id, 'statut', `Atelier — poste axes validé — dernier poste, envoi en emballage`);
-  await changerStatutDossier(d, 'emballage', '(atelier — dernier poste : axes)');
   saveData();
   showToast(`✓ Axe prêt — ${d.client} envoyé en emballage`);
   rerenderAtelierCourant();
