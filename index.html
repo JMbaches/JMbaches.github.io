@@ -5101,7 +5101,10 @@ async function parseMegaoPDFLocal(file) {
   })) : undefined;
 
   // Moteur : suffixe du code VR après le préfixe de structure (VRSIL80S → 80S)
-  const moteurM = vrProd ? vrProd.code.match(/^VR(?:SUBT|SUB|MOUV|XTR|COF|SOL|SIL)([A-Z0-9]+)$/i) : null;
+  // ⚠️ "XTR" ne matchait que 3 des 5 lettres de "XTREM" (cf. VRXTREM7/8, isXtremMouv un peu plus
+  // loin) : les 2 lettres restantes ("EM") se retrouvaient collées au moteur extrait
+  // (VRXTREM90S → "EM90S" au lieu de "90S") — bug réel trouvé en audit.
+  const moteurM = vrProd ? vrProd.code.match(/^VR(?:SUBT|SUB|MOUV|XTREM|COF|SOL|SIL)([A-Z0-9]+)$/i) : null;
   const moteur  = moteurM ? moteurM[1] : '';
 
   // Alim : voltage dans le bloc texte autour du produit VR (souvent sur la ligne suivante)
@@ -5117,7 +5120,10 @@ async function parseMegaoPDFLocal(file) {
   const largeur = lamCodeM ? lameCodeToLargeur(lamProd.code) : '';
 
   // Longueur depuis la quantité ML sur la ligne LAM (mètres linéaires = longueur bassin)
-  const lamQtyM = text.match(/^LAM[0-9]+.+?ML\s+([\d,]+)/m);
+  // ⚠️ Manquait (?:POL)? — présent 3 lignes plus haut pour la largeur (LAM/LAMPOL) mais oublié
+  // ici : toute commande Polycarbonate (code LAMPOL...) ne matchait jamais, laissant f-longueur
+  // (et donc f-surface, qui a besoin des 2) vide en silence — bug réel trouvé en audit.
+  const lamQtyM = text.match(/^LAM(?:POL)?[0-9]+.+?ML\s+([\d,]+)/m);
   const longueur = lamQtyM ? lamQtyM[1].replace(',', '.') : '';
 
   let transport = 'liv_pose';
@@ -6178,8 +6184,12 @@ function getPoseurs() {
 function renderHoraires() {
   const mc = document.getElementById('main-content');
   const poseurs = getPoseurs();
-  const JOURS = ['lun','mar','mer','jeu','ven'];
-  const JOURS_LABEL = {lun:'Lundi',mar:'Mardi',mer:'Mercredi',jeu:'Jeudi',ven:'Vendredi'};
+  // Samedi ajouté (2026-08-06, bug réel trouvé en audit) : le reste de l'app (EDT, feuille de
+  // route) traite déjà la semaine comme lundi→samedi (6 jours) — un poseur qui travaillait un
+  // samedi voyait ses heures enregistrées sans erreur depuis "Ma journée", mais invisibles ici,
+  // dans le total semaine, et dans l'export CSV (seuil des 39h donc faussé).
+  const JOURS = ['lun','mar','mer','jeu','ven','sam'];
+  const JOURS_LABEL = {lun:'Lundi',mar:'Mardi',mer:'Mercredi',jeu:'Jeudi',ven:'Vendredi',sam:'Samedi'};
 
   if(!horairesData[horSemaine]) horairesData[horSemaine] = {};
 
@@ -6374,8 +6384,8 @@ function setHorVal(pid, jour, champ, val) {
   const cellId = `total-jour-${pid}-${jour}`;
   const el = document.getElementById(cellId);
   if(el) el.textContent = fmtH(hJour);
-  // Recalcul total semaine
-  const JOURS = ['lun','mar','mer','jeu','ven'];
+  // Recalcul total semaine (samedi inclus, voir renderHoraires)
+  const JOURS = ['lun','mar','mer','jeu','ven','sam'];
   const semP = horairesData[horSemaine][pid] || {};
   let tot = 0;
   JOURS.forEach(j => {
@@ -6396,8 +6406,8 @@ function setHorVal(pid, jour, champ, val) {
 }
 
 function exportHoraires() {
-  const JOURS = ['lun','mar','mer','jeu','ven'];
-  const JOURS_LABEL = {lun:'Lundi',mar:'Mardi',mer:'Mercredi',jeu:'Jeudi',ven:'Vendredi'};
+  const JOURS = ['lun','mar','mer','jeu','ven','sam'];
+  const JOURS_LABEL = {lun:'Lundi',mar:'Mardi',mer:'Mercredi',jeu:'Jeudi',ven:'Vendredi',sam:'Samedi'};
   const poseurs = getPoseurs();
   let csv = 'Semaine;Poseur;Jour;Début;Fin;Pause supp.;Heures nettes;Absent\n';
   poseurs.forEach(p => {
@@ -6463,11 +6473,20 @@ function renderVuePoseur() {
   const dayKey = getDayKeyFr(dateObj);
   const weekKey = getWeekKeyForDate(dateObj);
 
-  const posesJour = dossiersScope().filter(d =>
-    d.needPose &&
-    d.poseDate === vuePoseurDateIso &&
-    (!d.poseurId || d.poseurId === currentUser.id)
-  );
+  // 2 bugs réels trouvés en audit :
+  // 1. d.needPose seul au lieu du helper canonique poseComptePlanning(d) — celui-ci a un filet
+  //    de sécurité (transport==='liv_pose') pour les vieux dossiers dont needPose n'a jamais été
+  //    calculé, déjà utilisé par planning.js pour ses propres vues jour — ici oublié, un tel
+  //    dossier restait invisible dans "Ma journée" du poseur assigné.
+  // 2. d.poseurId === currentUser.id ne matchait jamais une pose assignée à un BINÔME (dès qu'au
+  //    moins un binôme est configuré, Planning IA assigne par id de binôme, pas par poseur —
+  //    voir planning.js) : la pose disparaissait de "Ma journée" pour les 2 poseurs du binôme.
+  const posesJour = dossiersScope().filter(d => {
+    if (!poseComptePlanning(d) || d.poseDate !== vuePoseurDateIso) return false;
+    if (!d.poseurId || d.poseurId === currentUser.id) return true;
+    const bin = _binomesConfig.find(b => b.id === d.poseurId);
+    return bin ? (bin.memberIds||[]).includes(currentUser.id) : false;
+  });
 
   if(!horairesData[weekKey]) horairesData[weekKey] = {};
   if(!horairesData[weekKey][currentUser.id]) horairesData[weekKey][currentUser.id] = {};
@@ -6581,12 +6600,12 @@ function renderVuePoseursAll() {
 
   const isCurrentWeek = weekKey === getWeekKeyForDate(new Date());
 
-  const JOURS = ['lun','mar','mer','jeu','ven'];
-  const JOURS_L = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi'];
+  const JOURS = ['lun','mar','mer','jeu','ven','sam'];
+  const JOURS_L = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
 
   const semaineDu   = monday.toLocaleDateString('fr-FR', {day:'numeric', month:'long'});
   const semaineFin  = new Date(monday);
-  semaineFin.setDate(monday.getDate() + 4);
+  semaineFin.setDate(monday.getDate() + 5);
   const semaineAu   = semaineFin.toLocaleDateString('fr-FR', {day:'numeric', month:'long', year:'numeric'});
 
   // Calcul des lignes jours
@@ -8048,8 +8067,15 @@ function piloUserName(uid){
 }
 const PILO_WON = ['accepte','facture','paye'];
 function piloIsWon(d){ return PILO_WON.includes(d.devisStatut); }
-function piloIsClosed(d){ return ['expédié','livré','posé','retiré'].includes(d.statut); }
-function piloIsActive(d){ return ['nouveau','admin','production','emballage','stocké'].includes(d.statut); }
+// Reprend isDossierCloture() (plus haut dans ce fichier) au lieu de réinventer une liste de
+// statuts bruts : celle-ci ignorait `transport`, donc un dossier "liv_pose" livré (statut=
+// "livré") mais pas encore posé (needPose=true, poseDate vide) était compté comme clôturé —
+// disparaissait à tort de "Poses à planifier" alors que c'est justement le cas le plus urgent.
+function piloIsClosed(d){ return isDossierCloture(d); }
+// "verif" et "pret_atelier" (ajoutés au pipeline le 2026-07-16) manquaient ici — un dossier dans
+// l'un de ces 2 statuts était exclu du compte "Dossiers actifs" ET de "Livraisons en retard",
+// même avec une date de livraison dépassée. Même liste périmée que checkRetards() plus haut.
+function piloIsActive(d){ return ['nouveau','admin','verif','pret_atelier','production','emballage','stocké'].includes(d.statut); }
 
 function piloNiceMax(v){
   if(v<=0) return 1;
@@ -8124,7 +8150,12 @@ function renderPilotage(){
   const delaisAdminProd = [];
   D.forEach(d => {
     const c = piloCreatedDate(d);
-    const hProd = (d.history||[]).find(h => (h.action||'').toLowerCase().includes('→ en production') || (h.action||'').toLowerCase().includes('production'));
+    // Reversed (dernière occurrence, pas la première) : un dossier peut repasser plusieurs fois
+    // en "En production" (Kanban Suivi, glisser-déposer libre entre colonnes) — .find() seul
+    // prenait la 1ère entrée (parfois une entrée en production annulée/corrigée), faussant les
+    // délais moyens à la hausse ou à la baisse. Même correctif déjà appliqué à calcDelaiMoyen()
+    // pour la clôture (voir plus haut, [...history].reverse().find(...)).
+    const hProd = [...(d.history||[])].reverse().find(h => (h.action||'').toLowerCase().includes('→ en production') || (h.action||'').toLowerCase().includes('production'));
     if (c && hProd) { const p = parseFrDate(hProd.at); if (p) { const j = Math.round((p-c)/86400000); if(j>=0&&j<400) delaisAdminProd.push(j); } }
   });
   const delaiAdminProd = delaisAdminProd.length ? Math.round(delaisAdminProd.reduce((a,b)=>a+b,0)/delaisAdminProd.length) : null;
@@ -8133,7 +8164,12 @@ function renderPilotage(){
   const delaisAtelierLiv = [];
   D.forEach(d => {
     const l = piloParseDate(d.dateLivraison);
-    const hProd = (d.history||[]).find(h => (h.action||'').toLowerCase().includes('→ en production') || (h.action||'').toLowerCase().includes('production'));
+    // Reversed (dernière occurrence, pas la première) : un dossier peut repasser plusieurs fois
+    // en "En production" (Kanban Suivi, glisser-déposer libre entre colonnes) — .find() seul
+    // prenait la 1ère entrée (parfois une entrée en production annulée/corrigée), faussant les
+    // délais moyens à la hausse ou à la baisse. Même correctif déjà appliqué à calcDelaiMoyen()
+    // pour la clôture (voir plus haut, [...history].reverse().find(...)).
+    const hProd = [...(d.history||[])].reverse().find(h => (h.action||'').toLowerCase().includes('→ en production') || (h.action||'').toLowerCase().includes('production'));
     if (l && hProd) { const p = parseFrDate(hProd.at); if (p) { const j = Math.round((l-p)/86400000); if(j>=0&&j<400) delaisAtelierLiv.push(j); } }
   });
   const delaiAtelierLiv = delaisAtelierLiv.length ? Math.round(delaisAtelierLiv.reduce((a,b)=>a+b,0)/delaisAtelierLiv.length) : null;
